@@ -53,9 +53,15 @@ repository is paraphrased, and no artwork or card text is copied.
   draws, per-player-count event mix and hand sizes, difficulty table
   (4/5/5/6/6 darkenings; 4/4/5/5/6 objectives), first player = lowest region
   card number, hope starts at 6 (max 8), threat track 2/2/3/3/4/4/5.
-- Characters: all 13 names and starting locations; Frodo & Sam and
-  Merry & Pippin are single units; Frodo is always in play. Éowyn's ability
-  is transcribed from her card.
+- Characters: all 13 names, starting locations, and abilities (implemented
+  from a community reference sheet, paraphrased). Frodo & Sam and
+  Merry & Pippin are single units; Frodo is always in play. Known
+  simplifications: Galadriel's Mirror reveals the next 4 player cards but
+  doesn't let you rearrange them; Gandalf's battle magic rerolls dice rather
+  than setting faces; Arwen's Send Aid picks its beneficiary automatically;
+  the solo "Frodo before or after the token character" ordering may
+  interleave.
+- Captured strongholds never receive card-driven shadow troops.
 
 **Reconstructed (mechanically plausible stand-ins, marked ≈ in the UI —
 correct these against the physical game and edit the data files):**
@@ -63,9 +69,10 @@ correct these against the physical game and edit the data files):**
 - The exact routes of some paths and battle lines (`engine/src/data/board.ts`)
   — read from a board photo, a few orderings are judgment calls.
 - Search/battle die face distributions (`SEARCH_DIE` / `BATTLE_DIE`).
-- The 14 event cards' effects, 11 of 13 character abilities, objective
-  requirements and rewards, the 2 special shadow cards' effects, region-card
-  symbol distribution and flavor numbers, Skies Darken troop-drop locations.
+- The 14 event cards' effects, objective requirements and rewards, the 2
+  special shadow cards' effects, region-card flavor numbers, and Skies
+  Darken troop-drop locations. (Region cards do carry 12 of each symbol,
+  which matches the reference sheet's count of 12 Resistance in the game.)
 
 **Not yet implemented:**
 

@@ -138,6 +138,10 @@ export interface PendingSearch {
   context: SearchContext;
   location: LocationId; // where the bearer is (or is arriving)
   dice: SearchFace[];
+  /** Dice neutralized by Sam's steadfast aid (friendship spent). */
+  ignored: number[];
+  /** Aragorn's free ranger reroll, once per search. */
+  freeRerollUsed?: boolean;
 }
 
 export interface PendingBattle {
@@ -147,6 +151,8 @@ export interface PendingBattle {
   dice: BattleFace[];
   /** Shadow troops removed so far via Show Valor. */
   valorKills: number;
+  /** Galadriel's free ring-blessed reroll, once per battle. */
+  freeRerollUsed?: boolean;
 }
 
 export interface PendingDiscard {
@@ -186,8 +192,10 @@ export interface TurnState {
   actionsUsed: Record<CharacterId, number>;
   /** Order in which characters have acted (max 2; no going back). */
   actedOrder: CharacterId[];
-  /** Per-turn ability uses (e.g. Maelis). */
-  abilityUsed: Record<CharacterId, boolean>;
+  /** Once-per-turn ability uses, keyed by character or character_ability. */
+  abilityUsed: Record<string, boolean>;
+  /** Faramir led troops here this turn: one free Attack awaits. */
+  freeAttack?: { character: CharacterId; location: LocationId };
 }
 
 export interface GameState {
@@ -223,6 +231,8 @@ export interface GameState {
   playerDiscard: PlayerCard[];
   /** Darken cards leave the game entirely after resolving. */
   removedCards: PlayerCard[];
+  /** Event cards left out at setup (Galadriel can call on them). */
+  unusedEvents: PlayerCard[];
   shadowDeck: ShadowCard[];
   shadowDiscard: ShadowCard[];
   objectives: ObjectiveState[];
@@ -263,11 +273,21 @@ export type Action =
   | { type: 'attack'; character: CharacterId; dice: number }
   | { type: 'capture'; character: CharacterId }
   | { type: 'destroyEmber' }
-  | { type: 'ability'; character: CharacterId }
+  | {
+      type: 'ability';
+      character: CharacterId;
+      /** Target location (Éomer's ride, Legolas's shot, ...). */
+      to?: LocationId;
+      /** Selects between a character's multiple abilities. */
+      mode?: 'nazgul' | 'peek' | 'song' | 'distract' | 'summon';
+      /** Card id target (Faramir/Gollum discard retrieval). */
+      card?: string;
+    }
   | { type: 'playEvent'; card: string; location?: LocationId; character?: CharacterId; region?: RegionId; symbol?: SymbolKind }
   | { type: 'endTurn' }
   // Pending-resolution actions:
-  | { type: 'reroll'; die: number } // spend 1 resistance
+  | { type: 'reroll'; die: number; free?: boolean } // 1 resistance (or valor with Gandalf present); free uses a character's once-per-roll reroll
+  | { type: 'ignoreDie'; die: number } // Sam's aid: 1 friendship neutralizes a harmful search die
   | { type: 'showValor' } // battle only: spend 1 valor, remove 1 shadow troop
   | { type: 'confirm' } // apply the pending roll and continue
   | { type: 'discard'; card: string }; // resolve a pending hand-limit discard

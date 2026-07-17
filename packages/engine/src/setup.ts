@@ -120,7 +120,9 @@ export function createGame(
   // --- Player deck: regions + selected events; deal hands; then stack with
   // Skies Darken cards per difficulty.
   const regionCards = shuffle(rng, buildRegionCards());
-  const eventCards = shuffle(rng, buildEventCards()).slice(0, setupCfg.events);
+  const allEvents = shuffle(rng, buildEventCards());
+  const eventCards = allEvents.slice(0, setupCfg.events);
+  const unusedEvents = allEvents.slice(setupCfg.events);
   const preDeck = shuffle(rng, [...regionCards, ...eventCards]);
   const hands: PlayerCard[][] = players.map(() => []);
   for (let i = 0; i < setupCfg.hand; i++) {
@@ -192,6 +194,7 @@ export function createGame(
     playerDeck,
     playerDiscard: [],
     removedCards: [],
+    unusedEvents,
     shadowDeck,
     shadowDiscard,
     objectives,

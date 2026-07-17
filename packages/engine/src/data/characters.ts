@@ -2,12 +2,10 @@ import type { CharacterDef, CharacterId } from '../types.js';
 
 /**
  * The 13 playable characters. Names and starting locations are from the
- * rulebook. Frodo & Sam form a single unit (as do Merry & Pippin).
- *
- * Only Éowyn's ability is transcribed from a card visible in the rulebook;
- * the rest are reconstructions in the spirit of each character
- * (abilityReconstructed: true) — replace with the real card text as you
- * verify each one against the physical game.
+ * rulebook; abilities are implemented from a community reference sheet and
+ * paraphrased here in our own words — spot-check against the printed cards.
+ * `abilityReconstructed` stays true only where our implementation knowingly
+ * simplifies (noted inline).
  */
 export const CHARACTERS: CharacterDef[] = [
   {
@@ -17,8 +15,8 @@ export const CHARACTERS: CharacterDef[] = [
     start: 'the_shire',
     bearer: true,
     abilityText:
-      'Carry the One Ring. When traveling without spending Stealth, Frodo may instead put on the Ring: lose 1 hope, shift the Eye to his region, then roll the search ignoring shadow troops (Nazgûl still count).',
-    abilityReconstructed: false, // the Ring procedure is from the rulebook's fine points
+      'Every Travel costs 1 Stealth or a search. Sam can spend Friendship during a search to cancel harmful dice (1 each). Preparing at a haven inside the card\'s own region banks an extra token. Frodo may put on the Ring when traveling: lose 1 hope and draw the Eye, but the search ignores shadow troops.',
+    abilityReconstructed: false,
     color: '#e0a458',
   },
   {
@@ -26,8 +24,9 @@ export const CHARACTERS: CharacterDef[] = [
     name: 'Merry & Pippin',
     title: 'The Young Hobbits',
     start: 'the_shire',
-    abilityText: 'Once per turn, they may do the Fellowship action as a free action.',
-    abilityReconstructed: true,
+    abilityText:
+      'Once per turn (action): gain a Friendship token. In Frodo\'s location, an action and 3 Friendship buy 2 hope. Any time fewer than 4 Nazgûl haunt their region: 1 Friendship lures 2 Nazgûl into it.',
+    abilityReconstructed: false,
     color: '#9bc06e',
   },
   {
@@ -35,8 +34,9 @@ export const CHARACTERS: CharacterDef[] = [
     name: 'Aragorn',
     title: 'Heir of Isildur',
     start: 'weather_hills',
-    abilityText: 'When Aragorn Travels along normal paths, he may move 2 connections.',
-    abilityReconstructed: true,
+    abilityText:
+      'One free reroll on each search where he is present. In his battles, each Rout fells 2 shadow troops. Once per turn (action), after any objective is complete: his blade removes 1 shadow troop from his location.',
+    abilityReconstructed: false,
     color: '#3d5a80',
   },
   {
@@ -44,8 +44,9 @@ export const CHARACTERS: CharacterDef[] = [
     name: 'Arwen',
     title: 'Evenstar',
     start: 'rivendell',
-    abilityText: 'Searches rolled while Arwen is in Frodo\'s location roll 1 fewer die (minimum 1).',
-    abilityReconstructed: true,
+    abilityText:
+      'Musters at Elven locations without spending Friendship. When she Prepares, if a character stands in the card\'s region, an Elven troop travels from her to them. Once per turn, her Fellowship at a haven needs no matching region.',
+    abilityReconstructed: false,
     color: '#8ea8c3',
   },
   {
@@ -53,8 +54,9 @@ export const CHARACTERS: CharacterDef[] = [
     name: 'Boromir',
     title: 'Captain of the White Tower',
     start: 'minas_tirith',
-    abilityText: 'When Boromir does the Attack action, he may roll up to 4 battle dice.',
-    abilityReconstructed: true,
+    abilityText:
+      'Musters at Gondor locations without spending Friendship. Capture costs him 1 less Valor. But the Ring tempts him: his Fellowship can never pass Resistance cards.',
+    abilityReconstructed: false,
     color: '#b23a48',
   },
   {
@@ -62,8 +64,9 @@ export const CHARACTERS: CharacterDef[] = [
     name: 'Éomer',
     title: 'Marshal of the Mark',
     start: 'eastemnet',
-    abilityText: 'When Éomer Musters, he adds 2 Rohirrim troops instead of 1.',
-    abilityReconstructed: true,
+    abilityText:
+      'Once per turn he rides: a free bonus Travel. In battles at his location with Rohirrim present, 1 friendly-troop loss is ignored.',
+    abilityReconstructed: false,
     color: '#a1683a',
   },
   {
@@ -72,8 +75,8 @@ export const CHARACTERS: CharacterDef[] = [
     title: 'Shieldmaiden of Rohan',
     start: 'edoras',
     abilityText:
-      'When Éowyn Musters at a Rohirrim location, she spends no Friendship. If she is present when a battle is rolled, each Nazgûl! result removes 1 Nazgûl from her region instead of costing 2 friendly troops.',
-    abilityReconstructed: false, // transcribed from her card shown in the rulebook
+      'Musters at Rohirrim locations without spending Friendship. When she stands in a rolled battle, each Nazgûl! result destroys a Nazgûl in her region instead of costing 2 friendly troops.',
+    abilityReconstructed: false,
     color: '#d9c26a',
   },
   {
@@ -81,8 +84,9 @@ export const CHARACTERS: CharacterDef[] = [
     name: 'Faramir',
     title: 'Ranger of Ithilien',
     start: 'minas_tirith',
-    abilityText: 'Battles rolled in Faramir\'s location ignore Overrun results.',
-    abilityReconstructed: true,
+    abilityText:
+      'Special paths cost him 1 fewer symbol. When he Travels with friendly troops, he may Attack at his destination as a free action. Once per turn (action), at a haven: retrieve a region card matching his region from the discard pile.',
+    abilityReconstructed: false,
     color: '#5d7052',
   },
   {
@@ -90,8 +94,9 @@ export const CHARACTERS: CharacterDef[] = [
     name: 'Galadriel',
     title: 'Lady of Lórien',
     start: 'lorien',
-    abilityText: 'When Galadriel does the Prepare action, she takes 2 matching symbol tokens if available.',
-    abilityReconstructed: true,
+    abilityText:
+      'In battles with an Elven troop present, one free reroll. At a haven (any player\'s turn): 1 Friendship summons a random event left out of the game. Once per turn (action): her Mirror reveals the next 4 player cards.',
+    abilityReconstructed: true, // Mirror: the printed card also lets you rearrange them
     color: '#e8e2d5',
   },
   {
@@ -99,8 +104,9 @@ export const CHARACTERS: CharacterDef[] = [
     name: 'Gandalf',
     title: 'The Grey Pilgrim',
     start: 'tharbad',
-    abilityText: 'Once per turn (free), while Gandalf is at a haven: gain 1 hope.',
-    abilityReconstructed: true,
+    abilityText:
+      'His Muster adds an extra troop. Traveling alone on ordinary roads, he covers 2 connections. In battles where he stands, Valor may pay for die rerolls.',
+    abilityReconstructed: true, // printed card changes dice rather than rerolling
     color: '#a0a0b8',
   },
   {
@@ -108,8 +114,9 @@ export const CHARACTERS: CharacterDef[] = [
     name: 'Gimli',
     title: 'Son of Glóin',
     start: 'erebor',
-    abilityText: 'The Capture action costs Gimli 2 Valor instead of 3.',
-    abilityReconstructed: true,
+    abilityText:
+      'Musters at Dwarven locations without spending Friendship. Once per turn (action): his craft yields a Valor token.',
+    abilityReconstructed: false,
     color: '#7d5ba6',
   },
   {
@@ -117,8 +124,9 @@ export const CHARACTERS: CharacterDef[] = [
     name: 'Gollum',
     title: 'The Wretched Guide',
     start: 'moria',
-    abilityText: 'Gollum Travels along special paths without paying their symbol costs.',
-    abilityReconstructed: true,
+    abilityText:
+      'Cannot Muster, Attack, or Capture — and hope frays (−1 at turn\'s end) while he keeps company with Frodo & Sam. Searches where he lurks roll 3 fewer dice. He Prepares anywhere (no haven needed). Once per turn (action): he filches any card from the discard pile.',
+    abilityReconstructed: false,
     color: '#6f8f6a',
   },
   {
@@ -126,8 +134,9 @@ export const CHARACTERS: CharacterDef[] = [
     name: 'Legolas',
     title: 'Prince of the Woodland Realm',
     start: 'woodland_realm',
-    abilityText: 'Legolas may do the Attack action against a connected location, using the friendly troops there.',
-    abilityReconstructed: true,
+    abilityText:
+      'Once per turn (action): gain a Stealth token. Any player\'s turn: 1 Stealth lets him shoot — remove a shadow troop at or beside him, or send a Nazgûl in his region back to Mordor. Once per turn (free): peek at the top shadow card.',
+    abilityReconstructed: false,
     color: '#2a7f62',
   },
 ];

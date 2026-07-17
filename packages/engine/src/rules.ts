@@ -257,9 +257,9 @@ function rollSearch(s: GameState, rng: Rng, context: SearchContext, loc: Locatio
   const extra = context === 'final' ? HOPE_MAX - s.hope : 0;
   let diceCount = Math.min(MAX_SEARCH_DICE, wraithsInRegion + shadowHere + extra);
   if (context !== 'final') {
-    // Arwen (reconstructed): searches with her beside Frodo roll 1 fewer die.
-    const arwen = s.characters['arwen'];
-    if (arwen && arwen.location === loc && diceCount > 1) diceCount -= 1;
+    // Gollum knows the hidden ways: searches where he lurks roll 3 fewer dice.
+    const gollum = s.characters['gollum'];
+    if (gollum && gollum.location === loc) diceCount = Math.max(0, diceCount - 3);
   }
   if (diceCount <= 0) {
     if (context === 'final') winGame(s, events);
@@ -268,7 +268,7 @@ function rollSearch(s: GameState, rng: Rng, context: SearchContext, loc: Locatio
   }
   const dice: SearchFace[] = [];
   for (let i = 0; i < diceCount; i++) dice.push(SEARCH_DIE[nextInt(rng, 6)]);
-  s.pending = { type: 'search', context, location: loc, dice };
+  s.pending = { type: 'search', context, location: loc, dice, ignored: [] };
   events.push({
     kind: 'search',
     text: `Search at ${locName(loc)}: [${dice.join(' ')}] — spend resistance to reroll, then confirm.`,
@@ -280,8 +280,10 @@ function applySearch(s: GameState, events: GameEvent[]): void {
   if (!pend || pend.type !== 'search') return;
   s.pending = null;
   const loc = pend.location;
-  for (const face of pend.dice) {
+  for (let dieIdx = 0; dieIdx < pend.dice.length; dieIdx++) {
     if (s.phase !== 'playing') return;
+    if (pend.ignored.includes(dieIdx)) continue; // neutralized by Sam's aid
+    const face = pend.dice[dieIdx];
     switch (face) {
       case 'slip':
         break;
@@ -350,21 +352,22 @@ function applyBattle(s: GameState, events: GameEvent[]): void {
   s.pending = null;
   const loc = pend.location;
   const region = regionOf(loc);
-  const faramirHere = s.characters['faramir']?.location === loc;
   const eowynHere = s.characters['eowyn']?.location === loc;
+  const aragornHere = s.characters['aragorn']?.location === loc;
   let shadowKilled = pend.valorKills;
   let friendlyLost = 0;
   for (const face of pend.dice) {
     switch (face) {
       case 'rout':
-        shadowKilled += 1;
+        // Aragorn leads the charge: his routs fell two.
+        shadowKilled += aragornHere ? 2 : 1;
         break;
       case 'exchange':
         shadowKilled += 1;
         friendlyLost += 1;
         break;
       case 'overrun':
-        if (!isHaven(s, loc) && !faramirHere) friendlyLost += 1;
+        if (!isHaven(s, loc)) friendlyLost += 1;
         break;
       case 'wraith':
         if ((s.wraiths[region] ?? 0) > 0) {
@@ -378,6 +381,15 @@ function applyBattle(s: GameState, events: GameEvent[]): void {
         }
         break;
     }
+  }
+  // Éomer holds the line: with Rohirrim present, one loss is ignored.
+  if (
+    friendlyLost > 0 &&
+    s.characters['eomer']?.location === loc &&
+    (s.friendly[loc]?.riders ?? 0) > 0
+  ) {
+    friendlyLost -= 1;
+    events.push({ kind: 'battle', text: 'Éomer rallies the Rohirrim — one loss is turned aside.' });
   }
   const slain = removeShadow(s, loc, shadowKilled);
   if (slain > 0) events.push({ kind: 'battle', text: `${slain} shadow troop${slain > 1 ? 's' : ''} slain at ${locName(loc)}.` });
@@ -871,6 +883,21 @@ export function applyAction(state: GameState, playerId: PlayerId, action: Action
     return { state: s, events };
   }
 
+  // --- Any-turn abilities (Legolas's shot, the hobbits' distraction,
+  // Galadriel's summons) work outside their owner's turn too.
+  const anytimeAbility =
+    action.type === 'ability' &&
+    ((action.character === 'legolas' && (action.to || action.mode === 'nazgul')) ||
+      (action.character === 'merry_pippin' && action.mode === 'distract') ||
+      (action.character === 'galadriel' && action.mode === 'summon'));
+  if (anytimeAbility && p.id !== playerId) {
+    const owner = s.players.find((pl) => pl.id === playerId)!;
+    doAbility(s, owner, action as Extract<Action, { type: 'ability' }>, events);
+    pump(s, rng, events);
+    s.rngState = rng.state;
+    return { state: s, events };
+  }
+
   if (p.id !== playerId) throw new RuleError(`It is ${p.name}'s turn.`);
 
   switch (action.type) {
@@ -884,10 +911,16 @@ export function applyAction(state: GameState, playerId: PlayerId, action: Action
       requireOwn(p, c);
       const here = s.characters[c].location;
       const other = s.players.find((pl) => pl.id !== p.id && pl.characters.some((cc) => s.characters[cc]?.location === here));
-      const isFree = c === 'merry_pippin' && !s.turn.abilityUsed[c];
-      if (!isFree) spendAction(s, c);
-      else s.turn.abilityUsed[c] = true;
+      spendAction(s, c);
       const region = regionOf(here);
+      // Arwen's counsel: once per turn, at a haven, the region need not match.
+      const counsel = c === 'arwen' && isHaven(s, here) && !s.turn.abilityUsed['arwen_counsel'];
+      const matches = (card: { kind: string; region?: string; symbol?: string }) => {
+        if (card.kind !== 'region') return false;
+        // Boromir is tempted: Resistance cards never change hands through him.
+        if (c === 'boromir' && card.symbol === 'resistance') return false;
+        return counsel || card.region === region;
+      };
       if (action.give) {
         const target = action.takeFrom ? s.players.find((pl) => pl.id === action.takeFrom) : other;
         if (!target) throw new RuleError('No other player has a character here.');
@@ -897,9 +930,10 @@ export function applyAction(state: GameState, playerId: PlayerId, action: Action
         const idx = p.hand.findIndex((cd) => cd.id === action.give);
         if (idx < 0) throw new RuleError('Card not in your hand.');
         const card = p.hand[idx];
-        if (card.kind !== 'region' || card.region !== region) {
+        if (!matches(card)) {
           throw new RuleError('You may only pass a region card matching the region you are in.');
         }
+        if (counsel && card.kind === 'region' && card.region !== region) s.turn.abilityUsed['arwen_counsel'] = true;
         p.hand.splice(idx, 1);
         target.hand.push(card);
         events.push({ kind: 'action', text: `${p.name} passes a ${REGION_MAP[region].name} card to ${target.name}.` });
@@ -912,9 +946,10 @@ export function applyAction(state: GameState, playerId: PlayerId, action: Action
         const idx = target.hand.findIndex((cd) => cd.id === action.take);
         if (idx < 0) throw new RuleError('Card not in their hand.');
         const card = target.hand[idx];
-        if (card.kind !== 'region' || card.region !== region) {
+        if (!matches(card)) {
           throw new RuleError('You may only take a region card matching the region you are in.');
         }
+        if (counsel && card.kind === 'region' && card.region !== region) s.turn.abilityUsed['arwen_counsel'] = true;
         target.hand.splice(idx, 1);
         p.hand.push(card);
         events.push({ kind: 'action', text: `${p.name} takes a ${REGION_MAP[region].name} card from ${target.name}.` });
@@ -929,7 +964,8 @@ export function applyAction(state: GameState, playerId: PlayerId, action: Action
       const c = action.character;
       requireOwn(p, c);
       const here = s.characters[c].location;
-      if (!isHaven(s, here)) throw new RuleError('Prepare only at a haven.');
+      // Gollum needs no haven; everyone else does.
+      if (c !== 'gollum' && !isHaven(s, here)) throw new RuleError('Prepare only at a haven.');
       const idx = p.hand.findIndex((cd) => cd.id === action.card);
       if (idx < 0) throw new RuleError('Card not in your hand.');
       const card = p.hand[idx];
@@ -937,7 +973,8 @@ export function applyAction(state: GameState, playerId: PlayerId, action: Action
       if (s.solo && card.region !== regionOf(here)) {
         throw new RuleError('Solo rule: Prepare only with a card matching the region you are in.');
       }
-      const take = c === 'galadriel' ? 2 : 1; // Galadriel: reconstructed
+      // Frodo & Sam bank an extra token at a haven within the card's region.
+      const take = c === BEARER && isHaven(s, here) && card.region === regionOf(here) ? 2 : 1;
       if (s.supply.tokens[card.symbol] <= 0) throw new RuleError('No matching tokens left in the supply.');
       spendAction(s, c);
       p.hand.splice(idx, 1);
@@ -946,20 +983,43 @@ export function applyAction(state: GameState, playerId: PlayerId, action: Action
       s.supply.tokens[card.symbol] -= got;
       p.tokens[card.symbol] += got;
       events.push({ kind: 'action', text: `${charName(c)} prepares: ${p.name} banks ${got} ${card.symbol} token${got > 1 ? 's' : ''}.` });
+      // Arwen sends aid: an Elven troop rides to a character in the card's region.
+      if (c === 'arwen' && (s.friendly[here]?.sylvan ?? 0) > 0) {
+        const target = Object.keys(s.characters).find(
+          (cc) => cc !== c && regionOf(s.characters[cc].location) === card.region,
+        );
+        if (target) {
+          const dest = s.characters[target].location;
+          s.friendly[here]!.sylvan! -= 1;
+          const at = (s.friendly[dest] ??= {});
+          at.sylvan = (at.sylvan ?? 0) + 1;
+          events.push({ kind: 'action', text: `Arwen sends aid: an Elven troop joins ${charName(target)} at ${locName(dest)}.` });
+          checkHavens(s, events);
+        }
+      }
       break;
     }
 
     case 'muster': {
       const c = action.character;
       requireOwn(p, c);
+      if (c === 'gollum') throw new RuleError('Gollum will not muster troops.');
       const here = s.characters[c].location;
       const faction = MAP[here].muster;
       if (!faction) throw new RuleError('Muster only at a location with a muster icon.');
       if (s.supply.factions[faction] <= 0) throw new RuleError('No troops of that army left.');
-      const free = c === 'eowyn' && faction === 'riders'; // from her card
+      // Home-army musters are free: Éowyn/Éomer? no — Éowyn (riders),
+      // Arwen (elves), Boromir (gondor), Gimli (dwarves).
+      const FREE_MUSTER: Record<string, Faction> = {
+        eowyn: 'riders',
+        arwen: 'sylvan',
+        boromir: 'vale',
+        gimli: 'deepholm',
+      };
+      const free = FREE_MUSTER[c] === faction;
       spendAction(s, c);
       if (!free) pay(s, p, ['friendship'], events);
-      const amount = Math.min(c === 'eomer' ? 2 : 1, s.supply.factions[faction]); // Éomer: reconstructed
+      const amount = Math.min(c === 'gandalf' ? 2 : 1, s.supply.factions[faction]); // Gandalf inspires an extra troop
       s.supply.factions[faction] -= amount;
       const at = (s.friendly[here] ??= {});
       at[faction] = (at[faction] ?? 0) + amount;
@@ -971,21 +1031,20 @@ export function applyAction(state: GameState, playerId: PlayerId, action: Action
     case 'attack': {
       const c = action.character;
       requireOwn(p, c);
-      let loc = s.characters[c].location;
-      // Legolas (reconstructed): may attack a connected location.
-      if (c === 'legolas' && action.dice < 0) throw new RuleError('bad dice');
+      if (c === 'gollum') throw new RuleError('Gollum will not fight openly.');
+      const loc = s.characters[c].location;
       if ((s.shadow[loc] ?? 0) === 0 || friendlyAt(s, loc) === 0) {
-        if (c === 'legolas') {
-          const alt = CONNECTIONS[loc].map((cn) => cn.to).find((l) => (s.shadow[l] ?? 0) > 0 && friendlyAt(s, l) > 0);
-          if (alt) loc = alt;
-          else throw new RuleError('Attack needs friendly and shadow troops together.');
-        } else {
-          throw new RuleError('Attack needs friendly and shadow troops in your location.');
-        }
+        throw new RuleError('Attack needs friendly and shadow troops in your location.');
       }
-      const maxDice = Math.min(c === 'boromir' ? 4 : MAX_BATTLE_DICE, friendlyAt(s, loc));
+      const maxDice = Math.min(MAX_BATTLE_DICE, friendlyAt(s, loc));
       const dice = Math.max(1, Math.min(action.dice, maxDice));
-      spendAction(s, c);
+      // Faramir's ambush: traveling here with troops earned a free Attack.
+      if (s.turn.freeAttack && s.turn.freeAttack.character === c && s.turn.freeAttack.location === loc) {
+        delete s.turn.freeAttack;
+        events.push({ kind: 'action', text: `${charName(c)} springs the ambush (free attack).` });
+      } else {
+        spendAction(s, c);
+      }
       // Attacks draw the Eye.
       s.eye = regionOf(loc);
       events.push({ kind: 'action', text: `${charName(c)} attacks at ${locName(loc)} — the Eye turns to ${REGION_MAP[s.eye].name}.` });
@@ -997,15 +1056,17 @@ export function applyAction(state: GameState, playerId: PlayerId, action: Action
     case 'capture': {
       const c = action.character;
       requireOwn(p, c);
+      if (c === 'gollum') throw new RuleError('Gollum will not storm fortresses.');
       const here = s.characters[c].location;
       if (s.siteStatus[here] !== 'stronghold') throw new RuleError('Capture a shadow stronghold.');
       if (friendlyAt(s, here) === 0) throw new RuleError('A friendly troop must be present.');
       if ((s.shadow[here] ?? 0) > 0) throw new RuleError('Clear the shadow troops first.');
-      const cost = c === 'gimli' ? 2 : CAPTURE_COST; // Gimli: reconstructed
+      const cost = c === 'boromir' ? CAPTURE_COST - 1 : CAPTURE_COST;
       spendAction(s, c);
       pay(s, p, Array(cost).fill('valor') as SymbolKind[], events);
       s.siteStatus[here] = 'haven';
-      if (MAP[here].stopsSpawnWhenCaptured) s.spawnStopped[here] = true;
+      // Captured strongholds no longer receive card-driven shadow troops.
+      s.spawnStopped[here] = true;
       s.eye = regionOf(here);
       events.push({ kind: 'haven', text: `${locName(here)} is captured — it now shelters the Free Peoples! The Eye turns to ${REGION_MAP[s.eye].name}.` });
       changeHope(s, CAPTURE_HOPE, events, `${locName(here)} captured`);
@@ -1031,22 +1092,20 @@ export function applyAction(state: GameState, playerId: PlayerId, action: Action
       break;
     }
 
-    case 'ability': {
-      const c = action.character;
-      requireOwn(p, c);
-      if (c === 'gandalf') { // reconstructed
-        if (s.turn.abilityUsed[c]) throw new RuleError('Once per turn.');
-        if (!isHaven(s, s.characters[c].location)) throw new RuleError('Gandalf must be at a haven.');
-        s.turn.abilityUsed[c] = true;
-        events.push({ kind: 'action', text: 'Gandalf kindles hope in weary hearts.' });
-        changeHope(s, 1, events, 'Gandalf');
-      } else {
-        throw new RuleError('That character has no activated ability.');
-      }
+    case 'ability':
+      doAbility(s, p, action, events);
       break;
-    }
 
     case 'endTurn':
+      // Gollum's company wears on the Ring-bearers.
+      if (
+        s.characters['gollum'] &&
+        s.characters[BEARER] &&
+        s.characters['gollum'].location === s.characters[BEARER].location
+      ) {
+        events.push({ kind: 'turn', text: 'Gollum whispers poison in the dark beside Frodo...' });
+        changeHope(s, -1, events, "Gollum's company");
+      }
       s.queue.push({ step: 'drawPlayerCards', count: CARDS_PER_TURN });
       s.queue.push({ step: 'shadowDraw', remaining: THREAT_TRACK[s.threatIdx] });
       s.queue.push({ step: 'endTurn' });
@@ -1067,6 +1126,197 @@ function requireOwn(p: PlayerState, c: CharacterId): void {
 }
 
 // ---------------------------------------------------------------------------
+// Activated character abilities
+// ---------------------------------------------------------------------------
+
+function oncePerTurn(s: GameState, key: string): void {
+  if (s.turn.abilityUsed[key]) throw new RuleError('Once per turn.');
+  s.turn.abilityUsed[key] = true;
+}
+
+function gainToken(s: GameState, p: PlayerState, sym: SymbolKind, events: GameEvent[], why: string): void {
+  if (s.supply.tokens[sym] <= 0) throw new RuleError(`No ${sym} tokens left in the supply.`);
+  s.supply.tokens[sym] -= 1;
+  p.tokens[sym] += 1;
+  events.push({ kind: 'action', text: `${why}: ${p.name} gains a ${sym} token.` });
+}
+
+function doAbility(
+  s: GameState,
+  p: PlayerState,
+  action: Extract<Action, { type: 'ability' }>,
+  events: GameEvent[],
+): void {
+  const c = action.character;
+  requireOwn(p, c);
+  const here = s.characters[c]?.location;
+  if (!here) throw new RuleError('Character not in play.');
+
+  switch (c) {
+    case 'aragorn': {
+      // His blade, once per turn after any objective is won: an action that
+      // removes 1 shadow troop from his location.
+      if (!s.objectives.some((o) => o.complete)) throw new RuleError('Requires a completed objective.');
+      if ((s.shadow[here] ?? 0) === 0) throw new RuleError('No shadow troops here.');
+      oncePerTurn(s, 'aragorn_blade');
+      spendAction(s, c);
+      removeShadow(s, here, 1);
+      events.push({ kind: 'action', text: `Aragorn's blade drives the shadow from ${locName(here)}.` });
+      break;
+    }
+    case 'eomer': {
+      // A free bonus Travel once per turn.
+      if (!action.to) throw new RuleError('Choose where Éomer rides.');
+      const conn = connection(here, action.to);
+      if (!conn) throw new RuleError('Not connected.');
+      if (conn.cost) pay(s, p, conn.cost, events);
+      oncePerTurn(s, 'eomer_ride');
+      s.characters[c].location = action.to;
+      events.push({ kind: 'action', text: `Éomer rides free to ${locName(action.to)}.` });
+      checkStateObjectives(s, events);
+      break;
+    }
+    case 'gimli':
+      oncePerTurn(s, 'gimli_craft');
+      spendAction(s, c);
+      gainToken(s, p, 'valor', events, "Gimli's craft");
+      break;
+    case 'legolas': {
+      if (action.mode === 'peek') {
+        // Free once per turn: glimpse the top shadow card.
+        oncePerTurn(s, 'legolas_sight');
+        const top = s.shadowDeck[s.shadowDeck.length - 1];
+        const desc = !top
+          ? 'nothing — the deck is empty'
+          : top.special
+            ? SPECIAL_SHADOW_INFO[top.special].name
+            : `${BATTLE_LINES.find((l) => l.id === top.line)?.name} / ${locName(top.reinforce!)}`;
+        events.push({ kind: 'action', text: `Legolas's keen eyes read the next shadow card: ${desc}.` });
+        break;
+      }
+      if (action.mode === 'nazgul') {
+        // A shot on any turn: 1 Stealth sends a Nazgûl in his region to Mordor.
+        const region = regionOf(here);
+        if ((s.wraiths[region] ?? 0) === 0) throw new RuleError('No Nazgûl in his region.');
+        pay(s, p, ['stealth'], events);
+        s.wraiths[region] -= 1;
+        s.wraiths[MORDOR] = (s.wraiths[MORDOR] ?? 0) + 1;
+        events.push({ kind: 'action', text: `Legolas's arrow finds its mark — a Nazgûl flees ${REGION_MAP[region].name} for Mordor.` });
+        break;
+      }
+      if (action.to) {
+        // A shot on any turn: 1 Stealth removes a shadow troop at or beside him.
+        if (action.to !== here && !connection(here, action.to)) throw new RuleError('Target at or adjacent to Legolas.');
+        if ((s.shadow[action.to] ?? 0) === 0) throw new RuleError('No shadow troops there.');
+        pay(s, p, ['stealth'], events);
+        removeShadow(s, action.to, 1);
+        events.push({ kind: 'action', text: `Legolas fells a shadow troop at ${locName(action.to)}.` });
+        break;
+      }
+      // Default: walk silently — an action for a Stealth token.
+      oncePerTurn(s, 'legolas_walk');
+      spendAction(s, c);
+      gainToken(s, p, 'stealth', events, 'Legolas walks unseen');
+      break;
+    }
+    case 'merry_pippin': {
+      if (action.mode === 'song') {
+        // In Frodo's location: an action and 3 Friendship for 2 hope.
+        if (s.characters[BEARER]?.location !== here) throw new RuleError('They must be with Frodo.');
+        spendAction(s, c);
+        pay(s, p, ['friendship', 'friendship', 'friendship'], events);
+        events.push({ kind: 'action', text: 'Merry and Pippin strike up a song for weary hearts.' });
+        changeHope(s, 2, events, 'a hobbit song');
+        break;
+      }
+      if (action.mode === 'distract') {
+        // Any turn: lure 2 Nazgûl into their region while fewer than 4 haunt it.
+        const region = regionOf(here);
+        if ((s.wraiths[region] ?? 0) >= 4) throw new RuleError('Their region already crawls with Nazgûl.');
+        pay(s, p, ['friendship'], events);
+        moveNazgulToward(s, region, 2, events);
+        break;
+      }
+      oncePerTurn(s, 'mp_friend');
+      spendAction(s, c);
+      gainToken(s, p, 'friendship', events, 'Loyal friends');
+      break;
+    }
+    case 'galadriel': {
+      if (action.mode === 'summon') {
+        // Any turn, at a haven: 1 Friendship calls in an unused event card.
+        if (!isHaven(s, here)) throw new RuleError('Galadriel must be at a haven.');
+        if (s.unusedEvents.length === 0) throw new RuleError('No events remain outside the game.');
+        pay(s, p, ['friendship'], events);
+        const idx = Math.floor((s.rngState % 997) / 997 * s.unusedEvents.length) % s.unusedEvents.length;
+        const [card] = s.unusedEvents.splice(idx, 1);
+        p.hand.push(card);
+        const def = EVENTS.find((e) => e.key === (card as { event: string }).event);
+        events.push({ kind: 'action', text: `Galadriel's light reveals a lost chance: ${def?.name}.` });
+        if (p.hand.length > HAND_LIMIT) s.pending = { type: 'discard', player: p.id };
+        break;
+      }
+      // Her Mirror, once per turn (action): reveal the next 4 player cards.
+      oncePerTurn(s, 'galadriel_mirror');
+      spendAction(s, c);
+      const top = s.playerDeck.slice(-4).reverse();
+      const names = top.map((cd) =>
+        cd.kind === 'region'
+          ? REGION_MAP[cd.region].name
+          : cd.kind === 'event'
+            ? EVENTS.find((e) => e.key === cd.event)?.name ?? 'event'
+            : 'SKIES DARKEN',
+      );
+      events.push({ kind: 'action', text: `The Mirror shows what comes: ${names.join(', ')}.` });
+      break;
+    }
+    case 'faramir': {
+      // Once per turn (action), at a haven: recover a matching region card
+      // from the discard pile.
+      if (!isHaven(s, here)) throw new RuleError('Faramir must be at a haven.');
+      const idx = s.playerDiscard.findIndex(
+        (cd) => cd.id === action.card && cd.kind === 'region' && cd.region === regionOf(here),
+      );
+      if (idx < 0) throw new RuleError('Choose a discarded region card matching his region.');
+      oncePerTurn(s, 'faramir_wisdom');
+      spendAction(s, c);
+      const [card] = s.playerDiscard.splice(idx, 1);
+      p.hand.push(card);
+      events.push({ kind: 'action', text: `Faramir recovers a ${REGION_MAP[(card as { region: string }).region].name} card from the discard.` });
+      if (p.hand.length > HAND_LIMIT) s.pending = { type: 'discard', player: p.id };
+      break;
+    }
+    case 'gollum': {
+      // Once per turn (action): filch any card from the discard pile.
+      const idx = s.playerDiscard.findIndex((cd) => cd.id === action.card);
+      if (idx < 0) throw new RuleError('Choose a card from the discard pile.');
+      oncePerTurn(s, 'gollum_slink');
+      spendAction(s, c);
+      const [card] = s.playerDiscard.splice(idx, 1);
+      p.hand.push(card);
+      events.push({ kind: 'action', text: 'Gollum slinks off with a discarded card, precious.' });
+      if (p.hand.length > HAND_LIMIT) s.pending = { type: 'discard', player: p.id };
+      break;
+    }
+    default:
+      throw new RuleError('That character has no activated ability.');
+  }
+}
+
+/** Move `count` Nazgûl (from the largest groups elsewhere) into `target`. */
+function moveNazgulToward(s: GameState, target: RegionId, count: number, events: GameEvent[]): void {
+  for (let i = 0; i < count; i++) {
+    const from = Object.entries(s.wraiths)
+      .filter(([r, n]) => n > 0 && r !== target)
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0];
+    if (!from) return;
+    s.wraiths[from[0]] -= 1;
+    s.wraiths[target] = (s.wraiths[target] ?? 0) + 1;
+    events.push({ kind: 'action', text: `A Nazgûl is drawn from ${REGION_MAP[from[0]].name} to ${REGION_MAP[target].name}.` });
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Travel
 // ---------------------------------------------------------------------------
 
@@ -1080,7 +1330,23 @@ function doTravel(
   const c = action.character;
   requireOwn(p, c);
   const from = s.characters[c].location;
-  const conn = connection(from, action.to);
+  let conn = connection(from, action.to);
+  // Gandalf alone rides two connections on ordinary roads.
+  let gandalfRide = false;
+  if (
+    !conn &&
+    c === 'gandalf' &&
+    (action.companions ?? []).length === 0 &&
+    !Object.values(action.troops ?? {}).some((n) => (n ?? 0) > 0)
+  ) {
+    const twoStep = CONNECTIONS[from].some(
+      (c1) => !c1.cost && CONNECTIONS[c1.to].some((c2) => !c2.cost && c2.to === action.to),
+    );
+    if (twoStep) {
+      gandalfRide = true;
+      conn = { to: action.to };
+    }
+  }
   if (!conn) throw new RuleError(`${locName(from)} does not connect to ${locName(action.to)}.`);
 
   const companions = (action.companions ?? []).filter((cc) => cc !== c);
@@ -1102,8 +1368,11 @@ function doTravel(
 
   spendAction(s, c);
 
-  // Special path cost (Gollum travels them free — reconstructed).
-  if (conn.cost && c !== 'gollum') pay(s, p, conn.cost, events);
+  // Special path cost (Faramir the ranger spends 1 fewer symbol).
+  if (conn.cost) {
+    const cost = c === 'faramir' ? conn.cost.slice(1) : conn.cost;
+    if (cost.length > 0) pay(s, p, cost, events);
+  }
 
   // Move everyone and everything.
   s.characters[c].location = action.to;
@@ -1121,8 +1390,12 @@ function doTravel(
   ];
   events.push({
     kind: 'action',
-    text: `${charName(c)} travels to ${locName(action.to)}${extras.length ? ` with ${extras.join(', ')}` : ''}.`,
+    text: `${charName(c)} travels to ${locName(action.to)}${extras.length ? ` with ${extras.join(', ')}` : ''}${gandalfRide ? ' (riding hard, two roads)' : ''}.`,
   });
+  // Faramir leading troops may spring a free Attack at his destination.
+  if (c === 'faramir' && Object.values(troops).some((n) => (n ?? 0) > 0)) {
+    s.turn.freeAttack = { character: c, location: action.to };
+  }
   checkHavens(s, events);
 
   if (bearerMoves) {
@@ -1172,13 +1445,48 @@ function handlePendingAction(s: GameState, rng: Rng, playerId: PlayerId, action:
     case 'reroll': {
       if (!presentHere(pend.location)) throw new RuleError('You need a character at the roll to help.');
       if (action.die < 0 || action.die >= pend.dice.length) throw new RuleError('Bad die.');
-      pay(s, player, ['resistance'], events);
+      if (action.free) {
+        // Character-granted free rerolls, once per roll: Aragorn on searches,
+        // Galadriel (with an Elven troop present) in battles.
+        if (pend.freeRerollUsed) throw new RuleError('The free reroll is already spent.');
+        const ok =
+          pend.type === 'search'
+            ? s.characters['aragorn']?.location === pend.location
+            : s.characters['galadriel']?.location === pend.location &&
+              (s.friendly[pend.location]?.sylvan ?? 0) > 0;
+        if (!ok) throw new RuleError('No character grants a free reroll here.');
+        pend.freeRerollUsed = true;
+      } else {
+        // Resistance pays for rerolls; with Gandalf present, Valor serves too.
+        const hasResistance =
+          player.tokens.resistance > 0 ||
+          player.hand.some((cd) => cd.kind === 'region' && cd.symbol === 'resistance');
+        if (!hasResistance && pend.type === 'battle' && s.characters['gandalf']?.location === pend.location) {
+          pay(s, player, ['valor'], events);
+        } else {
+          pay(s, player, ['resistance'], events);
+        }
+      }
       if (pend.type === 'search') {
         pend.dice[action.die] = SEARCH_DIE[nextInt(rng, 6)] as SearchFace;
       } else {
         pend.dice[action.die] = BATTLE_DIE[nextInt(rng, 6)] as BattleFace;
       }
       events.push({ kind: pend.type, text: `${player.name} rerolls a die: now [${pend.dice.join(' ')}].` });
+      return;
+    }
+    case 'ignoreDie': {
+      // Sam's steadfast aid: 1 Friendship neutralizes a harmful search die.
+      if (pend.type !== 'search') throw new RuleError('Only search dice can be shrugged off.');
+      if (s.characters[BEARER]?.location !== pend.location || !player.characters.includes(BEARER)) {
+        throw new RuleError("Only Frodo & Sam's player may do this, with them present.");
+      }
+      const face = pend.dice[action.die];
+      if (face !== 'weary' && face !== 'exposed') throw new RuleError('Only Weary or Exposed dice.');
+      if (pend.ignored.includes(action.die)) throw new RuleError('Already shrugged off.');
+      pay(s, player, ['friendship'], events);
+      pend.ignored.push(action.die);
+      events.push({ kind: 'search', text: `Sam steadies Frodo — a ${face} result is shrugged off.` });
       return;
     }
     case 'showValor': {

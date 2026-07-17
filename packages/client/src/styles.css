@@ -669,3 +669,4 @@ select {
     border-left: none;
   }
 }
+.die.ignored { opacity: 0.45; border-style: dashed; }

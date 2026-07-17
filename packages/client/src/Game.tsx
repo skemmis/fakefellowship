@@ -410,6 +410,34 @@ function ObjectiveText({ id }: { id: string }) {
   );
 }
 
+function abilityLabel(a: Extract<Action, { type: 'ability' }>): string {
+  switch (a.character) {
+    case 'aragorn':
+      return "Andúril's edge ⚔";
+    case 'eomer':
+      return `Ride free → ${a.to ? MAP[a.to].name : ''}`;
+    case 'gimli':
+      return 'Craft (gain ⚔ token)';
+    case 'legolas':
+      if (a.mode === 'peek') return 'Keen sight (peek shadow deck)';
+      if (a.mode === 'nazgul') return 'Sure shot → Nazgûl (🌿1)';
+      if (a.to) return `Sure shot → ${MAP[a.to].name} (🌿1)`;
+      return 'Walk silently (gain 🌿 token)';
+    case 'merry_pippin':
+      if (a.mode === 'song') return 'Sing! (❤3 → +2 hope)';
+      if (a.mode === 'distract') return 'Distract Nazgûl here (❤1)';
+      return 'Loyal friends (gain ❤ token)';
+    case 'galadriel':
+      return a.mode === 'summon' ? 'Summon lost event (❤1)' : 'Mirror (peek 4 cards)';
+    case 'faramir':
+      return 'Recover discard card';
+    case 'gollum':
+      return 'Slink (steal from discard)';
+    default:
+      return 'Use ability';
+  }
+}
+
 function Stat({ label, value, warn, title }: { label: string; value: string; warn?: boolean; title?: string }) {
   return (
     <div className={`stat ${warn ? 'warn' : ''}`} title={title}>
@@ -492,11 +520,13 @@ function CharacterPanel({
               Fellowship
             </button>
           )}
-          {can('ability') && (
-            <button onClick={() => onAct({ type: 'ability', character })} title={def.abilityText}>
-              Use ability
-            </button>
-          )}
+          {legal
+            .filter((a): a is Extract<Action, { type: 'ability' }> => a.type === 'ability' && a.character === character)
+            .map((a, i) => (
+              <button key={i} onClick={() => onAct(a)} title={def.abilityText}>
+                {abilityLabel(a)}
+              </button>
+            ))}
           {destroy && character === BEARER && (
             <button className="primary" onClick={() => onAct(destroy)} title="Spend 5 Resistance and survive one final search. If any hope remains, you win.">
               Destroy the Ring 🌋
@@ -597,16 +627,31 @@ function PendingPanel({
           : 'Anyone with a character here may spend Resistance ◎ to reroll a die, or Valor ⚔ to slay an extra shadow troop. Then the current player confirms.'}
       </p>
       <div className="dice-row">
-        {faces.map((f, i) => (
-          <div key={i} className={`die die-${f}`} title={(isSearch ? SEARCH_FACE_INFO : BATTLE_FACE_INFO)[f]}>
-            <span className="die-face">{f}</span>
-            {canReroll && (
-              <button className="mini" onClick={() => onAct({ type: 'reroll', die: i })} title="Spend 1 Resistance to reroll this die">
-                ↻ ◎
-              </button>
-            )}
-          </div>
-        ))}
+        {faces.map((f, i) => {
+          const ignored = pend.type === 'search' && pend.ignored.includes(i);
+          const canIgnore = legal.some((a) => a.type === 'ignoreDie' && a.die === i);
+          const canFree = legal.some((a) => a.type === 'reroll' && a.die === i && a.free);
+          return (
+            <div key={i} className={`die die-${f} ${ignored ? 'ignored' : ''}`} title={(isSearch ? SEARCH_FACE_INFO : BATTLE_FACE_INFO)[f]}>
+              <span className="die-face">{ignored ? `${f} ✗` : f}</span>
+              {canReroll && !ignored && (
+                <button className="mini" onClick={() => onAct({ type: 'reroll', die: i })} title="Spend 1 Resistance to reroll this die (Valor works too when Gandalf stands here)">
+                  ↻ ◎
+                </button>
+              )}
+              {canFree && !ignored && (
+                <button className="mini" onClick={() => onAct({ type: 'reroll', die: i, free: true })} title="A free reroll granted by a character present (once per roll)">
+                  ↻ free
+                </button>
+              )}
+              {canIgnore && (
+                <button className="mini" onClick={() => onAct({ type: 'ignoreDie', die: i })} title="Sam's aid: spend 1 Friendship to shrug off this result">
+                  ✗ ❤
+                </button>
+              )}
+            </div>
+          );
+        })}
       </div>
       <div className="dice-legend hint">
         {Object.entries(isSearch ? SEARCH_FACE_INFO : BATTLE_FACE_INFO).map(([k, v]) => (

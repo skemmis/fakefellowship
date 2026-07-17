@@ -70,16 +70,17 @@ export function checkInvariants(s: GameState): void {
     if (s.supply.tokens[sym] < 0) fail(`negative ${sym} token supply`);
   }
 
-  // Player card conservation
-  const regionAndEvents = 48 + SETUP_BY_PLAYERS[s.players.length].events;
+  // Player card conservation (48 region + all 14 events incl. the unused
+  // pool Galadriel can summon from + this difficulty's darken cards)
   const darken = DIFFICULTY_TABLE[s.difficulty].darken;
   const total =
     s.playerDeck.length +
     s.playerDiscard.length +
     s.removedCards.length +
+    s.unusedEvents.length +
     s.players.reduce((a, p) => a + p.hand.length, 0);
-  if (total !== regionAndEvents + darken) {
-    fail(`player cards: ${total} != ${regionAndEvents + darken}`);
+  if (total !== 48 + 14 + darken) {
+    fail(`player cards: ${total} != ${48 + 14 + darken}`);
   }
 
   // Shadow card conservation (48 + 2 specials)

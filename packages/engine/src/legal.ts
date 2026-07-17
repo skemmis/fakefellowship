@@ -48,8 +48,34 @@ export function legalActions(s: GameState, playerId?: string): Action[] {
       return out;
     }
     const present = player.characters.some((c) => s.characters[c]?.location === pend.location);
-    if (present && canPayList(player, ['resistance'])) {
+    const gandalfHere = pend.type === 'battle' && s.characters['gandalf']?.location === pend.location;
+    if (present && (canPayList(player, ['resistance']) || (gandalfHere && canPayList(player, ['valor'])))) {
       for (let i = 0; i < pend.dice.length; i++) out.push({ type: 'reroll', die: i });
+    }
+    // Free once-per-roll rerolls: Aragorn (searches), Galadriel (battles with elves).
+    if (present && !pend.freeRerollUsed) {
+      const grants =
+        pend.type === 'search'
+          ? player.characters.includes('aragorn') && s.characters['aragorn']?.location === pend.location
+          : player.characters.includes('galadriel') &&
+            s.characters['galadriel']?.location === pend.location &&
+            (s.friendly[pend.location]?.sylvan ?? 0) > 0;
+      if (grants) {
+        for (let i = 0; i < pend.dice.length; i++) out.push({ type: 'reroll', die: i, free: true });
+      }
+    }
+    // Sam's aid: Frodo's player may neutralize harmful search dice.
+    if (
+      pend.type === 'search' &&
+      player.characters.includes('frodo_sam') &&
+      s.characters['frodo_sam']?.location === pend.location &&
+      canPayList(player, ['friendship'])
+    ) {
+      for (let i = 0; i < pend.dice.length; i++) {
+        if ((pend.dice[i] === 'weary' || pend.dice[i] === 'exposed') && !pend.ignored.includes(i)) {
+          out.push({ type: 'ignoreDie', die: i });
+        }
+      }
     }
     if (pend.type === 'battle' && present && canPayList(player, ['valor']) && pend.valorKills < (s.shadow[pend.location] ?? 0)) {
       out.push({ type: 'showValor' });
@@ -60,6 +86,23 @@ export function legalActions(s: GameState, playerId?: string): Action[] {
     }
     if (player.id === active.id) out.push({ type: 'confirm' });
     return out;
+  }
+
+  // --- Any-turn abilities for this player ------------------------------
+  for (const c of player.characters) {
+    const loc = s.characters[c]?.location;
+    if (!loc) continue;
+    if (c === 'legolas' && canPayList(player, ['stealth'])) {
+      const targets = [loc, ...CONNECTIONS[loc].map((cn) => cn.to)].filter((l) => (s.shadow[l] ?? 0) > 0);
+      if (targets.length > 0) out.push({ type: 'ability', character: c, to: targets[0] });
+      if ((s.wraiths[MAP[loc].region] ?? 0) > 0) out.push({ type: 'ability', character: c, mode: 'nazgul' });
+    }
+    if (c === 'merry_pippin' && canPayList(player, ['friendship']) && (s.wraiths[MAP[loc].region] ?? 0) < 4) {
+      out.push({ type: 'ability', character: c, mode: 'distract' });
+    }
+    if (c === 'galadriel' && s.siteStatus[loc] === 'haven' && s.unusedEvents.length > 0 && canPayList(player, ['friendship'])) {
+      out.push({ type: 'ability', character: c, mode: 'summon' });
+    }
   }
 
   // --- Events (playable by anyone outside of rolls) ---------------------
@@ -127,7 +170,9 @@ export function legalActions(s: GameState, playerId?: string): Action[] {
 
     // Travel (bearer cover variants; bots use bring-nothing or bring-all)
     for (const conn of CONNECTIONS[here]) {
-      if (conn.cost && character !== 'gollum' && !canPayList(p, conn.cost)) continue;
+      // Faramir the ranger spends one fewer symbol on special paths.
+      const effCost = character === 'faramir' ? conn.cost?.slice(1) : conn.cost;
+      if (effCost && effCost.length > 0 && !canPayList(p, effCost)) continue;
       const bearerHere =
         character === BEARER ||
         (s.characters[BEARER]?.location === here && p.characters.includes(BEARER));
@@ -135,7 +180,7 @@ export function legalActions(s: GameState, playerId?: string): Action[] {
         // Moving the bearer (or bringing him along as a companion).
         const companions = character === BEARER ? [] : [BEARER];
         const base = { type: 'travel' as const, character, to: conn.to, companions };
-        const stealthCost: SymbolKind[] = [...(conn.cost && character !== 'gollum' ? conn.cost : []), 'stealth'];
+        const stealthCost: SymbolKind[] = [...(effCost ?? []), 'stealth'];
         if (canPayList(p, stealthCost)) out.push({ ...base, cover: 'stealth' });
         out.push({ ...base, cover: 'search' });
         if (bearerHere) out.push({ ...base, cover: 'ring' });
@@ -155,20 +200,21 @@ export function legalActions(s: GameState, playerId?: string): Action[] {
     for (const other of s.solo ? [] : s.players) {
       if (other.id === p.id) continue;
       if (!other.characters.some((c) => s.characters[c]?.location === here)) continue;
+      // Boromir is tempted: Resistance cards never pass through his hands.
+      const ok = (card: { kind: string; region?: string; symbol?: string }) =>
+        card.kind === 'region' &&
+        card.region === region &&
+        !(character === 'boromir' && card.symbol === 'resistance');
       for (const card of p.hand) {
-        if (card.kind === 'region' && card.region === region) {
-          out.push({ type: 'fellowship', character, give: card.id, takeFrom: other.id });
-        }
+        if (ok(card)) out.push({ type: 'fellowship', character, give: card.id, takeFrom: other.id });
       }
       for (const card of other.hand) {
-        if (card.kind === 'region' && card.region === region) {
-          out.push({ type: 'fellowship', character, take: card.id, takeFrom: other.id });
-        }
+        if (ok(card)) out.push({ type: 'fellowship', character, take: card.id, takeFrom: other.id });
       }
     }
 
-    // Prepare (solo: the card must match the character's current region)
-    if (s.siteStatus[here] === 'haven') {
+    // Prepare (Gollum needs no haven; solo: card must match the region)
+    if (s.siteStatus[here] === 'haven' || character === 'gollum') {
       for (const card of p.hand) {
         if (
           card.kind === 'region' &&
@@ -180,34 +226,61 @@ export function legalActions(s: GameState, playerId?: string): Action[] {
       }
     }
 
-    // Muster
+    // Muster (home armies muster free)
     const muster = MAP[here].muster;
-    if (muster && s.supply.factions[muster] > 0) {
-      const free = character === 'eowyn' && muster === 'riders';
-      if (free || canPayList(p, ['friendship'])) out.push({ type: 'muster', character });
+    if (muster && s.supply.factions[muster] > 0 && character !== 'gollum') {
+      const FREE: Record<string, string> = { eowyn: 'riders', arwen: 'sylvan', boromir: 'vale', gimli: 'deepholm' };
+      if (FREE[character] === muster || canPayList(p, ['friendship'])) {
+        out.push({ type: 'muster', character });
+      }
     }
 
     // Attack
-    if ((s.shadow[here] ?? 0) > 0 && friendlyAt(s, here) > 0) {
+    if ((s.shadow[here] ?? 0) > 0 && friendlyAt(s, here) > 0 && character !== 'gollum') {
       out.push({ type: 'attack', character, dice: Math.min(MAX_BATTLE_DICE, friendlyAt(s, here)) });
-    } else if (character === 'legolas') {
-      const alt = CONNECTIONS[here].map((c) => c.to).find((l) => (s.shadow[l] ?? 0) > 0 && friendlyAt(s, l) > 0);
-      if (alt) out.push({ type: 'attack', character, dice: MAX_BATTLE_DICE });
     }
 
     // Capture
     if (
+      character !== 'gollum' &&
       s.siteStatus[here] === 'stronghold' &&
       friendlyAt(s, here) > 0 &&
       (s.shadow[here] ?? 0) === 0 &&
-      canPayList(p, Array(character === 'gimli' ? 2 : 3).fill('valor') as SymbolKind[])
+      canPayList(p, Array(character === 'boromir' ? 2 : 3).fill('valor') as SymbolKind[])
     ) {
       out.push({ type: 'capture', character });
     }
 
-    // Gandalf's kindled hope (reconstructed)
-    if (character === 'gandalf' && !s.turn.abilityUsed['gandalf'] && s.siteStatus[here] === 'haven') {
+    // Activated abilities (once per turn)
+    if (character === 'aragorn' && !s.turn.abilityUsed['aragorn_blade'] && s.objectives.some((o) => o.complete) && (s.shadow[here] ?? 0) > 0) {
       out.push({ type: 'ability', character });
+    }
+    if (character === 'eomer' && !s.turn.abilityUsed['eomer_ride']) {
+      const free = CONNECTIONS[here].find((cn) => !cn.cost);
+      if (free) out.push({ type: 'ability', character, to: free.to });
+    }
+    if (character === 'gimli' && !s.turn.abilityUsed['gimli_craft'] && s.supply.tokens.valor > 0) {
+      out.push({ type: 'ability', character });
+    }
+    if (character === 'legolas') {
+      if (!s.turn.abilityUsed['legolas_walk'] && s.supply.tokens.stealth > 0) out.push({ type: 'ability', character });
+      if (!s.turn.abilityUsed['legolas_sight'] && s.shadowDeck.length > 0) out.push({ type: 'ability', character, mode: 'peek' });
+    }
+    if (character === 'merry_pippin') {
+      if (!s.turn.abilityUsed['mp_friend'] && s.supply.tokens.friendship > 0) out.push({ type: 'ability', character });
+      if (s.characters[BEARER]?.location === here && canPayList(p, ['friendship', 'friendship', 'friendship'])) {
+        out.push({ type: 'ability', character, mode: 'song' });
+      }
+    }
+    if (character === 'galadriel' && !s.turn.abilityUsed['galadriel_mirror'] && s.playerDeck.length > 0) {
+      out.push({ type: 'ability', character });
+    }
+    if (character === 'faramir' && !s.turn.abilityUsed['faramir_wisdom'] && s.siteStatus[here] === 'haven') {
+      const match = s.playerDiscard.find((cd) => cd.kind === 'region' && cd.region === MAP[here].region);
+      if (match) out.push({ type: 'ability', character, card: match.id });
+    }
+    if (character === 'gollum' && !s.turn.abilityUsed['gollum_slink'] && s.playerDiscard.length > 0) {
+      out.push({ type: 'ability', character, card: s.playerDiscard[s.playerDiscard.length - 1].id });
     }
   }
 
