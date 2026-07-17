@@ -61,6 +61,10 @@ export function Lobby({ room, playerId }: { room: RoomInfo | null; playerId: str
               Join
             </button>
           </div>
+          <p className="hint">
+            Have the physical game? <a href="#editor">Open the board editor</a> to verify locations,
+            regions, path costs, and battle lines against your copy.
+          </p>
         </div>
       </div>
     );

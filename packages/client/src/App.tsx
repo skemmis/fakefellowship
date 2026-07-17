@@ -3,8 +3,20 @@ import type { GameEvent, GameState, RoomInfo, ServerMessage } from '@emberfall/e
 import { net } from './net.js';
 import { Lobby } from './Lobby.js';
 import { Game } from './Game.js';
+import { Editor } from './Editor.js';
 
 export function App() {
+  const [isEditor, setIsEditor] = useState(location.hash === '#editor');
+  useEffect(() => {
+    const onHash = () => setIsEditor(location.hash === '#editor');
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+  if (isEditor) return <Editor />;
+  return <GameApp />;
+}
+
+function GameApp() {
   const [status, setStatus] = useState<'connecting' | 'open' | 'closed'>('connecting');
   const [room, setRoom] = useState<RoomInfo | null>(null);
   const [playerId, setPlayerId] = useState<string | null>(null);

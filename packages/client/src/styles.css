@@ -670,3 +670,103 @@ select {
   }
 }
 .die.ignored { opacity: 0.45; border-style: dashed; }
+
+/* ---------- Board editor ---------- */
+.editor {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+}
+.editor-map {
+  flex: 1;
+  min-width: 0;
+  background: #211f1a;
+  display: flex;
+}
+.editor-map svg {
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+.editor-side {
+  width: 380px;
+  overflow-y: auto;
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.editor-side h2 {
+  margin: 0;
+  color: var(--accent);
+}
+.ed-modes {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.ed-chiprow {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 6px 0;
+}
+.ed-node {
+  fill: rgba(255, 255, 255, 0.06);
+  stroke-width: 7;
+  cursor: pointer;
+}
+.ed-node.selected {
+  fill: rgba(224, 164, 88, 0.35);
+}
+.ed-node.pathfrom {
+  fill: rgba(111, 168, 209, 0.5);
+}
+.ed-node-label {
+  font-size: 26px;
+  fill: #fff;
+  paint-order: stroke;
+  stroke: #14120e;
+  stroke-width: 6px;
+  pointer-events: none;
+}
+.ed-path {
+  stroke: rgba(255, 255, 255, 0.55);
+  stroke-width: 6;
+  cursor: pointer;
+}
+.ed-path.special {
+  stroke: #ffd76a;
+  stroke-dasharray: 14 10;
+}
+.ed-path.selected {
+  stroke: #ff5555;
+  stroke-width: 10;
+}
+.ed-cost-bg {
+  fill: rgba(20, 14, 10, 0.8);
+  stroke: #ffd76a;
+  stroke-width: 2;
+}
+.ed-cost-text {
+  font-size: 26px;
+}
+.ed-line {
+  fill: none;
+  stroke: #46f0f0;
+  stroke-width: 10;
+  stroke-dasharray: 20 12;
+  opacity: 0.85;
+  pointer-events: none;
+}
+.ed-line-num {
+  font-size: 34px;
+  font-weight: bold;
+  fill: #46f0f0;
+  paint-order: stroke;
+  stroke: #14120e;
+  stroke-width: 6px;
+  pointer-events: none;
+}
