@@ -69,12 +69,18 @@ correct these against the physical game and edit the data files):**
 
 **Not yet implemented:**
 
-- The 1-player solo variant (5 characters, rotating solo token). Play 2+
-  players for now.
 - Consent prompts when traveling with another player's character (the UI
   notes "ask their player!" and the log announces it; the move is allowed).
 - The full 24-objective deck (9 objectives implemented; each game deals the
   finale plus 3–5 others per difficulty).
+
+**Solo variant (implemented):** one player runs Frodo & Sam plus 4 random
+characters. A solo token rotates each turn: the token character takes up to
+4 actions and Frodo & Sam take 1 bonus action. Fellowship is skipped (one
+shared hand) and Prepare requires a region card matching the character's
+current region. One relaxation: the rulebook has the Frodo action come
+strictly before or after the token character's actions; this edition lets it
+interleave.
 
 ## Known state
 
