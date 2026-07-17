@@ -377,6 +377,19 @@ export function Editor() {
               Click two locations to select their path (or create one if missing).
               {pathFrom ? ` First: ${locMap[pathFrom]?.name} — now click the other end.` : ''}
             </p>
+            <button
+              onClick={() => {
+                if (confirm('Delete ALL paths and rebuild from scratch by clicking node pairs?')) {
+                  update((d) => {
+                    d.paths = [];
+                  });
+                  setSelPath(null);
+                  setPathFrom(null);
+                }
+              }}
+            >
+              🗑 Clear ALL paths (start fresh)
+            </button>
             {selPath !== null && data.paths[selPath] && (
               <>
                 <p>
@@ -427,6 +440,19 @@ export function Editor() {
                   {l.name}
                 </button>
               ))}
+              <button
+                onClick={() => {
+                  if (confirm('Delete ALL battle lines and rebuild from scratch?')) {
+                    update((d) => {
+                      d.battleLines = [];
+                    });
+                    setSelLine(null);
+                    setDrawingLine(null);
+                  }
+                }}
+              >
+                🗑 Clear ALL lines
+              </button>
               <button
                 onClick={() => {
                   const id = `line_${Date.now().toString(36)}`;
