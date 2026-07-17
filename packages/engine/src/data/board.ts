@@ -171,23 +171,24 @@ export const PATHS: PathDef[] = [
   { a: 'lamedon', b: 'erech' },
   { a: 'erech', b: 'pinnath_gelin' },
   { a: 'grey_havens', b: 'dol_amroth', cost: ['friendship', 'friendship'] }, // the sea route
-  // Ithilien & Mordor approaches
+  // Ithilien & Mordor approaches. Mordor is webbed with stealth crossings —
+  // badge counts below are read from a high-zoom board photo.
   { a: 'osgiliath', b: 'north_ithilien' },
   { a: 'osgiliath', b: 'south_ithilien' },
   { a: 'north_ithilien', b: 'south_ithilien' },
   { a: 'emyn_muil', b: 'north_ithilien', cost: ['resistance'] }, // the Dead Marshes
-  { a: 'north_ithilien', b: 'udun', cost: ['stealth', 'stealth'] }, // the Black Gate
-  { a: 'south_ithilien', b: 'minas_morgul' },
+  { a: 'north_ithilien', b: 'udun', cost: ['stealth', 'stealth', 'stealth'] }, // the Black Gate
+  { a: 'south_ithilien', b: 'minas_morgul', cost: ['stealth', 'stealth'] },
   { a: 'south_ithilien', b: 'harondor' },
-  // Mordor
+  // Mordor interior
   { a: 'minas_morgul', b: 'mount_doom', cost: ['stealth', 'stealth'] }, // Cirith Ungol
-  { a: 'minas_morgul', b: 'plateau_of_gorgoroth' },
-  { a: 'mount_doom', b: 'plateau_of_gorgoroth', cost: ['stealth'] },
+  { a: 'minas_morgul', b: 'plateau_of_gorgoroth', cost: ['stealth'] },
+  { a: 'mount_doom', b: 'plateau_of_gorgoroth', cost: ['stealth', 'stealth'] },
   { a: 'mount_doom', b: 'barad_dur' },
-  { a: 'mount_doom', b: 'udun', cost: ['stealth'] },
+  { a: 'mount_doom', b: 'udun', cost: ['stealth', 'stealth', 'stealth'] },
   { a: 'plateau_of_gorgoroth', b: 'barad_dur' },
   { a: 'plateau_of_gorgoroth', b: 'nurn' },
-  { a: 'barad_dur', b: 'udun' },
+  { a: 'barad_dur', b: 'udun', cost: ['stealth'] },
   { a: 'udun', b: 'dagorlad', cost: ['stealth'] },
   { a: 'nurn', b: 'near_harad' },
   // Rhovanion
@@ -251,8 +252,9 @@ export const CONNECTIONS: Record<LocationId, Connection[]> = (() => {
   const add = (from: LocationId, to: LocationId, cost?: SymbolKind[], viaBattleLine?: boolean) => {
     const existing = out[from].find((c) => c.to === to);
     if (existing) {
-      // A free route supersedes a costed one between the same pair.
-      if (!cost) delete existing.cost;
+      // Battle lines are drawn ALONG paths on the board: a line overlapping a
+      // special path never waives the path's symbol cost. Line-derived edges
+      // only add connectivity where no path exists at all.
       if (viaBattleLine) existing.viaBattleLine = true;
       return;
     }
