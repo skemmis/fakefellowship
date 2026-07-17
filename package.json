@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.1.0",
   "description": "Emberfall — a cooperative fantasy strategy game for 1-4 players, playable online in real time.",
+  "engines": {
+    "node": ">=20"
+  },
   "workspaces": [
     "packages/*"
   ],
