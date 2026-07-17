@@ -1,37 +1,20 @@
 import { Fragment } from 'react';
 import {
-  BATTLE_LINES,
   CHARACTER_MAP,
   LOCATIONS,
   MAP,
-  PATHS,
   REGIONS,
   type GameState,
   type LocationId,
 } from '@emberfall/engine';
 
-const LINE_COLORS: Record<string, string> = {
-  moria_line: '#7fae6f',
-  shire_line: '#9a6fae',
-  helms_line: '#5fb3a1',
-  west_gondor_line: '#d1766a',
-  lorien_line: '#d9c26a',
-  wood_line: '#6fa8d1',
-  erebor_line: '#c98ad1',
-  rohan_line: '#66c2d6',
-  tirith_line: '#e0c050',
-  south_amroth_line: '#b08ad1',
-  harad_line: '#e08a6a',
-  umbar_line: '#8a9ad1',
-};
-
-const SYMBOL_GLYPH: Record<string, string> = {
-  friendship: '❤',
-  valor: '⚔',
-  stealth: '🌿',
-  resistance: '◎',
-};
-
+/**
+ * The illustrated board is the play surface: the game state is drawn as an
+ * interactive overlay on top of the board artwork (public/board.jpg,
+ * 2500x2143). Paths, battle lines, symbols, and labels are part of the art;
+ * the overlay adds only live state — troops, characters, Nazgûl, the Eye,
+ * haven/stronghold status changes, and click targets.
+ */
 export function MapView({
   state,
   highlights,
@@ -44,63 +27,27 @@ export function MapView({
   onClickLocation: (loc: LocationId) => void;
 }) {
   const frodoLoc = state.characters['frodo_sam']?.location;
-  return (
-    <svg className="map" viewBox="30 30 1000 850" preserveAspectRatio="xMidYMid meet">
-      <rect x="30" y="30" width="1000" height="850" className="map-bg" />
 
-      {/* Region labels + Nazgûl + the Eye */}
+  return (
+    <svg className="map" viewBox="0 0 2500 2143" preserveAspectRatio="xMidYMid meet">
+      <image href="/board.jpg" x="0" y="0" width="2500" height="2143" />
+
+      {/* Region chips: Nazgûl count + the Eye of Sauron */}
       {REGIONS.map((r) => {
         const wraiths = state.wraiths[r.id] ?? 0;
         const hasEye = state.eye === r.id;
+        if (wraiths === 0 && !hasEye) return null;
+        const label = `${hasEye ? '👁 ' : ''}${wraiths > 0 ? `🐉×${wraiths}` : ''}`;
+        const w = 60 + label.length * 16;
         return (
-          <g key={r.id} className="region-label">
-            <text x={r.x} y={r.y} textAnchor="middle" className="region-name">
-              {r.name.toUpperCase()}
+          <g key={r.id} className="region-chip">
+            <rect x={r.x - w / 2} y={r.y - 26} width={w} height={52} rx={14} className="chip-bg" />
+            <text x={r.x} y={r.y + 12} textAnchor="middle" className="chip-text">
+              {label}
             </text>
-            {(wraiths > 0 || hasEye) && (
-              <text x={r.x} y={r.y + 22} textAnchor="middle" className="region-badges">
-                {hasEye ? '👁 ' : ''}
-                {wraiths > 0 ? `🐉×${wraiths}` : ''}
-                <title>
-                  {r.name}: {wraiths} Nazgûl{hasEye ? ' — the Eye of Sauron watches this region' : ''}
-                </title>
-              </text>
-            )}
-          </g>
-        );
-      })}
-
-      {/* Battle lines (under paths) */}
-      {BATTLE_LINES.map((line) => {
-        const pts = line.path.map((id) => MAP[id]);
-        const d = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ');
-        return (
-          <g key={line.id}>
-            <path d={d} className="battle-line" stroke={LINE_COLORS[line.id] ?? '#888'}>
-              <title>Battle line: {line.name}</title>
-            </path>
-          </g>
-        );
-      })}
-
-      {/* Normal + special paths */}
-      {PATHS.map((p, i) => {
-        const a = MAP[p.a];
-        const b = MAP[p.b];
-        const midX = (a.x + b.x) / 2;
-        const midY = (a.y + b.y) / 2;
-        return (
-          <g key={i}>
-            <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} className={p.cost ? 'path special' : 'path'} />
-            {p.cost && (
-              <g>
-                <rect x={midX - 13} y={midY - 9} width={26} height={18} rx={4} className="cost-badge" />
-                <text x={midX} y={midY + 4} textAnchor="middle" className="cost-text">
-                  {p.cost.map((c) => SYMBOL_GLYPH[c]).join('')}
-                </text>
-                <title>{`Special path: costs ${p.cost.join(' + ')} to travel`}</title>
-              </g>
-            )}
+            <title>
+              {r.name}: {wraiths} Nazgûl{hasEye ? ' — the Eye of Sauron watches this region' : ''}
+            </title>
           </g>
         );
       })}
@@ -111,6 +58,8 @@ export function MapView({
         const friendly = Object.entries(state.friendly[loc.id] ?? {}).filter(([, n]) => (n ?? 0) > 0);
         const friendlyTotal = friendly.reduce((a, [, n]) => a + (n ?? 0), 0);
         const status = state.siteStatus[loc.id];
+        const flipped =
+          (loc.haven && status === 'stronghold') || (loc.stronghold && status === 'haven');
         const charsHere = Object.keys(state.characters).filter(
           (c) => state.characters[c].location === loc.id,
         );
@@ -120,8 +69,9 @@ export function MapView({
         const tooltip = [
           `${loc.name} (${REGIONS.find((r) => r.id === loc.region)?.name})`,
           status === 'haven' ? 'Haven — Frodo ignores Exposed here; Prepare is possible' : '',
-          status === 'stronghold' ? 'Shadow stronghold — capture with a troop, no shadow, and 3 Valor' : '',
-          loc.muster ? `Muster: ${loc.muster}` : '',
+          status === 'stronghold' ? 'Shadow stronghold — capture with a troop, no shadow troops, and 3 Valor' : '',
+          flipped ? '(status flipped from its printed side!)' : '',
+          loc.muster ? `Muster location (${loc.muster})` : '',
           shadow ? `${shadow} shadow troops` : '',
           friendlyTotal ? `${friendlyTotal} friendly troops (${friendly.map(([f, n]) => `${n} ${f}`).join(', ')})` : '',
           charsHere.length ? `Characters: ${charsHere.map((c) => CHARACTER_MAP[c].name).join(', ')}` : '',
@@ -134,47 +84,37 @@ export function MapView({
           <Fragment key={loc.id}>
             <g className={`loc ${highlight ? 'clickable' : ''}`} onClick={() => onClickLocation(loc.id)}>
               <title>{tooltip}</title>
-              {highlight && <circle cx={loc.x} cy={loc.y} r={24} className={`halo halo-${highlight}`} />}
+              {highlight && <circle cx={loc.x} cy={loc.y} r={54} className={`halo halo-${highlight}`} />}
+              {/* Click target + selection ring; near-invisible unless relevant */}
               <circle
                 cx={loc.x}
                 cy={loc.y}
-                r={isDoom ? 17 : 14}
-                className={[
-                  'loc-node',
-                  status === 'haven' ? 'haven' : '',
-                  status === 'stronghold' ? 'stronghold' : '',
-                  loc.shadowLoc ? 'shadow-loc' : '',
-                  isDoom ? 'doom' : '',
-                  selectedLoc === loc.id ? 'selected' : '',
-                ].join(' ')}
+                r={40}
+                className={`loc-ring ${selectedLoc === loc.id ? 'selected' : ''} ${highlight ? 'lit' : ''}`}
               />
-              {loc.muster && (
-                <text x={loc.x} y={loc.y + 4} textAnchor="middle" className={`muster-glyph muster-${loc.muster}`}>
-                  {loc.muster === 'deepholm' ? '⛏' : loc.muster === 'sylvan' ? '☘' : loc.muster === 'riders' ? '🐎' : '🌳'}
-                </text>
+              {/* Status flip marker: captured stronghold or fallen haven */}
+              {flipped && (
+                <g>
+                  <circle cx={loc.x} cy={loc.y} r={30} className={status === 'haven' ? 'flip-haven' : 'flip-stronghold'} />
+                  <text x={loc.x} y={loc.y + 10} textAnchor="middle" className="flip-glyph">
+                    {status === 'haven' ? '🕊' : '🔥'}
+                  </text>
+                </g>
               )}
-              {isDoom && (
-                <text x={loc.x} y={loc.y + 5} textAnchor="middle" className="doom-glyph">
-                  🌋
-                </text>
-              )}
-              <text x={loc.x} y={loc.y + 28} textAnchor="middle" className="loc-name">
-                {loc.name}
-              </text>
 
               {/* Troops */}
               {shadow > 0 && (
                 <g>
-                  <circle cx={loc.x - 14} cy={loc.y - 12} r={9} className="badge shadow-badge" />
-                  <text x={loc.x - 14} y={loc.y - 8} textAnchor="middle" className="badge-text">
+                  <circle cx={loc.x - 34} cy={loc.y - 34} r={22} className="badge shadow-badge" />
+                  <text x={loc.x - 34} y={loc.y - 25} textAnchor="middle" className="badge-text">
                     {shadow}
                   </text>
                 </g>
               )}
               {friendlyTotal > 0 && (
                 <g>
-                  <circle cx={loc.x + 14} cy={loc.y - 12} r={9} className="badge friendly-badge" />
-                  <text x={loc.x + 14} y={loc.y - 8} textAnchor="middle" className="badge-text">
+                  <circle cx={loc.x + 34} cy={loc.y - 34} r={22} className="badge friendly-badge" />
+                  <text x={loc.x + 34} y={loc.y - 25} textAnchor="middle" className="badge-text">
                     {friendlyTotal}
                   </text>
                 </g>
@@ -184,9 +124,9 @@ export function MapView({
               {charsHere.map((c, i) => (
                 <circle
                   key={c}
-                  cx={loc.x - 12 + (i % 4) * 8}
-                  cy={loc.y + 13 + Math.floor(i / 4) * 8}
-                  r={4.5}
+                  cx={loc.x - 27 + (i % 4) * 18}
+                  cy={loc.y + 40 + Math.floor(i / 4) * 19}
+                  r={10}
                   fill={CHARACTER_MAP[c].color}
                   className={`char-pawn ${c === 'frodo_sam' ? 'frodo' : ''}`}
                 >
@@ -194,7 +134,7 @@ export function MapView({
                 </circle>
               ))}
               {frodoLoc === loc.id && (
-                <text x={loc.x} y={loc.y - 20} textAnchor="middle" className="frodo-mark">
+                <text x={loc.x} y={loc.y - 48} textAnchor="middle" className="frodo-mark">
                   💍
                 </text>
               )}
