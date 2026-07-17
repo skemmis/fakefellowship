@@ -5,6 +5,7 @@ export {
   REGION_MAP,
   LOCATIONS,
   MAP,
+  EDGES,
   PATHS,
   BATTLE_LINES,
   CONNECTIONS,

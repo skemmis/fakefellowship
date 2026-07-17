@@ -46,6 +46,23 @@ export interface PathDef {
   cost?: SymbolKind[];
 }
 
+/**
+ * An atomic connection between two locations: EITHER a white path (players
+ * only, optional symbol cost) OR a battle line segment (colored, directed
+ * arrow; chains of same-colored segments form full battle lines).
+ */
+export interface EdgeDef {
+  a: LocationId;
+  b: LocationId;
+  kind: 'path' | 'line';
+  /** Paths only: symbols spent to travel. */
+  cost?: SymbolKind[];
+  /** Line segments only: the route's printed color. */
+  color?: string;
+  /** Line segments only: arrow direction ('ab' = a→b, 'ba' = b→a). */
+  dir?: 'ab' | 'ba';
+}
+
 /** Ordered from the shadow location to the haven it menaces. */
 export interface BattleLineDef {
   id: string;

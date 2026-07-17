@@ -1,5 +1,6 @@
 import type {
   BattleLineDef,
+  EdgeDef,
   LocationDef,
   LocationId,
   PathDef,
@@ -112,121 +113,193 @@ export const LOCATIONS: LocationDef[] = [
 ];
 
 /**
- * Paths. `cost` marks a special path. The Rivendell-Carrock stealth pass and
- * the Hollin-Moria friendship pass are confirmed by rulebook examples; other
- * costed paths are read from symbol badges on the map photo.
+ * Edges: every connection between two locations is EITHER a white path
+ * (players only; may carry a symbol cost) OR a battle line segment (a
+ * colored, directed arrow; shadow troops advance along it, and players may
+ * travel it too). Multiple edges may join the same pair of locations.
+ *
+ * Full battle lines are DERIVED by chaining same-colored segments head to
+ * tail. This entire list is editable in the in-game board editor (#editor).
  */
-export const PATHS: PathDef[] = [
-  // Eriador
-  { a: 'grey_havens', b: 'ered_luin' },
-  { a: 'grey_havens', b: 'the_shire' },
-  { a: 'grey_havens', b: 'sarn_ford' },
-  { a: 'ered_luin', b: 'the_shire' },
-  { a: 'the_shire', b: 'bree' },
-  { a: 'the_shire', b: 'sarn_ford' },
-  { a: 'bree', b: 'weather_hills' },
-  { a: 'bree', b: 'sarn_ford' },
-  { a: 'sarn_ford', b: 'tharbad' },
-  { a: 'weather_hills', b: 'rivendell' },
-  { a: 'tharbad', b: 'bree' },
-  // North & Misty Mountains
-  { a: 'rivendell', b: 'hollin' },
-  { a: 'rivendell', b: 'carrock', cost: ['stealth'] }, // the High Pass
-  { a: 'hollin', b: 'moria', cost: ['friendship'] }, // the doors of Moria
-  { a: 'hollin', b: 'carrock', cost: ['resistance'] }, // over Caradhras
-  { a: 'hollin', b: 'dunland' },
-  { a: 'hollin', b: 'tharbad' },
-  { a: 'moria', b: 'gladden_fields' },
-  { a: 'gladden_fields', b: 'carrock' },
-  { a: 'gladden_fields', b: 'lorien' },
-  { a: 'carrock', b: 'old_forest_road' },
-  // Enedwaith
-  { a: 'tharbad', b: 'dunland' },
-  { a: 'tharbad', b: 'druwaith_iaur' },
-  { a: 'dunland', b: 'isengard' },
-  { a: 'druwaith_iaur', b: 'pinnath_gelin' },
-  { a: 'druwaith_iaur', b: 'fords_of_isen' },
-  { a: 'isengard', b: 'fangorn_forest', cost: ['stealth'] },
-  { a: 'isengard', b: 'fords_of_isen' },
-  // Rohan
-  { a: 'fangorn_forest', b: 'lorien', cost: ['friendship'] },
-  { a: 'fangorn_forest', b: 'eastemnet' },
-  { a: 'fangorn_forest', b: 'fords_of_isen' },
-  { a: 'fords_of_isen', b: 'helms_deep' },
-  { a: 'helms_deep', b: 'edoras' },
-  { a: 'edoras', b: 'eastemnet' },
-  { a: 'edoras', b: 'druadan_forest' },
-  { a: 'edoras', b: 'erech', cost: ['stealth'] }, // the Paths of the Dead
-  { a: 'eastemnet', b: 'emyn_muil' },
-  { a: 'eastemnet', b: 'brown_lands' },
-  // Gondor
-  { a: 'druadan_forest', b: 'minas_tirith' },
-  { a: 'minas_tirith', b: 'osgiliath' },
-  { a: 'minas_tirith', b: 'pelargir' },
-  { a: 'pelargir', b: 'lamedon' },
-  { a: 'pelargir', b: 'south_ithilien' },
-  { a: 'pelargir', b: 'harondor' },
-  { a: 'dol_amroth', b: 'lamedon' },
-  { a: 'dol_amroth', b: 'pinnath_gelin' },
-  { a: 'lamedon', b: 'erech' },
-  { a: 'erech', b: 'pinnath_gelin' },
-  { a: 'grey_havens', b: 'dol_amroth', cost: ['friendship', 'friendship'] }, // the sea route
-  // Ithilien & Mordor approaches. Mordor is webbed with stealth crossings —
-  // badge counts below are read from a high-zoom board photo.
-  { a: 'osgiliath', b: 'north_ithilien' },
-  { a: 'osgiliath', b: 'south_ithilien' },
-  { a: 'north_ithilien', b: 'south_ithilien' },
-  { a: 'emyn_muil', b: 'north_ithilien', cost: ['resistance'] }, // the Dead Marshes
-  { a: 'north_ithilien', b: 'udun', cost: ['stealth', 'stealth', 'stealth'] }, // the Black Gate
-  { a: 'south_ithilien', b: 'minas_morgul', cost: ['stealth', 'stealth'] },
-  { a: 'south_ithilien', b: 'harondor' },
-  // Mordor interior
-  { a: 'minas_morgul', b: 'mount_doom', cost: ['stealth', 'stealth'] }, // Cirith Ungol
-  { a: 'minas_morgul', b: 'plateau_of_gorgoroth', cost: ['stealth'] },
-  { a: 'mount_doom', b: 'plateau_of_gorgoroth', cost: ['stealth', 'stealth'] },
-  { a: 'mount_doom', b: 'barad_dur' },
-  { a: 'mount_doom', b: 'udun', cost: ['stealth', 'stealth', 'stealth'] },
-  { a: 'plateau_of_gorgoroth', b: 'barad_dur' },
-  { a: 'plateau_of_gorgoroth', b: 'nurn' },
-  { a: 'barad_dur', b: 'udun', cost: ['stealth'] },
-  { a: 'udun', b: 'dagorlad', cost: ['stealth'] },
-  { a: 'nurn', b: 'near_harad' },
-  // Rhovanion
-  { a: 'brown_lands', b: 'emyn_muil' },
-  { a: 'brown_lands', b: 'dagorlad' },
-  { a: 'brown_lands', b: 'southern_mirkwood' },
-  { a: 'dagorlad', b: 'rhun' },
-  // Mirkwood & Dale
-  { a: 'lorien', b: 'dol_guldur' },
-  { a: 'dol_guldur', b: 'southern_mirkwood' },
-  { a: 'southern_mirkwood', b: 'old_forest_road' },
-  { a: 'old_forest_road', b: 'woodland_realm' },
-  { a: 'woodland_realm', b: 'lake_town' },
-  { a: 'lake_town', b: 'erebor' },
-  { a: 'lake_town', b: 'dorwinion' },
-  { a: 'erebor', b: 'iron_hills' },
-  { a: 'iron_hills', b: 'dorwinion' },
-  // Haradwaith
-  { a: 'harondor', b: 'near_harad' },
-  { a: 'umbar', b: 'near_harad' },
-  { a: 'umbar', b: 'harondor' },
+export const EDGES: EdgeDef[] = [
+  { a: "grey_havens", b: "ered_luin", kind: "path" },
+  { a: "grey_havens", b: "the_shire", kind: "path" },
+  { a: "grey_havens", b: "sarn_ford", kind: "path" },
+  { a: "ered_luin", b: "the_shire", kind: "path" },
+  { a: "the_shire", b: "bree", kind: "path" },
+  { a: "the_shire", b: "sarn_ford", kind: "path" },
+  { a: "bree", b: "weather_hills", kind: "path" },
+  { a: "bree", b: "sarn_ford", kind: "path" },
+  { a: "sarn_ford", b: "tharbad", kind: "path" },
+  { a: "weather_hills", b: "rivendell", kind: "path" },
+  { a: "tharbad", b: "bree", kind: "path" },
+  { a: "rivendell", b: "hollin", kind: "path" },
+  { a: "rivendell", b: "carrock", kind: "path", cost: ["stealth"] },
+  { a: "hollin", b: "moria", kind: "path", cost: ["friendship"] },
+  { a: "hollin", b: "carrock", kind: "path", cost: ["resistance"] },
+  { a: "hollin", b: "dunland", kind: "path" },
+  { a: "hollin", b: "tharbad", kind: "path" },
+  { a: "moria", b: "gladden_fields", kind: "path" },
+  { a: "gladden_fields", b: "carrock", kind: "path" },
+  { a: "gladden_fields", b: "lorien", kind: "path" },
+  { a: "carrock", b: "old_forest_road", kind: "path" },
+  { a: "tharbad", b: "dunland", kind: "path" },
+  { a: "tharbad", b: "druwaith_iaur", kind: "path" },
+  { a: "dunland", b: "isengard", kind: "path" },
+  { a: "druwaith_iaur", b: "pinnath_gelin", kind: "path" },
+  { a: "druwaith_iaur", b: "fords_of_isen", kind: "path" },
+  { a: "isengard", b: "fangorn_forest", kind: "path", cost: ["stealth"] },
+  { a: "isengard", b: "fords_of_isen", kind: "path" },
+  { a: "fangorn_forest", b: "lorien", kind: "path", cost: ["friendship"] },
+  { a: "fangorn_forest", b: "eastemnet", kind: "path" },
+  { a: "fangorn_forest", b: "fords_of_isen", kind: "path" },
+  { a: "fords_of_isen", b: "helms_deep", kind: "path" },
+  { a: "helms_deep", b: "edoras", kind: "path" },
+  { a: "edoras", b: "eastemnet", kind: "path" },
+  { a: "edoras", b: "druadan_forest", kind: "path" },
+  { a: "edoras", b: "erech", kind: "path", cost: ["stealth"] },
+  { a: "eastemnet", b: "emyn_muil", kind: "path" },
+  { a: "eastemnet", b: "brown_lands", kind: "path" },
+  { a: "druadan_forest", b: "minas_tirith", kind: "path" },
+  { a: "minas_tirith", b: "osgiliath", kind: "path" },
+  { a: "minas_tirith", b: "pelargir", kind: "path" },
+  { a: "pelargir", b: "lamedon", kind: "path" },
+  { a: "pelargir", b: "south_ithilien", kind: "path" },
+  { a: "pelargir", b: "harondor", kind: "path" },
+  { a: "dol_amroth", b: "lamedon", kind: "path" },
+  { a: "dol_amroth", b: "pinnath_gelin", kind: "path" },
+  { a: "lamedon", b: "erech", kind: "path" },
+  { a: "erech", b: "pinnath_gelin", kind: "path" },
+  { a: "grey_havens", b: "dol_amroth", kind: "path", cost: ["friendship", "friendship"] },
+  { a: "osgiliath", b: "north_ithilien", kind: "path" },
+  { a: "osgiliath", b: "south_ithilien", kind: "path" },
+  { a: "north_ithilien", b: "south_ithilien", kind: "path" },
+  { a: "emyn_muil", b: "north_ithilien", kind: "path", cost: ["resistance"] },
+  { a: "north_ithilien", b: "udun", kind: "path", cost: ["stealth", "stealth", "stealth"] },
+  { a: "south_ithilien", b: "minas_morgul", kind: "path", cost: ["stealth", "stealth"] },
+  { a: "south_ithilien", b: "harondor", kind: "path" },
+  { a: "minas_morgul", b: "mount_doom", kind: "path", cost: ["stealth", "stealth"] },
+  { a: "minas_morgul", b: "plateau_of_gorgoroth", kind: "path", cost: ["stealth"] },
+  { a: "mount_doom", b: "plateau_of_gorgoroth", kind: "path", cost: ["stealth", "stealth"] },
+  { a: "mount_doom", b: "barad_dur", kind: "path" },
+  { a: "mount_doom", b: "udun", kind: "path", cost: ["stealth", "stealth", "stealth"] },
+  { a: "plateau_of_gorgoroth", b: "barad_dur", kind: "path" },
+  { a: "plateau_of_gorgoroth", b: "nurn", kind: "path" },
+  { a: "barad_dur", b: "udun", kind: "path", cost: ["stealth"] },
+  { a: "udun", b: "dagorlad", kind: "path", cost: ["stealth"] },
+  { a: "nurn", b: "near_harad", kind: "path" },
+  { a: "brown_lands", b: "emyn_muil", kind: "path" },
+  { a: "brown_lands", b: "dagorlad", kind: "path" },
+  { a: "brown_lands", b: "southern_mirkwood", kind: "path" },
+  { a: "dagorlad", b: "rhun", kind: "path" },
+  { a: "lorien", b: "dol_guldur", kind: "path" },
+  { a: "dol_guldur", b: "southern_mirkwood", kind: "path" },
+  { a: "southern_mirkwood", b: "old_forest_road", kind: "path" },
+  { a: "old_forest_road", b: "woodland_realm", kind: "path" },
+  { a: "woodland_realm", b: "lake_town", kind: "path" },
+  { a: "lake_town", b: "erebor", kind: "path" },
+  { a: "lake_town", b: "dorwinion", kind: "path" },
+  { a: "erebor", b: "iron_hills", kind: "path" },
+  { a: "iron_hills", b: "dorwinion", kind: "path" },
+  { a: "harondor", b: "near_harad", kind: "path" },
+  { a: "umbar", b: "near_harad", kind: "path" },
+  { a: "umbar", b: "harondor", kind: "path" },
+  { a: "moria", b: "hollin", kind: "line", color: "#7fbf5f", dir: "ab" },
+  { a: "hollin", b: "weather_hills", kind: "line", color: "#7fbf5f", dir: "ab" },
+  { a: "weather_hills", b: "rivendell", kind: "line", color: "#7fbf5f", dir: "ab" },
+  { a: "dunland", b: "tharbad", kind: "line", color: "#8f6fc0", dir: "ab" },
+  { a: "tharbad", b: "sarn_ford", kind: "line", color: "#8f6fc0", dir: "ab" },
+  { a: "sarn_ford", b: "the_shire", kind: "line", color: "#8f6fc0", dir: "ab" },
+  { a: "isengard", b: "fords_of_isen", kind: "line", color: "#5fb3a1", dir: "ab" },
+  { a: "fords_of_isen", b: "helms_deep", kind: "line", color: "#5fb3a1", dir: "ab" },
+  { a: "isengard", b: "druwaith_iaur", kind: "line", color: "#e8836a", dir: "ab" },
+  { a: "druwaith_iaur", b: "pinnath_gelin", kind: "line", color: "#e8836a", dir: "ab" },
+  { a: "pinnath_gelin", b: "lamedon", kind: "line", color: "#e8836a", dir: "ab" },
+  { a: "lamedon", b: "dol_amroth", kind: "line", color: "#e8836a", dir: "ab" },
+  { a: "dol_guldur", b: "lorien", kind: "line", color: "#e0c050", dir: "ab" },
+  { a: "dol_guldur", b: "old_forest_road", kind: "line", color: "#6fb8e8", dir: "ab" },
+  { a: "old_forest_road", b: "woodland_realm", kind: "line", color: "#6fb8e8", dir: "ab" },
+  { a: "rhun", b: "dorwinion", kind: "line", color: "#c98ad1", dir: "ab" },
+  { a: "dorwinion", b: "lake_town", kind: "line", color: "#c98ad1", dir: "ab" },
+  { a: "lake_town", b: "erebor", kind: "line", color: "#c98ad1", dir: "ab" },
+  { a: "barad_dur", b: "dagorlad", kind: "line", color: "#55c8dc", dir: "ab" },
+  { a: "dagorlad", b: "emyn_muil", kind: "line", color: "#55c8dc", dir: "ab" },
+  { a: "emyn_muil", b: "eastemnet", kind: "line", color: "#55c8dc", dir: "ab" },
+  { a: "eastemnet", b: "edoras", kind: "line", color: "#55c8dc", dir: "ab" },
+  { a: "edoras", b: "helms_deep", kind: "line", color: "#55c8dc", dir: "ab" },
+  { a: "nurn", b: "plateau_of_gorgoroth", kind: "line", color: "#e8d060", dir: "ab" },
+  { a: "plateau_of_gorgoroth", b: "osgiliath", kind: "line", color: "#e8d060", dir: "ab" },
+  { a: "osgiliath", b: "minas_tirith", kind: "line", color: "#e8d060", dir: "ab" },
+  { a: "minas_morgul", b: "south_ithilien", kind: "line", color: "#a98ae0", dir: "ab" },
+  { a: "south_ithilien", b: "pelargir", kind: "line", color: "#a98ae0", dir: "ab" },
+  { a: "pelargir", b: "dol_amroth", kind: "line", color: "#a98ae0", dir: "ab" },
+  { a: "near_harad", b: "harondor", kind: "line", color: "#e8946a", dir: "ab" },
+  { a: "harondor", b: "south_ithilien", kind: "line", color: "#e8946a", dir: "ab" },
+  { a: "south_ithilien", b: "minas_tirith", kind: "line", color: "#e8946a", dir: "ab" },
+  { a: "umbar", b: "dol_amroth", kind: "line", color: "#8a9ae0", dir: "ab" },
 ];
 
-/** Battle lines (12): from a shadow location to the haven it menaces. */
-export const BATTLE_LINES: BattleLineDef[] = [
-  { id: 'moria_line', name: 'Moria → Rivendell', color: '#7fbf5f', path: ['moria', 'hollin', 'weather_hills', 'rivendell'] },
-  { id: 'shire_line', name: 'Dunland → The Shire', color: '#8f6fc0', path: ['dunland', 'tharbad', 'sarn_ford', 'the_shire'] },
-  { id: 'helms_line', name: "Isengard → Helm's Deep", color: '#5fb3a1', path: ['isengard', 'fords_of_isen', 'helms_deep'] },
-  { id: 'west_gondor_line', name: 'Isengard → Dol Amroth', color: '#e8836a', path: ['isengard', 'druwaith_iaur', 'pinnath_gelin', 'lamedon', 'dol_amroth'] },
-  { id: 'lorien_line', name: 'Dol Guldur → Lórien', color: '#e0c050', path: ['dol_guldur', 'lorien'] },
-  { id: 'wood_line', name: 'Dol Guldur → Woodland Realm', color: '#6fb8e8', path: ['dol_guldur', 'old_forest_road', 'woodland_realm'] },
-  { id: 'erebor_line', name: 'Rhûn → Erebor', color: '#c98ad1', path: ['rhun', 'dorwinion', 'lake_town', 'erebor'] },
-  { id: 'rohan_line', name: "Barad-dûr → Helm's Deep", color: '#55c8dc', path: ['barad_dur', 'dagorlad', 'emyn_muil', 'eastemnet', 'edoras', 'helms_deep'] },
-  { id: 'tirith_line', name: 'Núrn → Minas Tirith', color: '#e8d060', path: ['nurn', 'plateau_of_gorgoroth', 'osgiliath', 'minas_tirith'] },
-  { id: 'south_amroth_line', name: 'Minas Morgul → Dol Amroth', color: '#a98ae0', path: ['minas_morgul', 'south_ithilien', 'pelargir', 'dol_amroth'] },
-  { id: 'harad_line', name: 'Near Harad → Minas Tirith', color: '#e8946a', path: ['near_harad', 'harondor', 'south_ithilien', 'minas_tirith'] },
-  { id: 'umbar_line', name: 'Umbar → Dol Amroth', color: '#8a9ae0', path: ['umbar', 'dol_amroth'] },
-];
+/** White paths (derived from EDGES; kept for compatibility). */
+export const PATHS: PathDef[] = EDGES.filter((e) => e.kind === 'path').map((e) => ({
+  a: e.a,
+  b: e.b,
+  ...(e.cost ? { cost: e.cost } : {}),
+}));
+
+/**
+ * Battle lines, derived by chaining same-colored directed segments.
+ * A chain starts at a node with no incoming segment of that color and
+ * follows the arrows to its end.
+ */
+function deriveBattleLines(edges: EdgeDef[]): BattleLineDef[] {
+  const byColor = new Map<string, { from: LocationId; to: LocationId }[]>();
+  for (const e of edges) {
+    if (e.kind !== 'line') continue;
+    const color = e.color ?? '#999999';
+    const from = e.dir === 'ba' ? e.b : e.a;
+    const to = e.dir === 'ba' ? e.a : e.b;
+    if (!byColor.has(color)) byColor.set(color, []);
+    byColor.get(color)!.push({ from, to });
+  }
+  const lines: BattleLineDef[] = [];
+  for (const [color, segs] of byColor) {
+    const outgoing = new Map<LocationId, LocationId[]>();
+    const hasIncoming = new Set<LocationId>();
+    for (const s of segs) {
+      if (!outgoing.has(s.from)) outgoing.set(s.from, []);
+      outgoing.get(s.from)!.push(s.to);
+      hasIncoming.add(s.to);
+    }
+    const starts = [...outgoing.keys()].filter((n) => !hasIncoming.has(n)).sort();
+    for (const start of starts) {
+      // Follow each branch from the start (branches split into separate lines).
+      const walk = (node: LocationId, path: LocationId[], guard: number): void => {
+        const nexts = outgoing.get(node) ?? [];
+        if (nexts.length === 0 || guard > 40) {
+          if (path.length >= 2) {
+            const id = `bl_${color.replace('#', '')}_${path[0]}_${path[path.length - 1]}`;
+            const name = `${path[0]} \u2192 ${path[path.length - 1]}`;
+            lines.push({ id, name, path: [...path], color });
+          }
+          return;
+        }
+        for (const nxt of nexts) walk(nxt, [...path, nxt], guard + 1);
+      };
+      walk(start, [start], 0);
+    }
+  }
+  lines.sort((a, b) => a.id.localeCompare(b.id));
+  return lines;
+}
+
+const LOC_NAME: Record<LocationId, string> = Object.fromEntries(
+  LOCATIONS.map((l) => [l.id, l.name]),
+);
+
+export const BATTLE_LINES: BattleLineDef[] = deriveBattleLines(EDGES).map((l) => ({
+  ...l,
+  name: `${LOC_NAME[l.path[0]]} \u2192 ${LOC_NAME[l.path[l.path.length - 1]]}`,
+}));
 
 // ---------------------------------------------------------------------------
 // Derived lookups
