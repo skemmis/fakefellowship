@@ -107,7 +107,9 @@ export function Editor() {
   const [pair, setPair] = useState<[LocationId, LocationId] | null>(null);
   const [pairFrom, setPairFrom] = useState<LocationId | null>(null);
   const [selRegion, setSelRegion] = useState<string>(REGIONS[0].id);
-  const [showLines, setShowLines] = useState(true);
+  const [view, setView] = useState({ nodes: true, paths: true, lines: true, labels: true });
+  const [boardOnly, setBoardOnly] = useState(false);
+  const [lastPaint, setLastPaint] = useState<string | null>(null);
   const dragging = useRef<LocationId | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
 
@@ -151,6 +153,7 @@ export function Editor() {
       update((d) => {
         d.locations.find((l) => l.id === id)!.region = selRegion;
       });
+      setLastPaint(`${locMap[id]?.name} → ${data.regions.find((r) => r.id === selRegion)?.name}`);
     }
     if (mode === 'edges') {
       if (!pairFrom) {
@@ -215,7 +218,9 @@ export function Editor() {
 
           {/* Edges */}
           {data.edges.map((e, i) => {
-            if (e.kind === 'line' && !showLines) return null;
+            if (boardOnly) return null;
+            if (e.kind === 'line' && !view.lines) return null;
+            if (e.kind === 'path' && !view.paths) return null;
             const a = locMap[e.a];
             const b = locMap[e.b];
             if (!a || !b) return null;
@@ -273,30 +278,35 @@ export function Editor() {
           })}
 
           {/* Location nodes */}
-          {data.locations.map((l) => (
-            <g
-              key={l.id}
-              onPointerDown={(e) => {
-                if (mode === 'move') {
-                  dragging.current = l.id;
-                  setSelected(l.id);
-                  e.preventDefault();
-                }
-              }}
-              onClick={() => clickLocation(l.id)}
-            >
-              <circle
-                cx={l.x} cy={l.y} r={38}
-                className={`ed-node ${selected === l.id || pair?.includes(l.id) ? 'selected' : ''} ${pairFrom === l.id ? 'pathfrom' : ''}`}
-                stroke={regionColor[l.region]}
-              />
-              <text x={l.x} y={l.y - 44} textAnchor="middle" className="ed-node-label">
-                {l.name}
-                {l.haven ? ' 🏠' : ''}{l.stronghold ? ' 🏴' : ''}{l.shadowLoc ? ' 🔴' : ''}
-                {l.muster ? ` +${l.muster[0]}` : ''}
-              </text>
-            </g>
-          ))}
+          {!boardOnly &&
+            view.nodes &&
+            data.locations.map((l) => (
+              <g
+                key={l.id}
+                onPointerDown={(e) => {
+                  if (mode === 'move') {
+                    dragging.current = l.id;
+                    setSelected(l.id);
+                    e.preventDefault();
+                  }
+                }}
+                onClick={() => clickLocation(l.id)}
+              >
+                <circle
+                  cx={l.x} cy={l.y} r={38}
+                  className={`ed-node ${selected === l.id || pair?.includes(l.id) ? 'selected' : ''} ${pairFrom === l.id ? 'pathfrom' : ''}`}
+                  stroke={regionColor[l.region]}
+                  style={mode === 'region' ? { fill: regionColor[l.region], fillOpacity: 0.5 } : undefined}
+                />
+                {view.labels && (
+                  <text x={l.x} y={l.y - 44} textAnchor="middle" className="ed-node-label">
+                    {l.name}
+                    {l.haven ? ' 🏠' : ''}{l.stronghold ? ' 🏴' : ''}{l.shadowLoc ? ' 🔴' : ''}
+                    {l.muster ? ` +${l.muster[0]}` : ''}
+                  </text>
+                )}
+              </g>
+            ))}
         </svg>
       </div>
 
@@ -310,6 +320,37 @@ export function Editor() {
           ))}
         </div>
 
+        <section className="panel">
+          <h3>View</h3>
+          <div className="ed-chiprow">
+            <button
+              className={boardOnly ? 'primary' : ''}
+              onClick={() => setBoardOnly(!boardOnly)}
+              title="Hide every overlay to inspect the raw board art"
+            >
+              🗺 Board only
+            </button>
+            {(
+              [
+                ['nodes', 'Nodes'],
+                ['labels', 'Labels'],
+                ['paths', 'White paths'],
+                ['lines', 'Line segments'],
+              ] as const
+            ).map(([key, label]) => (
+              <label key={key} className="check">
+                <input
+                  type="checkbox"
+                  checked={view[key]}
+                  disabled={boardOnly}
+                  onChange={(e) => setView({ ...view, [key]: e.target.checked })}
+                />
+                {label}
+              </label>
+            ))}
+          </div>
+        </section>
+
         {mode === 'edges' && (
           <>
             <section className="panel">
@@ -320,10 +361,6 @@ export function Editor() {
                 with an arrow direction).
                 {pairFrom ? ` First node: ${locMap[pairFrom]?.name} — click the second.` : ''}
               </p>
-              <label className="check">
-                <input type="checkbox" checked={showLines} onChange={(e) => setShowLines(e.target.checked)} />
-                Show battle line segments
-              </label>
               {pair && (
                 <>
                   <p>
@@ -354,12 +391,21 @@ export function Editor() {
                             arrow: {locMap[e.dir === 'ba' ? e.b : e.a]?.name} → {locMap[e.dir === 'ba' ? e.a : e.b]?.name}
                           </span>
                           <div className="ed-chiprow">
-                            <button className="mini" onClick={() => update((d) => {
-                              const cur = LINE_PALETTE.indexOf(d.edges[i].color ?? '');
-                              d.edges[i].color = LINE_PALETTE[(cur + 1) % LINE_PALETTE.length];
-                            })}>
-                              🎨 color
-                            </button>
+                            {LINE_PALETTE.map((c) => (
+                              <button
+                                key={c}
+                                className={`ed-swatch-btn ${e.color === c ? 'selected' : ''}`}
+                                style={{ background: c }}
+                                title={c}
+                                onClick={() => update((d) => { d.edges[i].color = c; })}
+                              />
+                            ))}
+                            <input
+                              type="color"
+                              value={e.color ?? '#999999'}
+                              title="Exact color"
+                              onChange={(ev) => update((d) => { d.edges[i].color = ev.target.value; })}
+                            />
                             <button className="mini" onClick={() => update((d) => {
                               d.edges[i].dir = d.edges[i].dir === 'ba' ? 'ab' : 'ba';
                             })}>
@@ -437,7 +483,11 @@ export function Editor() {
         {mode === 'region' && (
           <section className="panel">
             <h3>Regions</h3>
-            <p className="hint">Pick a region, then click locations to assign them. Ring colors show assignments.</p>
+            <p className="hint">
+              Pick a region, then click locations to paint them — nodes fill with their region's
+              color in this mode.
+            </p>
+            {lastPaint && <p className="ed-feedback">✔ Painted: {lastPaint}</p>}
             <div className="ed-chiprow">
               {data.regions.map((r) => (
                 <button

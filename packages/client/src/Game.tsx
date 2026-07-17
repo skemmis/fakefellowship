@@ -72,6 +72,7 @@ export function Game({
     | { kind: 'eventTarget'; card: string; event: string }
   >({ kind: 'idle' });
   const [chatText, setChatText] = useState('');
+  const [boardOnly, setBoardOnly] = useState(false);
   const logRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -220,13 +221,20 @@ export function Game({
 
       <div className="main">
         {/* ---- Map ---- */}
-        <div className="map-pane">
+        <div className={`map-pane ${boardOnly ? 'board-only' : ''}`}>
           <MapView
             state={state}
             highlights={highlights}
             selectedLoc={mode.kind === 'travel' ? state.characters[mode.character]?.location ?? null : null}
             onClickLocation={onClickLocation}
           />
+          <button
+            className="board-only-toggle"
+            title="Toggle the game overlay to see the board art underneath"
+            onClick={() => setBoardOnly(!boardOnly)}
+          >
+            {boardOnly ? '👁 Show game' : '🗺 Board only'}
+          </button>
           {mode.kind === 'travel' && (
             <div className="overlay-hint">
               Choose a destination for {CHARACTER_MAP[mode.character].name} (badged paths cost symbols)…{' '}
