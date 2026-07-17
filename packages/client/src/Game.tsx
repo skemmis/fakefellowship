@@ -154,6 +154,11 @@ export function Game({
     const p = active;
     return p.characters.map((c) => {
       const used = state.turn.actionsUsed[c] ?? 0;
+      if (state.solo) {
+        const token = state.solo.order[state.solo.idx];
+        const cap = c === token ? 4 : c === BEARER ? 1 : 0;
+        return { character: c, used, cap, locked: used >= cap };
+      }
       const order = state.turn.actedOrder;
       let cap = 4;
       if (order.length >= 1 && order[0] !== c) {
