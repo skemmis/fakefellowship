@@ -30,6 +30,12 @@ const REGION_COLORS = [
   '#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231', '#911eb4',
   '#46f0f0', '#f032e6', '#bcf60c', '#fabebe', '#008080', '#e6beff',
 ];
+/** Colors for battle lines — cycle to match each route's printed color. */
+const LINE_PALETTE = [
+  '#7fbf5f', '#8f6fc0', '#5fb3a1', '#e8836a', '#e0c050', '#6fb8e8',
+  '#c98ad1', '#55c8dc', '#e8d060', '#a98ae0', '#e8946a', '#8a9ae0',
+  '#f06292', '#aed581', '#ff8a65', '#4dd0e1', '#ba68c8', '#fff176',
+];
 
 type Mode = 'move' | 'region' | 'flags' | 'path' | 'line';
 
@@ -47,7 +53,13 @@ function initialData(): BoardData {
   if (saved) {
     try {
       const parsed = JSON.parse(saved) as BoardData;
-      if (parsed.locations?.length && parsed.paths?.length) return parsed;
+      if (parsed.locations?.length && parsed.paths?.length) {
+        // Backfill line colors saved before colors existed.
+        for (const l of parsed.battleLines ?? []) {
+          if (!l.color) l.color = BATTLE_LINES.find((x) => x.id === l.id)?.color;
+        }
+        return parsed;
+      }
     } catch {
       // fall through to fresh data
     }
@@ -183,14 +195,32 @@ export function Editor() {
             );
           })}
 
+          {/* All battle lines in their printed colors (line mode) */}
+          {mode === 'line' &&
+            data.battleLines.map((l) =>
+              l.path.length >= 2 && l.id !== selLine ? (
+                <polyline
+                  key={l.id}
+                  points={l.path.map((id) => `${locMap[id]?.x},${locMap[id]?.y}`).join(' ')}
+                  className="ed-line-all"
+                  stroke={l.color ?? '#999'}
+                  onClick={() => {
+                    setSelLine(l.id);
+                    setDrawingLine(null);
+                  }}
+                />
+              ) : null,
+            )}
+
           {/* Selected battle line route */}
           {(line || drawingLine) && (
             <polyline
               points={(drawingLine ?? line!.path).map((id) => `${locMap[id]?.x},${locMap[id]?.y}`).join(' ')}
               className="ed-line"
+              stroke={line?.color ?? '#46f0f0'}
             />
           )}
-          {(drawingLine ?? line?.path ?? []).map((id, i) => (
+          {(drawingLine ?? (mode === 'line' ? line?.path : undefined) ?? []).map((id, i) => (
             <text key={i} x={locMap[id]?.x} y={(locMap[id]?.y ?? 0) - 46} textAnchor="middle" className="ed-line-num">
               {i + 1}
             </text>
@@ -380,21 +410,75 @@ export function Editor() {
 
         {mode === 'line' && (
           <section className="panel">
-            <h3>Battle lines</h3>
-            <p className="hint">Select a line to see its route numbered on the map. Redraw = click locations in order from the shadow location to the haven, then Finish.</p>
+            <h3>Battle lines ({data.battleLines.length})</h3>
+            <p className="hint">
+              Every colored route on the board is its own battle line — a shadow location can
+              launch several. All lines are drawn in their colors; click one (on the map or below)
+              to select it. Add as many as the board has.
+            </p>
             <div className="ed-chiprow">
               {data.battleLines.map((l) => (
-                <button key={l.id} className={selLine === l.id ? 'primary' : ''} onClick={() => { setSelLine(l.id); setDrawingLine(null); }}>
+                <button
+                  key={l.id}
+                  className={selLine === l.id ? 'primary' : ''}
+                  style={{ borderColor: l.color, borderWidth: 2 }}
+                  onClick={() => { setSelLine(l.id); setDrawingLine(null); }}
+                >
                   {l.name}
                 </button>
               ))}
+              <button
+                onClick={() => {
+                  const id = `line_${Date.now().toString(36)}`;
+                  update((d) => {
+                    d.battleLines.push({
+                      id,
+                      name: '(new line — draw it)',
+                      path: [],
+                      color: LINE_PALETTE[d.battleLines.length % LINE_PALETTE.length],
+                    });
+                  });
+                  setSelLine(id);
+                  setDrawingLine([]);
+                }}
+              >
+                ➕ Add battle line
+              </button>
             </div>
             {selLine && !drawingLine && (
-              <button onClick={() => setDrawingLine([])}>✏️ Redraw this line</button>
+              <div className="ed-chiprow">
+                <button onClick={() => setDrawingLine([])}>✏️ Redraw this line</button>
+                <button
+                  onClick={() =>
+                    update((d) => {
+                      const l = d.battleLines.find((x) => x.id === selLine)!;
+                      const i = LINE_PALETTE.indexOf(l.color ?? '');
+                      l.color = LINE_PALETTE[(i + 1) % LINE_PALETTE.length];
+                    })
+                  }
+                >
+                  🎨 Cycle color (match the board)
+                </button>
+                <button
+                  onClick={() => {
+                    if (confirm('Delete this battle line?')) {
+                      update((d) => {
+                        d.battleLines = d.battleLines.filter((x) => x.id !== selLine);
+                      });
+                      setSelLine(null);
+                    }
+                  }}
+                >
+                  🗑 Delete line
+                </button>
+              </div>
             )}
             {drawingLine && (
               <>
-                <p className="hint">Clicked so far: {drawingLine.map((id) => locMap[id]?.name).join(' → ') || '(none)'}</p>
+                <p className="hint">
+                  Click locations in order, from the shadow location to the haven it ends at.
+                  So far: {drawingLine.map((id) => locMap[id]?.name).join(' → ') || '(none)'}
+                </p>
                 <button
                   className="primary"
                   disabled={drawingLine.length < 2}

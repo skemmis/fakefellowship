@@ -51,6 +51,8 @@ export interface BattleLineDef {
   id: string;
   name: string;
   path: LocationId[];
+  /** The line's printed color on the board (for display/verification). */
+  color?: string;
 }
 
 // ---------------------------------------------------------------------------

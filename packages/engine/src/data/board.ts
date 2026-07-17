@@ -214,18 +214,18 @@ export const PATHS: PathDef[] = [
 
 /** Battle lines (12): from a shadow location to the haven it menaces. */
 export const BATTLE_LINES: BattleLineDef[] = [
-  { id: 'moria_line', name: 'Moria → Rivendell', path: ['moria', 'hollin', 'weather_hills', 'rivendell'] },
-  { id: 'shire_line', name: 'Dunland → The Shire', path: ['dunland', 'tharbad', 'sarn_ford', 'the_shire'] },
-  { id: 'helms_line', name: "Isengard → Helm's Deep", path: ['isengard', 'fords_of_isen', 'helms_deep'] },
-  { id: 'west_gondor_line', name: 'Isengard → Dol Amroth', path: ['isengard', 'druwaith_iaur', 'pinnath_gelin', 'lamedon', 'dol_amroth'] },
-  { id: 'lorien_line', name: 'Dol Guldur → Lórien', path: ['dol_guldur', 'lorien'] },
-  { id: 'wood_line', name: 'Dol Guldur → Woodland Realm', path: ['dol_guldur', 'old_forest_road', 'woodland_realm'] },
-  { id: 'erebor_line', name: 'Rhûn → Erebor', path: ['rhun', 'dorwinion', 'lake_town', 'erebor'] },
-  { id: 'rohan_line', name: "Barad-dûr → Helm's Deep", path: ['barad_dur', 'dagorlad', 'emyn_muil', 'eastemnet', 'edoras', 'helms_deep'] },
-  { id: 'tirith_line', name: 'Núrn → Minas Tirith', path: ['nurn', 'plateau_of_gorgoroth', 'osgiliath', 'minas_tirith'] },
-  { id: 'south_amroth_line', name: 'Minas Morgul → Dol Amroth', path: ['minas_morgul', 'south_ithilien', 'pelargir', 'dol_amroth'] },
-  { id: 'harad_line', name: 'Near Harad → Minas Tirith', path: ['near_harad', 'harondor', 'south_ithilien', 'minas_tirith'] },
-  { id: 'umbar_line', name: 'Umbar → Dol Amroth', path: ['umbar', 'dol_amroth'] },
+  { id: 'moria_line', name: 'Moria → Rivendell', color: '#7fbf5f', path: ['moria', 'hollin', 'weather_hills', 'rivendell'] },
+  { id: 'shire_line', name: 'Dunland → The Shire', color: '#8f6fc0', path: ['dunland', 'tharbad', 'sarn_ford', 'the_shire'] },
+  { id: 'helms_line', name: "Isengard → Helm's Deep", color: '#5fb3a1', path: ['isengard', 'fords_of_isen', 'helms_deep'] },
+  { id: 'west_gondor_line', name: 'Isengard → Dol Amroth', color: '#e8836a', path: ['isengard', 'druwaith_iaur', 'pinnath_gelin', 'lamedon', 'dol_amroth'] },
+  { id: 'lorien_line', name: 'Dol Guldur → Lórien', color: '#e0c050', path: ['dol_guldur', 'lorien'] },
+  { id: 'wood_line', name: 'Dol Guldur → Woodland Realm', color: '#6fb8e8', path: ['dol_guldur', 'old_forest_road', 'woodland_realm'] },
+  { id: 'erebor_line', name: 'Rhûn → Erebor', color: '#c98ad1', path: ['rhun', 'dorwinion', 'lake_town', 'erebor'] },
+  { id: 'rohan_line', name: "Barad-dûr → Helm's Deep", color: '#55c8dc', path: ['barad_dur', 'dagorlad', 'emyn_muil', 'eastemnet', 'edoras', 'helms_deep'] },
+  { id: 'tirith_line', name: 'Núrn → Minas Tirith', color: '#e8d060', path: ['nurn', 'plateau_of_gorgoroth', 'osgiliath', 'minas_tirith'] },
+  { id: 'south_amroth_line', name: 'Minas Morgul → Dol Amroth', color: '#a98ae0', path: ['minas_morgul', 'south_ithilien', 'pelargir', 'dol_amroth'] },
+  { id: 'harad_line', name: 'Near Harad → Minas Tirith', color: '#e8946a', path: ['near_harad', 'harondor', 'south_ithilien', 'minas_tirith'] },
+  { id: 'umbar_line', name: 'Umbar → Dol Amroth', color: '#8a9ae0', path: ['umbar', 'dol_amroth'] },
 ];
 
 // ---------------------------------------------------------------------------
