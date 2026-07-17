@@ -1,6 +1,6 @@
 /**
- * Emberfall game server: HTTP static hosting (production client build) plus
- * a WebSocket endpoint. The server is authoritative — clients send intents,
+ * Game server: HTTP static hosting (production client build) plus a
+ * WebSocket endpoint. The server is authoritative — clients send intents,
  * the engine validates and applies them, and the resulting state + events
  * are broadcast to the whole room.
  */
@@ -12,25 +12,24 @@ import { WebSocketServer, WebSocket } from 'ws';
 import {
   applyAction,
   createGame,
-  HEROES,
   RuleError,
   type Action,
   type ClientMessage,
+  type Difficulty,
   type GameEvent,
   type GameState,
-  type HeroId,
   type RoomInfo,
   type ServerMessage,
 } from '@emberfall/engine';
 import { randomBytes } from 'node:crypto';
 
 const PORT = Number(process.env.PORT ?? 8080);
+const DIFFICULTIES: Difficulty[] = ['introductory', 'standard', 'heroic', 'epic', 'legendary'];
 
 interface RoomPlayer {
   id: string;
   token: string;
   name: string;
-  heroes: HeroId[];
   ws: WebSocket | null;
 }
 
@@ -38,6 +37,7 @@ interface Room {
   code: string;
   players: RoomPlayer[];
   hostId: string;
+  difficulty: Difficulty;
   state: GameState | null;
   /** Full event history so reconnecting clients can rebuild the log. */
   eventLog: GameEvent[];
@@ -47,7 +47,6 @@ interface Room {
 const rooms = new Map<string, Room>();
 
 function roomCode(): string {
-  // Unambiguous alphabet (no 0/O, 1/I).
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let code = '';
   const bytes = randomBytes(4);
@@ -60,19 +59,17 @@ function send(ws: WebSocket, msg: ServerMessage): void {
 }
 
 function broadcast(room: Room, msg: ServerMessage): void {
-  for (const p of room.players) {
-    if (p.ws) send(p.ws, msg);
-  }
+  for (const p of room.players) if (p.ws) send(p.ws, msg);
 }
 
 function roomInfo(room: Room): RoomInfo {
   return {
     code: room.code,
     started: room.state !== null,
+    difficulty: room.difficulty,
     players: room.players.map((p) => ({
       id: p.id,
       name: p.name,
-      heroes: p.heroes,
       connected: p.ws !== null,
       isHost: p.id === room.hostId,
     })),
@@ -83,22 +80,46 @@ function pushRoom(room: Room): void {
   broadcast(room, { type: 'room', info: roomInfo(room) });
 }
 
-/** Assign unpicked heroes so every player has exactly two. */
-function finalizeHeroes(room: Room): boolean {
-  const taken = new Set<HeroId>();
-  for (const p of room.players) {
-    p.heroes = p.heroes.filter((h) => !taken.has(h)).slice(0, 2);
-    for (const h of p.heroes) taken.add(h);
+interface ConnCtx {
+  roomCode: string | null;
+  playerId: string | null;
+}
+
+function requireRoom(ws: WebSocket, ctx: ConnCtx): { room: Room | null; player: RoomPlayer | null } {
+  const room = ctx.roomCode ? rooms.get(ctx.roomCode) ?? null : null;
+  const player = room?.players.find((p) => p.id === ctx.playerId) ?? null;
+  if (!room || !player) {
+    send(ws, { type: 'error', message: 'You are not in a game room.' });
+    return { room: null, player: null };
   }
-  const free = HEROES.map((h) => h.id).filter((h) => !taken.has(h));
-  for (const p of room.players) {
-    while (p.heroes.length < 2) {
-      const next = free.shift();
-      if (!next) return false;
-      p.heroes.push(next);
-    }
+  return { room, player };
+}
+
+function joinRoom(ws: WebSocket, ctx: ConnCtx, room: Room, name: string, playerToken?: string): void {
+  const existing = playerToken ? room.players.find((p) => p.token === playerToken) : undefined;
+  if (existing) {
+    if (existing.ws && existing.ws !== ws) existing.ws.close();
+    existing.ws = ws;
+    ctx.roomCode = room.code;
+    ctx.playerId = existing.id;
+    send(ws, { type: 'joined', room: room.code, playerId: existing.id, playerToken: existing.token });
+    pushRoom(room);
+    if (room.state) send(ws, { type: 'game', state: room.state, events: room.eventLog });
+    return;
   }
-  return true;
+  if (room.state) return send(ws, { type: 'error', message: 'That game already started.' });
+  if (room.players.length >= 5) return send(ws, { type: 'error', message: 'That room is full (5 players max).' });
+  const player: RoomPlayer = {
+    id: `p${room.players.length + 1}-${randomBytes(3).toString('hex')}`,
+    token: randomBytes(16).toString('hex'),
+    name: (name || 'Traveler').slice(0, 24),
+    ws,
+  };
+  room.players.push(player);
+  ctx.roomCode = room.code;
+  ctx.playerId = player.id;
+  send(ws, { type: 'joined', room: room.code, playerId: player.id, playerToken: player.token });
+  pushRoom(room);
 }
 
 function handleMessage(ws: WebSocket, ctx: ConnCtx, msg: ClientMessage): void {
@@ -108,6 +129,7 @@ function handleMessage(ws: WebSocket, ctx: ConnCtx, msg: ClientMessage): void {
         code: roomCode(),
         players: [],
         hostId: '',
+        difficulty: 'introductory',
         state: null,
         eventLog: [],
         createdAt: Date.now(),
@@ -126,15 +148,13 @@ function handleMessage(ws: WebSocket, ctx: ConnCtx, msg: ClientMessage): void {
       break;
     }
 
-    case 'pickHeroes': {
+    case 'setDifficulty': {
       const { room, player } = requireRoom(ws, ctx);
       if (!room || !player) return;
+      if (player.id !== room.hostId) return send(ws, { type: 'error', message: 'Only the host sets difficulty.' });
       if (room.state) return send(ws, { type: 'error', message: 'The game already started.' });
-      const valid = msg.heroes.filter((h) => HEROES.some((d) => d.id === h)).slice(0, 2);
-      const takenByOthers = new Set(
-        room.players.filter((p) => p.id !== player.id).flatMap((p) => p.heroes),
-      );
-      player.heroes = valid.filter((h) => !takenByOthers.has(h));
+      if (!DIFFICULTIES.includes(msg.difficulty)) return send(ws, { type: 'error', message: 'Unknown difficulty.' });
+      room.difficulty = msg.difficulty;
       pushRoom(room);
       break;
     }
@@ -142,27 +162,25 @@ function handleMessage(ws: WebSocket, ctx: ConnCtx, msg: ClientMessage): void {
     case 'start': {
       const { room, player } = requireRoom(ws, ctx);
       if (!room || !player) return;
-      if (player.id !== room.hostId) {
-        return send(ws, { type: 'error', message: 'Only the host can start the game.' });
-      }
+      if (player.id !== room.hostId) return send(ws, { type: 'error', message: 'Only the host can start the game.' });
       if (room.state) return send(ws, { type: 'error', message: 'Already started.' });
-      if (room.players.length < 1 || room.players.length > 4) {
-        return send(ws, { type: 'error', message: 'Emberfall is for 1-4 players.' });
+      if (room.players.length < 2 || room.players.length > 5) {
+        return send(ws, { type: 'error', message: 'This digital edition supports 2-5 players.' });
       }
-      if (!finalizeHeroes(room)) {
-        return send(ws, { type: 'error', message: 'Not enough heroes for that many players.' });
+      try {
+        room.state = createGame(
+          room.players.map((p) => ({ id: p.id, name: p.name })),
+          randomBytes(4).readUInt32LE(0),
+          room.difficulty,
+        );
+      } catch (err) {
+        return send(ws, { type: 'error', message: (err as Error).message });
       }
-      const seed = randomBytes(4).readUInt32LE(0);
-      room.state = createGame(
-        room.players.map((p) => ({
-          id: p.id,
-          name: p.name,
-          heroes: p.heroes as [HeroId, HeroId],
-        })),
-        seed,
-      );
       const opening: GameEvent[] = [
-        { kind: 'turn', text: `The fellowship sets out from Hearthden. ${room.players[0].name} goes first.` },
+        {
+          kind: 'turn',
+          text: `The Fellowship sets out (${room.difficulty}). ${room.state.players[room.state.turn.playerIdx].name} takes the first turn.`,
+        },
       ];
       room.eventLog.push(...opening);
       pushRoom(room);
@@ -200,70 +218,6 @@ function handleMessage(ws: WebSocket, ctx: ConnCtx, msg: ClientMessage): void {
   }
 }
 
-interface ConnCtx {
-  roomCode: string | null;
-  playerId: string | null;
-}
-
-function requireRoom(
-  ws: WebSocket,
-  ctx: ConnCtx,
-): { room: Room | null; player: RoomPlayer | null } {
-  const room = ctx.roomCode ? rooms.get(ctx.roomCode) ?? null : null;
-  const player = room?.players.find((p) => p.id === ctx.playerId) ?? null;
-  if (!room || !player) {
-    send(ws, { type: 'error', message: 'You are not in a game room.' });
-    return { room: null, player: null };
-  }
-  return { room, player };
-}
-
-function joinRoom(
-  ws: WebSocket,
-  ctx: ConnCtx,
-  room: Room,
-  name: string,
-  playerToken?: string,
-): void {
-  // Reconnect: a token identifies a seat across page reloads and drops.
-  const existing = playerToken
-    ? room.players.find((p) => p.token === playerToken)
-    : undefined;
-  if (existing) {
-    if (existing.ws && existing.ws !== ws) existing.ws.close();
-    existing.ws = ws;
-    ctx.roomCode = room.code;
-    ctx.playerId = existing.id;
-    send(ws, { type: 'joined', room: room.code, playerId: existing.id, playerToken: existing.token });
-    pushRoom(room);
-    if (room.state) {
-      send(ws, { type: 'game', state: room.state, events: room.eventLog });
-    }
-    return;
-  }
-
-  if (room.state) {
-    send(ws, { type: 'error', message: 'That game already started.' });
-    return;
-  }
-  if (room.players.length >= 4) {
-    send(ws, { type: 'error', message: 'That room is full (4 players max).' });
-    return;
-  }
-  const player: RoomPlayer = {
-    id: `p${room.players.length + 1}-${randomBytes(3).toString('hex')}`,
-    token: randomBytes(16).toString('hex'),
-    name: (name || 'Traveler').slice(0, 24),
-    heroes: [],
-    ws,
-  };
-  room.players.push(player);
-  ctx.roomCode = room.code;
-  ctx.playerId = player.id;
-  send(ws, { type: 'joined', room: room.code, playerId: player.id, playerToken: player.token });
-  pushRoom(room);
-}
-
 // ---------------------------------------------------------------------------
 // HTTP: serve the built client (packages/client/dist) if present.
 // ---------------------------------------------------------------------------
@@ -284,10 +238,7 @@ const httpServer = createServer(async (req, res) => {
   try {
     const url = (req.url ?? '/').split('?')[0];
     let path = normalize(join(clientDist, url === '/' ? 'index.html' : url));
-    if (!path.startsWith(clientDist)) {
-      res.writeHead(403).end();
-      return;
-    }
+    if (!path.startsWith(clientDist)) return void res.writeHead(403).end();
     try {
       const st = await stat(path);
       if (st.isDirectory()) path = join(path, 'index.html');
@@ -330,15 +281,13 @@ wss.on('connection', (ws) => {
   });
 });
 
-// Reap rooms idle for 24h.
 setInterval(() => {
   const cutoff = Date.now() - 24 * 60 * 60 * 1000;
   for (const [code, room] of rooms) {
-    const empty = room.players.every((p) => p.ws === null);
-    if (empty && room.createdAt < cutoff) rooms.delete(code);
+    if (room.players.every((p) => p.ws === null) && room.createdAt < cutoff) rooms.delete(code);
   }
 }, 60 * 60 * 1000).unref();
 
 httpServer.listen(PORT, () => {
-  console.log(`Emberfall server listening on http://localhost:${PORT} (ws at /ws)`);
+  console.log(`Fellowship server listening on http://localhost:${PORT} (ws at /ws)`);
 });

@@ -1,23 +1,25 @@
 import { useState } from 'react';
-import { HEROES, type RoomInfo } from '@emberfall/engine';
+import { DIFFICULTY_TABLE, type Difficulty, type RoomInfo } from '@emberfall/engine';
 import { net } from './net.js';
 
+const DIFFICULTIES: Difficulty[] = ['introductory', 'standard', 'heroic', 'epic', 'legendary'];
+
 export function Lobby({ room, playerId }: { room: RoomInfo | null; playerId: string | null }) {
-  const [name, setName] = useState(localStorage.getItem('emberfall.name') ?? '');
+  const [name, setName] = useState(localStorage.getItem('fellowship.name') ?? '');
   const [code, setCode] = useState('');
 
   const saveName = (n: string) => {
     setName(n);
-    localStorage.setItem('emberfall.name', n);
+    localStorage.setItem('fellowship.name', n);
   };
 
   if (!room) {
     return (
       <div className="lobby">
-        <h1 className="title">Emberfall</h1>
+        <h1 className="title">Fate of the Fellowship</h1>
         <p className="tagline">
-          A cooperative journey for 1–4 players. Escort the shardbearer to the Cindermaw,
-          hold the sanctuaries, and keep hope alive.
+          A cooperative journey for 2–5 players. Escort Frodo to Mount Doom, defend the havens,
+          and keep hope alive. Play together from anywhere.
         </p>
         <div className="lobby-card">
           <label>
@@ -51,9 +53,9 @@ export function Lobby({ room, playerId }: { room: RoomInfo | null; playerId: str
             <button
               disabled={!name.trim() || code.trim().length !== 4}
               onClick={() => {
-                const room = code.trim().toUpperCase();
-                net.rejoin = { room, name: name.trim() };
-                net.send({ type: 'join', room, name: name.trim() });
+                const r = code.trim().toUpperCase();
+                net.rejoin = { room: r, name: name.trim() };
+                net.send({ type: 'join', room: r, name: name.trim() });
               }}
             >
               Join
@@ -65,26 +67,14 @@ export function Lobby({ room, playerId }: { room: RoomInfo | null; playerId: str
   }
 
   const me = room.players.find((p) => p.id === playerId);
-  const takenByOthers = new Set(
-    room.players.filter((p) => p.id !== playerId).flatMap((p) => p.heroes),
-  );
-
-  const toggleHero = (heroId: string) => {
-    if (!me) return;
-    const current = me.heroes;
-    const next = current.includes(heroId)
-      ? current.filter((h) => h !== heroId)
-      : [...current, heroId].slice(-2);
-    net.send({ type: 'pickHeroes', heroes: next });
-  };
 
   return (
     <div className="lobby">
-      <h1 className="title">Emberfall</h1>
+      <h1 className="title">Fate of the Fellowship</h1>
       <div className="lobby-card">
         <div className="room-code">
           Room code: <strong>{room.code}</strong>
-          <span className="hint"> — share it with your fellowship (1–4 players)</span>
+          <span className="hint"> — share it with your fellowship (2–5 players)</span>
         </div>
         <h3>Travelers</h3>
         <ul className="player-list">
@@ -93,38 +83,37 @@ export function Lobby({ room, playerId }: { room: RoomInfo | null; playerId: str
               <span className={p.connected ? '' : 'disconnected'}>
                 {p.name} {p.isHost && '(host)'} {p.id === playerId && '(you)'}
               </span>
-              <span className="picked-heroes">
-                {p.heroes.map((h) => HEROES.find((d) => d.id === h)?.name).join(', ') || '—'}
-              </span>
             </li>
           ))}
         </ul>
-        <h3>Choose your two heroes</h3>
-        <p className="hint">Unpicked heroes are assigned automatically at start.</p>
-        <div className="hero-grid">
-          {HEROES.map((h) => {
-            const mine = me?.heroes.includes(h.id) ?? false;
-            const taken = takenByOthers.has(h.id);
-            return (
-              <button
-                key={h.id}
-                className={`hero-card ${mine ? 'mine' : ''} ${taken ? 'taken' : ''}`}
-                disabled={taken}
-                onClick={() => toggleHero(h.id)}
-                style={{ borderColor: h.color }}
-              >
-                <span className="hero-name" style={{ color: h.color }}>
-                  {h.name}
-                </span>
-                <span className="hero-title">{h.title}</span>
-                <span className="hero-ability">{h.abilityText}</span>
-              </button>
-            );
-          })}
+        <h3>Difficulty</h3>
+        <div className="difficulty-row">
+          {DIFFICULTIES.map((d) => (
+            <button
+              key={d}
+              className={`difficulty ${room.difficulty === d ? 'selected' : ''}`}
+              disabled={!me?.isHost}
+              onClick={() => net.send({ type: 'setDifficulty', difficulty: d })}
+              title={`${DIFFICULTY_TABLE[d].darken} Skies Darken cards, ${DIFFICULTY_TABLE[d].objectives} objectives`}
+            >
+              {d}
+              <span className="hint">
+                {DIFFICULTY_TABLE[d].objectives} objectives · {DIFFICULTY_TABLE[d].darken} darkenings
+              </span>
+            </button>
+          ))}
         </div>
+        <p className="hint">
+          Each player is dealt 2 random characters (Frodo &amp; Sam are always in play). Hands are
+          public — this is a fully cooperative game, so talk it out.
+        </p>
         {me?.isHost ? (
-          <button className="primary start" onClick={() => net.send({ type: 'start' })}>
-            Begin the journey
+          <button
+            className="primary start"
+            disabled={room.players.length < 2}
+            onClick={() => net.send({ type: 'start' })}
+          >
+            {room.players.length < 2 ? 'Waiting for at least 2 players…' : 'Begin the journey'}
           </button>
         ) : (
           <p className="hint">Waiting for the host to begin…</p>

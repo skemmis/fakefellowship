@@ -1,18 +1,18 @@
-# Emberfall
+# Fate of the Fellowship — Online Multiplayer
 
-A cooperative fantasy strategy game for 1–4 players, playable online in real
-time from different locations. Escort **Wick Fernby**, the shardbearer, across
-the realm to cast the **Ember** into the **Cindermaw** — while wraiths hunt
-him, shadow armies besiege the sanctuaries, and hope runs thin.
+A digital, real-time multiplayer implementation of the cooperative board game
+*The Lord of the Rings: Fate of the Fellowship* (Matt Leacock / Z-Man Games)
+for personal hobby play with friends in different locations. 2–5 players,
+each controlling two characters, escorting Frodo to Mount Doom.
 
-Emberfall is an original game inspired by the cooperative "escort and hold the
-line" genre. All names, text, art, and data in this repository are original.
-The exact rules implemented are documented in [RULES.md](RULES.md).
+Rules were transcribed from the publisher's rulebook; everything the rulebook
+doesn't spell out (most card content, die faces, some board routes) is
+reconstructed and clearly marked — see [RULES.md](RULES.md) for the exact
+fidelity matrix. All text here is paraphrased and no art or card text is
+copied. Not affiliated with Z-Man Games or Middle-earth Enterprises; buy the
+real game — it's excellent.
 
 ## Playing
-
-One person runs the server (or you deploy it somewhere); everyone else just
-needs a browser.
 
 ```bash
 npm install
@@ -20,61 +20,40 @@ npm run build
 npm start           # serves the game at http://localhost:8080
 ```
 
-The host clicks **Host a new game** and shares the 4-letter room code. Friends
-enter the code to join, everyone picks two heroes, and the host starts the
-game. Disconnected players can reload the page and rejoin the same seat —
-the server replays the full game state and log.
+The host clicks **Host a new game**, picks a difficulty, and shares the
+4-letter room code. Friends enter the code, and the host starts the game —
+characters are dealt automatically (Frodo & Sam always in play). Reloading
+the page rejoins your seat with the full game state and log restored.
 
-To play across the internet, deploy anywhere that runs Node 20+ (Fly.io,
-Railway, a VPS) or expose your local server with a tunnel (e.g. `cloudflared`,
-`tailscale funnel`). The server is a single process with in-memory rooms.
+Deployed on Railway (see `railway.json`): connect the repo, set the branch,
+generate a domain — every push redeploys.
 
-## Development
+## Interface notes
 
-```bash
-npm run dev:server   # game server on :8080 (auto-restarts)
-npm run dev:client   # Vite dev server on :5173, proxies /ws to :8080
-npm test             # engine unit tests (rules, invariants, full-game sims)
-```
-
-### Headless playtesting
-
-The engine is a pure, deterministic state machine (seeded RNG lives in the
-game state), so entire games can be played without a UI. The simulator plays
-bot games while checking conservation invariants after every single action:
-
-```bash
-npm run build -w @emberfall/engine
-node packages/engine/dist/cli.js 500                 # 500 games, stats
-node packages/engine/dist/cli.js 300 --players 4     # balance by player count
-node packages/engine/dist/cli.js 1 --trace --seed 42 # watch one full game log
-node packages/engine/dist/cli.js 200 --bot random    # chaos-monkey the rules
-```
-
-Use it to reproduce gameplay bugs deterministically (`--seed`), to verify rule
-changes don't break invariants, and to tune balance (constants live in
-`packages/engine/src/data/constants.ts`).
+- **Everything is hover-documented**: locations, stats, dice faces, actions,
+  and cards all carry tooltips explaining the rule behind them.
+- The engine only offers **legal moves** — buttons disable themselves and the
+  map highlights valid targets, so rules arguments can't happen.
+- Dice rolls pause in a **resolution panel**: anyone with a character present
+  can spend Resistance to reroll or Valor to slay before the roll is
+  confirmed, just like at the table.
+- Moving Frodo opens a **cover picker** that previews exactly how many search
+  dice each choice risks (stealth / open travel / putting on the Ring).
+- The **4+1 action rule** is tracked visually — the turn banner shows each
+  character's remaining actions and locks a character once you've switched.
 
 ## Architecture
 
 ```
 packages/
-  engine/   Pure TypeScript rules engine. No IO, no network. applyAction(state,
-            playerId, action) -> {state, events}. Also: legal-action
-            enumerator, seeded RNG, bot simulator, invariant checker.
-  server/   Node WebSocket server. Authoritative: applies actions via the
-            engine, broadcasts state + events to the room. Rooms, seats,
-            reconnect tokens, chat. Serves the built client.
-  client/   React + Vite. SVG map with legal-target highlighting, turn banner,
-            hand/objectives/log panels, lobby with hero drafting.
+  engine/   Pure deterministic rules engine (seeded RNG lives in the game
+            state). Board/cards/characters as data. Legal-action enumerator,
+            invariant checker, bot simulator + CLI for headless debug loops.
+  server/   Authoritative Node WebSocket server: rooms, join codes, seat
+            tokens for reconnect, chat. Serves the built client.
+  client/   React + Vite. SVG board, guided dialogs, dice panels, tooltips.
 ```
 
-Design principles:
-
-- **The engine is the only rulebook.** The server never edits state by hand;
-  the client never computes outcomes. The client's buttons are driven by the
-  same `legalActions()` the bots use, so the UI can only offer legal plays.
-- **Determinism everywhere.** Same seed + same action list = same game. This
-  gives replays, reconnection, and reproducible bug reports for free.
-- **Content is data.** Cards, heroes, map, and tuning constants are data files
-  in `engine/src/data/` — adding cards or rebalancing is data entry.
+Development: `npm run dev:server` + `npm run dev:client` (Vite on :5173
+proxies websockets to :8080). Tests: `npm test`. Headless playtesting: see
+RULES.md.
