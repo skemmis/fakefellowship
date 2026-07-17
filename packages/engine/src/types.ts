@@ -1,169 +1,270 @@
 export type LocationId = string;
-export type HeroId = string;
+export type RegionId = string;
+export type CharacterId = string;
 export type PlayerId = string;
 
 export type Faction = 'vale' | 'riders' | 'sylvan' | 'deepholm';
+export type SymbolKind = 'friendship' | 'valor' | 'stealth' | 'resistance';
+
+export type Difficulty = 'introductory' | 'standard' | 'heroic' | 'epic' | 'legendary';
+
+// ---------------------------------------------------------------------------
+// Board
+// ---------------------------------------------------------------------------
+
+export interface RegionDef {
+  id: RegionId;
+  name: string;
+  adjacent: RegionId[];
+  /** Label position for rendering. */
+  x: number;
+  y: number;
+}
 
 export interface LocationDef {
   id: LocationId;
   name: string;
-  region: string;
-  adjacent: LocationId[];
-  /** Map coordinates for rendering (0-1000 x 0-700). */
+  region: RegionId;
   x: number;
   y: number;
-  /** If set, this location is a sanctuary of the given faction. */
-  sanctuary?: Faction;
-  /** Enemy stronghold: spawns are heavier here. */
+  /** Printed haven. */
+  haven?: boolean;
+  /** Red location: shadow troops spawn here via shadow cards. */
+  shadowLoc?: boolean;
+  /** Printed shadow stronghold (capturable). */
   stronghold?: boolean;
+  /** Capturing this stronghold permanently stops spawns here. */
+  stopsSpawnWhenCaptured?: boolean;
+  /** Muster location for a faction. */
+  muster?: Faction;
 }
 
-export type HeroAbility =
-  | 'battle_die'  // rolls an extra battle die
-  | 'swift'       // Move action covers up to 2 connections
-  | 'kindle'      // once per turn, free: +1 hope while at a standing sanctuary
-  | 'muster'      // Muster places 1 extra troop
-  | 'guide'       // Guide moves the shardbearer up to 2 connections
-  | 'bulwark'     // skull results in battle don't cost allied troops
-  | 'insight'     // owner draws 1 extra card at end of turn
-  | 'longshot';   // may Battle an adjacent location
+export interface PathDef {
+  a: LocationId;
+  b: LocationId;
+  /** Symbols the traveling character must spend (special paths). */
+  cost?: SymbolKind[];
+}
 
-export interface HeroDef {
-  id: HeroId;
+/** Ordered from the shadow location to the haven it menaces. */
+export interface BattleLineDef {
+  id: string;
+  name: string;
+  path: LocationId[];
+}
+
+// ---------------------------------------------------------------------------
+// Characters
+// ---------------------------------------------------------------------------
+
+export interface CharacterDef {
+  id: CharacterId;
   name: string;
   title: string;
-  ability: HeroAbility;
+  start: LocationId;
+  /** True for the shardbearer pair (the analog of the ring-bearer unit). */
+  bearer?: boolean;
   abilityText: string;
+  /** True if reconstructed rather than transcribed from the source game. */
+  abilityReconstructed: boolean;
   color: string;
 }
 
-export type PlayerCardKind =
-  | 'swift_march'   // move one of your heroes up to 2 connections
-  | 'rally_banner'  // muster 2 troops at any standing sanctuary
-  | 'ambush'        // remove 2 shadow troops at or adjacent to one of your heroes
-  | 'lantern_oil'   // +1 hope
-  | 'fernpath'      // move the shardbearer 1 connection, or hide them
-  | 'farsight'      // reveal the top 3 shadow cards (public knowledge)
-  | 'hearthsong'    // +2 hope
-  | 'ashen_surge';  // escalation: threat rises, heavy spawn, shadow discard reshuffled
+// ---------------------------------------------------------------------------
+// Cards
+// ---------------------------------------------------------------------------
 
-export interface PlayerCard {
+export interface RegionCard {
   id: string;
-  kind: PlayerCardKind;
+  kind: 'region';
+  region: RegionId;
+  symbol: SymbolKind;
+  /** Flavor number; lowest in an opening hand takes the first turn. */
+  number: number;
 }
 
-export type ShadowCardKind = 'spawn' | 'hunt';
+export interface EventCard {
+  id: string;
+  kind: 'event';
+  event: string; // key into EVENTS
+}
+
+export interface DarkenCard {
+  id: string;
+  kind: 'darken';
+  location: LocationId; // step 3 target
+}
+
+export type PlayerCard = RegionCard | EventCard | DarkenCard;
+
+export type ShadowOrder = 'eye' | 'hunt2' | 'deploy3';
 
 export interface ShadowCard {
   id: string;
-  kind: ShadowCardKind;
-  /** For spawn cards: where the shadow rises. */
-  location?: LocationId;
+  /** Which half resolves is decided by the back of the next card on the deck. */
+  back: 'flag' | 'banner';
+  special?: 'war_drums' | 'traitors_engine';
+  /** Advance half: battle line to advance. */
+  line?: string;
+  /** Reinforce half: location + special order. */
+  reinforce?: LocationId;
+  order?: ShadowOrder;
 }
 
-export type SanctuaryStatus = 'standing' | 'besieged' | 'fallen';
+// ---------------------------------------------------------------------------
+// Objectives
+// ---------------------------------------------------------------------------
 
-export interface Wraith {
-  id: number;
+export interface ObjectiveState {
+  id: string;
+  complete: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Dice
+// ---------------------------------------------------------------------------
+
+export type SearchFace = 'slip' | 'weary' | 'exposed' | 'recall';
+export type BattleFace = 'rout' | 'exchange' | 'overrun' | 'wraith';
+
+// ---------------------------------------------------------------------------
+// Pending interactive resolutions (dice mitigation, forced discards)
+// ---------------------------------------------------------------------------
+
+export type SearchContext = 'travel' | 'order' | 'ring' | 'final';
+
+export interface PendingSearch {
+  type: 'search';
+  context: SearchContext;
+  location: LocationId; // where the bearer is (or is arriving)
+  dice: SearchFace[];
+}
+
+export interface PendingBattle {
+  type: 'battle';
   location: LocationId;
+  source: 'attack' | 'shadow';
+  dice: BattleFace[];
+  /** Shadow troops removed so far via Show Valor. */
+  valorKills: number;
 }
 
-export interface HeroState {
-  id: HeroId;
-  location: LocationId;
+export interface PendingDiscard {
+  type: 'discard';
+  player: PlayerId;
 }
+
+export type Pending = PendingSearch | PendingBattle | PendingDiscard;
+
+// ---------------------------------------------------------------------------
+// Automatic step queue (shadow phase, darken steps, queued battles)
+// ---------------------------------------------------------------------------
+
+export type QueueItem =
+  | { step: 'drawPlayerCards'; count: number }
+  | { step: 'shadowDraw'; remaining: number }
+  | { step: 'battle'; location: LocationId; source: 'attack' | 'shadow'; dice?: number }
+  | { step: 'search'; context: SearchContext; location: LocationId }
+  | { step: 'endTurn' }
+  | { step: 'winCheck' };
+
+// ---------------------------------------------------------------------------
+// Game state
+// ---------------------------------------------------------------------------
 
 export interface PlayerState {
   id: PlayerId;
   name: string;
-  heroes: [HeroId, HeroId];
+  characters: CharacterId[];
   hand: PlayerCard[];
+  tokens: Record<SymbolKind, number>;
 }
 
 export interface TurnState {
   playerIdx: number;
-  /** Actions used this turn, per hero. One hero may use up to 4, the other up to 1. */
-  actionsUsed: Record<HeroId, number>;
-  /** Kindle (Maelis) is once per turn. */
-  kindleUsed: boolean;
-  stage: 'actions' | 'over';
-}
-
-export type ObjectiveId = 'garrisons' | 'purge' | 'beacon';
-
-export interface ObjectiveState {
-  id: ObjectiveId;
-  name: string;
-  text: string;
-  complete: boolean;
+  /** Actions used per character this turn. */
+  actionsUsed: Record<CharacterId, number>;
+  /** Order in which characters have acted (max 2; no going back). */
+  actedOrder: CharacterId[];
+  /** Per-turn ability uses (e.g. Maelis). */
+  abilityUsed: Record<CharacterId, boolean>;
 }
 
 export interface GameState {
-  version: 1;
+  version: 2;
   rngState: number;
   phase: 'playing' | 'won' | 'lost';
-  /** Set when phase is 'lost'. */
   lossReason?: string;
+  difficulty: Difficulty;
   players: PlayerState[];
-  heroes: Record<HeroId, HeroState>;
-  shardbearer: {
-    location: LocationId;
-    hidden: boolean;
-    corruption: number; // 0..CORRUPTION_MAX; max = loss
-  };
-  wraiths: Wraith[];
-  /** Shadow troops per location. */
+  /** Locations of in-play characters. */
+  characters: Record<CharacterId, { location: LocationId }>;
+  /** Wraith count per region (9 total in the box). */
+  wraiths: Record<RegionId, number>;
+  /** The Gaze: which region the enemy's attention is fixed on. */
+  eye: RegionId;
   shadow: Record<LocationId, number>;
-  /** Allied troops per location, per faction. */
-  allied: Record<LocationId, Partial<Record<Faction, number>>>;
+  friendly: Record<LocationId, Partial<Record<Faction, number>>>;
   supply: {
     shadow: number;
     factions: Record<Faction, number>;
+    tokens: Record<SymbolKind, number>;
   };
-  sanctuaries: Record<LocationId, SanctuaryStatus>;
-  hope: number; // 0..HOPE_MAX; 0 = loss
-  /** Index into THREAT_TRACK; advanced by ashen_surge cards. */
+  /**
+   * Current status of convertible sites. Printed havens/strongholds start
+   * here; Capture and haven-loss flip them.
+   */
+  siteStatus: Record<LocationId, 'haven' | 'stronghold'>;
+  /** Captured strongholds that no longer receive card-driven spawns. */
+  spawnStopped: Record<LocationId, boolean>;
+  hope: number;
   threatIdx: number;
   playerDeck: PlayerCard[];
   playerDiscard: PlayerCard[];
+  /** Darken cards leave the game entirely after resolving. */
+  removedCards: PlayerCard[];
   shadowDeck: ShadowCard[];
   shadowDiscard: ShadowCard[];
-  /** Set by farsight: the next N shadow cards, publicly known. */
-  foreseen: ShadowCard[];
   objectives: ObjectiveState[];
-  /** Battles won counter for the 'purge' objective. */
-  shadowSlain: number;
   turn: TurnState;
+  pending: Pending | null;
+  queue: QueueItem[];
   turnNumber: number;
 }
 
 // ---------------------------------------------------------------------------
-// Actions (client intents). All randomness happens inside the engine.
+// Player intents
 // ---------------------------------------------------------------------------
+
+/** How the bearer's arrival is covered when traveling. */
+export type BearerCover = 'stealth' | 'search' | 'ring';
 
 export type Action =
-  | { type: 'move'; hero: HeroId; path: LocationId[] }
-  | { type: 'muster'; hero: HeroId }
-  | { type: 'battle'; hero: HeroId; location: LocationId }
-  | { type: 'guide'; hero: HeroId; path: LocationId[] }
-  | { type: 'hide'; hero: HeroId }
-  | { type: 'kindle'; hero: HeroId }
-  | { type: 'destroyEmber'; hero: HeroId }
   | {
-      type: 'playCard';
-      card: string; // card id in the acting player's hand
-      // Optional targets depending on the card kind:
-      hero?: HeroId;
-      path?: LocationId[];
-      location?: LocationId;
-      hide?: boolean;
-      cleanse?: boolean;
+      type: 'travel';
+      character: CharacterId;
+      to: LocationId;
+      /** Friendly troops to bring along. */
+      troops?: Partial<Record<Faction, number>>;
+      /** Other characters to bring along. */
+      companions?: CharacterId[];
+      /** Required whenever the bearer moves (himself or brought along). */
+      cover?: BearerCover;
     }
-  | { type: 'endTurn' };
-
-// ---------------------------------------------------------------------------
-// Events (facts that happened; drives the client log and animations).
-// ---------------------------------------------------------------------------
+  | { type: 'fellowship'; character: CharacterId; give?: string; takeFrom?: PlayerId; take?: string }
+  | { type: 'prepare'; character: CharacterId; card: string }
+  | { type: 'muster'; character: CharacterId }
+  | { type: 'attack'; character: CharacterId; dice: number }
+  | { type: 'capture'; character: CharacterId }
+  | { type: 'destroyEmber' }
+  | { type: 'ability'; character: CharacterId }
+  | { type: 'playEvent'; card: string; location?: LocationId; character?: CharacterId; region?: RegionId; symbol?: SymbolKind }
+  | { type: 'endTurn' }
+  // Pending-resolution actions:
+  | { type: 'reroll'; die: number } // spend 1 resistance
+  | { type: 'showValor' } // battle only: spend 1 valor, remove 1 shadow troop
+  | { type: 'confirm' } // apply the pending roll and continue
+  | { type: 'discard'; card: string }; // resolve a pending hand-limit discard
 
 export interface GameEvent {
   text: string;
@@ -171,8 +272,9 @@ export interface GameEvent {
     | 'action'
     | 'card'
     | 'shadow'
-    | 'hunt'
-    | 'siege'
+    | 'search'
+    | 'battle'
+    | 'haven'
     | 'objective'
     | 'turn'
     | 'win'

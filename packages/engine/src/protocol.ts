@@ -1,13 +1,11 @@
 /**
- * Client <-> server wire protocol. Lives in the engine package so both sides
- * share one set of types.
+ * Client <-> server wire protocol (shared types).
  */
-import type { Action, GameEvent, GameState, HeroId } from './types.js';
+import type { Action, Difficulty, GameEvent, GameState } from './types.js';
 
 export interface LobbyPlayer {
   id: string;
   name: string;
-  heroes: HeroId[];
   connected: boolean;
   isHost: boolean;
 }
@@ -15,13 +13,14 @@ export interface LobbyPlayer {
 export interface RoomInfo {
   code: string;
   players: LobbyPlayer[];
+  difficulty: Difficulty;
   started: boolean;
 }
 
 export type ClientMessage =
   | { type: 'create'; name: string; playerToken?: string }
   | { type: 'join'; room: string; name: string; playerToken?: string }
-  | { type: 'pickHeroes'; heroes: HeroId[] }
+  | { type: 'setDifficulty'; difficulty: Difficulty }
   | { type: 'start' }
   | { type: 'action'; action: Action }
   | { type: 'chat'; text: string };

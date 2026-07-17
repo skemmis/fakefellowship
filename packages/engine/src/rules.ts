@@ -1,129 +1,95 @@
 import {
   ACTIONS_PRIMARY,
   ACTIONS_SECONDARY,
-  BATTLE_DICE,
-  BEACON_TARGET,
+  BATTLE_DIE,
+  CAPTURE_COST,
+  CAPTURE_HOPE,
   CARDS_PER_TURN,
-  CORRUPTION_MAX,
-  FALL_THRESHOLD,
-  FALLEN_LOSS,
-  GARRISON_TARGET,
+  EVENTS,
   HAND_LIMIT,
+  HAVEN_LOST_HOPE,
   HOPE_MAX,
-  MUSTER_AMOUNT,
-  OBJECTIVES_REQUIRED,
-  PURGE_TARGET,
-  SIEGE_THRESHOLD,
+  MAX_BATTLE_DICE,
+  MAX_SEARCH_DICE,
+  OBJECTIVE_MAP,
+  RING_DESTROY_COST,
+  SEARCH_DIE,
+  SPECIAL_SHADOW_INFO,
   THREAT_TRACK,
-  WRAITH_COUNT_MAX,
-} from './data/constants.js';
-import { HERO_MAP, SHARDBEARER_NAME } from './data/heroes.js';
-import { GOAL_LOCATION, MAP, areAdjacent, stepToward } from './data/map.js';
-import { makeRng, next, shuffle, type Rng } from './rng.js';
+} from './data/cards.js';
+import {
+  BATTLE_LINES,
+  CONNECTIONS,
+  connection,
+  MAP,
+  MORDOR,
+  MOUNT_DOOM,
+  REGION_MAP,
+  regionDistance,
+  regionsToward,
+} from './data/board.js';
+import { BEARER, CHARACTER_MAP } from './data/characters.js';
+import { makeRng, next, nextInt, shuffle, type Rng } from './rng.js';
 import type {
   Action,
   ActionResult,
+  BattleFace,
+  CharacterId,
   Faction,
   GameEvent,
   GameState,
-  HeroId,
   LocationId,
-  PlayerCard,
   PlayerId,
   PlayerState,
+  RegionId,
+  SearchContext,
+  SearchFace,
   ShadowCard,
+  SymbolKind,
 } from './types.js';
 
 export class RuleError extends Error {}
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
 
-function deepClone<T>(v: T): T {
-  return JSON.parse(JSON.stringify(v)) as T;
-}
+// ---------------------------------------------------------------------------
+// Small helpers
+// ---------------------------------------------------------------------------
 
 function activePlayer(s: GameState): PlayerState {
   return s.players[s.turn.playerIdx];
 }
 
-function heroName(id: HeroId): string {
-  return HERO_MAP[id].name;
+function charName(id: CharacterId): string {
+  return CHARACTER_MAP[id].name;
 }
 
 function locName(id: LocationId): string {
   return MAP[id].name;
 }
 
-function alliedAt(s: GameState, loc: LocationId): number {
-  const a = s.allied[loc];
-  if (!a) return 0;
-  return Object.values(a).reduce((x, y) => x + (y ?? 0), 0);
+function regionOf(loc: LocationId): RegionId {
+  return MAP[loc].region;
 }
 
-function otherHero(p: PlayerState, hero: HeroId): HeroId {
-  return p.heroes[0] === hero ? p.heroes[1] : p.heroes[0];
+function friendlyAt(s: GameState, loc: LocationId): number {
+  return Object.values(s.friendly[loc] ?? {}).reduce((a, b) => a + (b ?? 0), 0);
 }
 
-function playerOwnsHero(p: PlayerState, hero: HeroId): boolean {
-  return p.heroes.includes(hero);
+function isHaven(s: GameState, loc: LocationId): boolean {
+  return s.siteStatus[loc] === 'haven';
 }
 
-/**
- * Turn budget: one of your two heroes may take up to 4 actions, the other up
- * to 1 — decided implicitly by how you spend them. A new action by `hero` is
- * legal if afterwards one hero has <= 4 used and the other <= 1.
- */
-export function canAct(s: GameState, hero: HeroId): boolean {
-  const p = activePlayer(s);
-  if (!playerOwnsHero(p, hero)) return false;
-  const used = { ...s.turn.actionsUsed };
-  used[hero] = (used[hero] ?? 0) + 1;
-  const a = used[p.heroes[0]] ?? 0;
-  const b = used[p.heroes[1]] ?? 0;
-  return Math.min(a, b) <= ACTIONS_SECONDARY && Math.max(a, b) <= ACTIONS_PRIMARY;
+function bearerInPlay(s: GameState): boolean {
+  return BEARER in s.characters;
 }
 
-export function actionsRemaining(s: GameState): { hero: HeroId; remaining: number }[] {
-  const p = activePlayer(s);
-  return p.heroes.map((h) => {
-    const usedH = s.turn.actionsUsed[h] ?? 0;
-    const usedOther = s.turn.actionsUsed[otherHero(p, h)] ?? 0;
-    const cap = usedOther > ACTIONS_SECONDARY ? ACTIONS_SECONDARY : ACTIONS_PRIMARY;
-    return { hero: h, remaining: Math.max(0, cap - usedH) };
-  });
-}
-
-function checkObjectives(s: GameState, events: GameEvent[]): void {
-  for (const obj of s.objectives) {
-    if (obj.complete) continue;
-    let done = false;
-    if (obj.id === 'garrisons') {
-      const standing = Object.entries(s.sanctuaries).filter(([, st]) => st !== 'fallen');
-      done =
-        standing.length > 0 &&
-        standing.every(([loc]) => alliedAt(s, loc) >= GARRISON_TARGET);
-    } else if (obj.id === 'purge') {
-      done = s.shadowSlain >= PURGE_TARGET;
-    } else if (obj.id === 'beacon') {
-      done = s.hope >= BEACON_TARGET;
-    }
-    if (done) {
-      obj.complete = true;
-      events.push({ kind: 'objective', text: `Objective complete: ${obj.name}!` });
-    }
-  }
-}
-
-function loseGame(s: GameState, reason: string, events: GameEvent[]): void {
-  if (s.phase !== 'playing') return;
-  s.phase = 'lost';
-  s.lossReason = reason;
-  events.push({ kind: 'loss', text: `The realm falls: ${reason}` });
+function bearerLocation(s: GameState): LocationId | null {
+  return s.characters[BEARER]?.location ?? null;
 }
 
 function changeHope(s: GameState, delta: number, events: GameEvent[], why: string): void {
+  if (s.phase !== 'playing') return;
   const before = s.hope;
   s.hope = Math.max(0, Math.min(HOPE_MAX, s.hope + delta));
   if (s.hope !== before) {
@@ -132,578 +98,1085 @@ function changeHope(s: GameState, delta: number, events: GameEvent[], why: strin
       text: `Hope ${delta < 0 ? 'falls' : 'rises'} to ${s.hope} (${why}).`,
     });
   }
-  if (s.hope <= 0) loseGame(s, 'hope is extinguished', events);
+  if (s.hope <= 0) {
+    s.phase = 'lost';
+    s.lossReason = 'Frodo has lost all hope';
+    events.push({ kind: 'loss', text: 'The hope marker reaches despair. The quest fails.' });
+  }
 }
 
 /**
- * Place shadow troops at a location. Garrisoned allied troops absorb spawns
- * one-for-one (both are removed). Handles sieges and falls of sanctuaries.
+ * Spend symbols for a player: tokens first, then discard matching region
+ * cards. (Simplification: the engine auto-picks which card to discard;
+ * players in the physical game choose.)
  */
-function spawnShadow(s: GameState, loc: LocationId, n: number, events: GameEvent[]): void {
-  for (let i = 0; i < n && s.phase === 'playing'; i++) {
-    // Allied garrison absorbs the spawn: one ally falls, no shadow lands.
-    const a = s.allied[loc];
-    if (a) {
-      const faction = (Object.keys(a) as Faction[]).find((f) => (a[f] ?? 0) > 0);
-      if (faction) {
-        a[faction]! -= 1;
-        s.supply.factions[faction] += 1;
-        events.push({
-          kind: 'shadow',
-          text: `Shadow assails ${locName(loc)} — an allied troop falls holding the line.`,
-        });
-        continue;
-      }
-    }
-    if (s.supply.shadow <= 0) {
-      loseGame(s, 'the shadow is endless (troop supply exhausted)', events);
-      return;
-    }
-    s.supply.shadow -= 1;
-    s.shadow[loc] = (s.shadow[loc] ?? 0) + 1;
-    events.push({ kind: 'shadow', text: `Shadow troops muster at ${locName(loc)} (${s.shadow[loc]}).` });
+function canPay(p: PlayerState, symbols: SymbolKind[]): boolean {
+  const need: Record<string, number> = {};
+  for (const sym of symbols) need[sym] = (need[sym] ?? 0) + 1;
+  for (const [sym, n] of Object.entries(need)) {
+    const tokens = p.tokens[sym as SymbolKind];
+    const cards = p.hand.filter((c) => c.kind === 'region' && c.symbol === sym).length;
+    if (tokens + cards < n) return false;
+  }
+  return true;
+}
 
-    const status = s.sanctuaries[loc];
-    if (status === 'standing' && s.shadow[loc] >= SIEGE_THRESHOLD) {
-      s.sanctuaries[loc] = 'besieged';
-      events.push({ kind: 'siege', text: `${locName(loc)} is besieged!` });
-      changeHope(s, -1, events, `${locName(loc)} besieged`);
-    } else if (status === 'besieged' && s.shadow[loc] >= FALL_THRESHOLD) {
-      s.sanctuaries[loc] = 'fallen';
-      events.push({ kind: 'siege', text: `${locName(loc)} has fallen to the shadow!` });
-      changeHope(s, -2, events, `${locName(loc)} fell`);
-      const fallen = Object.values(s.sanctuaries).filter((st) => st === 'fallen').length;
-      if (fallen >= FALLEN_LOSS) {
-        loseGame(s, `${fallen} sanctuaries lie in ruin`, events);
-      }
+function pay(s: GameState, p: PlayerState, symbols: SymbolKind[], events: GameEvent[]): void {
+  if (!canPay(p, symbols)) {
+    throw new RuleError(`Not enough symbols (need ${symbols.join(', ')}).`);
+  }
+  for (const sym of symbols) {
+    if (p.tokens[sym] > 0) {
+      p.tokens[sym] -= 1;
+      s.supply.tokens[sym] += 1;
+      events.push({ kind: 'action', text: `${p.name} spends a ${sym} token.` });
+    } else {
+      const idx = p.hand.findIndex((c) => c.kind === 'region' && c.symbol === sym);
+      const [card] = p.hand.splice(idx, 1);
+      s.playerDiscard.push(card);
+      events.push({ kind: 'action', text: `${p.name} discards a region card for ${sym}.` });
     }
   }
 }
 
-function removeShadow(s: GameState, loc: LocationId, n: number, events: GameEvent[], slain: boolean): number {
+// ---------------------------------------------------------------------------
+// Havens falling / troops
+// ---------------------------------------------------------------------------
+
+/** A haven with shadow troops and no friendly troops becomes a stronghold. */
+function checkHavens(s: GameState, events: GameEvent[]): void {
+  for (const [loc, status] of Object.entries(s.siteStatus)) {
+    if (status !== 'haven') continue;
+    if ((s.shadow[loc] ?? 0) > 0 && friendlyAt(s, loc) === 0) {
+      s.siteStatus[loc] = 'stronghold';
+      events.push({ kind: 'haven', text: `${locName(loc)} is overrun and falls to the shadow!` });
+      changeHope(s, -HAVEN_LOST_HOPE, events, `${locName(loc)} lost`);
+    }
+  }
+}
+
+function addShadow(s: GameState, loc: LocationId, n: number, events: GameEvent[], fromCard: boolean): void {
+  if (fromCard && s.spawnStopped[loc]) {
+    events.push({ kind: 'shadow', text: `${locName(loc)} is held by the Free Peoples — no shadow troops appear.` });
+    return;
+  }
+  let placed = 0;
+  for (let i = 0; i < n; i++) {
+    if (s.supply.shadow <= 0) {
+      changeHope(s, -1, events, 'the shadow troop supply is empty');
+      continue;
+    }
+    s.supply.shadow -= 1;
+    s.shadow[loc] = (s.shadow[loc] ?? 0) + 1;
+    placed++;
+  }
+  if (placed > 0) {
+    events.push({ kind: 'shadow', text: `${placed} shadow troop${placed > 1 ? 's' : ''} muster at ${locName(loc)} (${s.shadow[loc]}).` });
+  }
+}
+
+function removeShadow(s: GameState, loc: LocationId, n: number): number {
   const have = s.shadow[loc] ?? 0;
   const removed = Math.min(have, n);
+  s.shadow[loc] = have - removed;
+  if (s.shadow[loc] === 0) delete s.shadow[loc];
+  s.supply.shadow += removed;
+  return removed;
+}
+
+/** Remove friendly troops; the engine auto-picks from the largest army present. */
+function removeFriendly(s: GameState, loc: LocationId, n: number, events: GameEvent[]): number {
+  const at = s.friendly[loc];
+  if (!at) return 0;
+  let removed = 0;
+  for (let i = 0; i < n; i++) {
+    const factions = (Object.keys(at) as Faction[]).filter((f) => (at[f] ?? 0) > 0);
+    if (factions.length === 0) break;
+    factions.sort((a, b) => (at[b] ?? 0) - (at[a] ?? 0));
+    const f = factions[0];
+    at[f]! -= 1;
+    s.supply.factions[f] += 1;
+    removed++;
+  }
   if (removed > 0) {
-    s.shadow[loc] = have - removed;
-    if (s.shadow[loc] === 0) delete s.shadow[loc];
-    s.supply.shadow += removed;
-    if (slain) s.shadowSlain += removed;
-    // Lifting a siege
-    if (s.sanctuaries[loc] === 'besieged' && (s.shadow[loc] ?? 0) < SIEGE_THRESHOLD) {
-      s.sanctuaries[loc] = 'standing';
-      events.push({ kind: 'siege', text: `The siege of ${locName(loc)} is broken!` });
-    }
+    events.push({ kind: 'battle', text: `${removed} friendly troop${removed > 1 ? 's' : ''} fall at ${locName(loc)}.` });
   }
   return removed;
 }
 
+// ---------------------------------------------------------------------------
+// Objectives
+// ---------------------------------------------------------------------------
+
+function completeObjective(s: GameState, id: string, events: GameEvent[]): void {
+  const obj = s.objectives.find((o) => o.id === id);
+  if (!obj || obj.complete) return;
+  obj.complete = true;
+  const def = OBJECTIVE_MAP[id];
+  events.push({ kind: 'objective', text: `Objective complete: ${def.name}!` });
+  // Rewards (reconstructed).
+  switch (id) {
+    case 'blessing_elves': {
+      changeHope(s, 1, events, def.name);
+      if (s.supply.tokens.stealth > 0) {
+        s.supply.tokens.stealth -= 1;
+        activePlayer(s).tokens.stealth += 1;
+        events.push({ kind: 'objective', text: `${activePlayer(s).name} takes a stealth token.` });
+      }
+      break;
+    }
+    case 'challenge_sauron':
+      changeHope(s, 2, events, def.name);
+      break;
+    default:
+      // Reconstructed reward: completed objectives rekindle hope.
+      changeHope(s, 2, events, def.name);
+  }
+}
+
+function checkStateObjectives(s: GameState, events: GameEvent[]): void {
+  const gondorTroops = Object.values(s.friendly).reduce((a, f) => a + (f.vale ?? 0), 0);
+  const riderTroops = Object.values(s.friendly).reduce((a, f) => a + (f.riders ?? 0), 0);
+  if (gondorTroops >= 5) completeObjective(s, 'oathbreakers', events);
+  if (riderTroops >= 6) completeObjective(s, 'ride_eored', events);
+  if (
+    bearerLocation(s) === 'rivendell' &&
+    (s.shadow['rivendell'] ?? 0) === 0
+  ) {
+    completeObjective(s, 'blessing_elves', events);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Dice: rolling creates a pending state; `confirm` applies it.
+// ---------------------------------------------------------------------------
+
+function rollSearch(s: GameState, rng: Rng, context: SearchContext, loc: LocationId, events: GameEvent[]): void {
+  const wraithsInRegion = s.wraiths[regionOf(loc)] ?? 0;
+  const shadowHere = context === 'ring' ? 0 : s.shadow[loc] ?? 0;
+  const extra = context === 'final' ? HOPE_MAX - s.hope : 0;
+  let diceCount = Math.min(MAX_SEARCH_DICE, wraithsInRegion + shadowHere + extra);
+  if (context !== 'final') {
+    // Arwen (reconstructed): searches with her beside Frodo roll 1 fewer die.
+    const arwen = s.characters['arwen'];
+    if (arwen && arwen.location === loc && diceCount > 1) diceCount -= 1;
+  }
+  if (diceCount <= 0) {
+    if (context === 'final') winGame(s, events);
+    else events.push({ kind: 'search', text: `No enemies near ${locName(loc)} — Frodo passes unseen.` });
+    return;
+  }
+  const dice: SearchFace[] = [];
+  for (let i = 0; i < diceCount; i++) dice.push(SEARCH_DIE[nextInt(rng, 6)]);
+  s.pending = { type: 'search', context, location: loc, dice };
+  events.push({
+    kind: 'search',
+    text: `Search at ${locName(loc)}: [${dice.join(' ')}] — spend resistance to reroll, then confirm.`,
+  });
+}
+
+function applySearch(s: GameState, events: GameEvent[]): void {
+  const pend = s.pending;
+  if (!pend || pend.type !== 'search') return;
+  s.pending = null;
+  const loc = pend.location;
+  for (const face of pend.dice) {
+    if (s.phase !== 'playing') return;
+    switch (face) {
+      case 'slip':
+        break;
+      case 'weary':
+        changeHope(s, -1, events, 'weary');
+        break;
+      case 'exposed':
+        if (isHaven(s, loc)) {
+          events.push({ kind: 'search', text: 'Exposed — but the haven shelters Frodo.' });
+        } else {
+          changeHope(s, -1, events, 'exposed');
+        }
+        break;
+      case 'recall': {
+        if (regionOf(loc) === MORDOR) break;
+        // Move 1 Nazgûl to Mordor: take from Frodo's region if possible,
+        // otherwise from the largest group.
+        const from =
+          (s.wraiths[regionOf(loc)] ?? 0) > 0
+            ? regionOf(loc)
+            : Object.entries(s.wraiths).sort((a, b) => b[1] - a[1]).find(([, n]) => n > 0)?.[0];
+        if (from) {
+          s.wraiths[from] -= 1;
+          s.wraiths[MORDOR] = (s.wraiths[MORDOR] ?? 0) + 1;
+          events.push({ kind: 'search', text: `A Nazgûl is recalled from ${REGION_MAP[from].name} to Mordor.` });
+        }
+        break;
+      }
+    }
+  }
+  if (pend.context === 'final' && s.phase === 'playing' && s.hope >= 1) {
+    winGame(s, events);
+  }
+}
+
+function winGame(s: GameState, events: GameEvent[]): void {
+  completeObjective(s, 'destroy_ring', events);
+  s.phase = 'won';
+  events.push({
+    kind: 'win',
+    text: 'The One Ring falls into the fire. Barad-dûr crumbles — Middle-earth is saved!',
+  });
+}
+
+function rollBattle(s: GameState, rng: Rng, loc: LocationId, source: 'attack' | 'shadow', requested: number | undefined, events: GameEvent[]): void {
+  let diceCount: number;
+  if (source === 'attack') {
+    const cap = Math.min(requested ?? MAX_BATTLE_DICE, friendlyAt(s, loc));
+    diceCount = Math.max(1, cap);
+  } else {
+    diceCount = Math.min(MAX_BATTLE_DICE, s.shadow[loc] ?? 0);
+  }
+  if (diceCount <= 0) return;
+  const dice: BattleFace[] = [];
+  for (let i = 0; i < diceCount; i++) dice.push(BATTLE_DIE[nextInt(rng, 6)]);
+  s.pending = { type: 'battle', location: loc, source, dice, valorKills: 0 };
+  events.push({
+    kind: 'battle',
+    text: `Battle at ${locName(loc)}: [${dice.join(' ')}] — spend resistance to reroll or valor to slay, then confirm.`,
+  });
+}
+
+function applyBattle(s: GameState, events: GameEvent[]): void {
+  const pend = s.pending;
+  if (!pend || pend.type !== 'battle') return;
+  s.pending = null;
+  const loc = pend.location;
+  const region = regionOf(loc);
+  const faramirHere = s.characters['faramir']?.location === loc;
+  const eowynHere = s.characters['eowyn']?.location === loc;
+  let shadowKilled = pend.valorKills;
+  let friendlyLost = 0;
+  for (const face of pend.dice) {
+    switch (face) {
+      case 'rout':
+        shadowKilled += 1;
+        break;
+      case 'exchange':
+        shadowKilled += 1;
+        friendlyLost += 1;
+        break;
+      case 'overrun':
+        if (!isHaven(s, loc) && !faramirHere) friendlyLost += 1;
+        break;
+      case 'wraith':
+        if ((s.wraiths[region] ?? 0) > 0) {
+          if (eowynHere) {
+            s.wraiths[region] -= 1;
+            s.wraiths[MORDOR] = (s.wraiths[MORDOR] ?? 0) + 1;
+            events.push({ kind: 'battle', text: `Éowyn strikes — a Nazgûl in ${REGION_MAP[region].name} is destroyed and returns to Mordor.` });
+          } else {
+            friendlyLost += 2;
+          }
+        }
+        break;
+    }
+  }
+  const slain = removeShadow(s, loc, shadowKilled);
+  if (slain > 0) events.push({ kind: 'battle', text: `${slain} shadow troop${slain > 1 ? 's' : ''} slain at ${locName(loc)}.` });
+  if (friendlyLost > 0) removeFriendly(s, loc, friendlyLost, events);
+  checkHavens(s, events);
+  checkStateObjectives(s, events);
+}
+
+// ---------------------------------------------------------------------------
+// Shadow phase
+// ---------------------------------------------------------------------------
+
 function drawShadowCard(s: GameState, rng: Rng): ShadowCard | undefined {
-  if (s.foreseen.length > 0) return s.foreseen.shift();
   if (s.shadowDeck.length === 0) {
-    // The shadow never rests: reshuffle the discard.
+    if (s.shadowDiscard.length === 0) return undefined;
     s.shadowDeck = shuffle(rng, [...s.shadowDiscard]);
     s.shadowDiscard = [];
   }
   return s.shadowDeck.pop();
 }
 
-function huntCheck(s: GameState, rng: Rng, events: GameEvent[]): void {
-  const loc = s.shardbearer.location;
-  const wraithsHere = s.wraiths.filter((w) => w.location === loc).length;
-  if (wraithsHere === 0 || s.phase !== 'playing') return;
-  let eyes = 0;
-  for (let i = 0; i < wraithsHere; i++) {
-    if (next(rng) < 1 / 3) eyes++;
-  }
-  if (eyes === 0) {
-    events.push({
-      kind: 'hunt',
-      text: `Wraiths search ${locName(loc)} but ${SHARDBEARER_NAME} slips away unseen.`,
-    });
-    return;
-  }
-  if (s.shardbearer.hidden) {
-    s.shardbearer.hidden = false;
-    events.push({
-      kind: 'hunt',
-      text: `Wraiths sweep ${locName(loc)} — ${SHARDBEARER_NAME}'s hiding place is compromised!`,
-    });
-    return;
-  }
-  s.shardbearer.corruption = Math.min(CORRUPTION_MAX, s.shardbearer.corruption + eyes);
-  events.push({
-    kind: 'hunt',
-    text: `Wraiths find ${SHARDBEARER_NAME}'s trail! Corruption rises to ${s.shardbearer.corruption}.`,
-  });
-  if (s.shardbearer.corruption >= CORRUPTION_MAX) {
-    loseGame(s, `${SHARDBEARER_NAME} succumbs to the Ember's corruption`, events);
-  }
-}
-
-function moveWraithsToward(s: GameState, count: number, events: GameEvent[]): void {
-  // The `count` wraiths nearest the shardbearer (by id order for determinism)
-  // each advance one step.
-  let moved = 0;
-  for (const w of s.wraiths) {
-    if (moved >= count) break;
-    if (w.location === s.shardbearer.location) continue;
-    const step = stepToward(w.location, s.shardbearer.location);
-    if (step !== w.location) {
-      w.location = step;
-      moved++;
-      events.push({ kind: 'shadow', text: `A wraith rides to ${locName(step)}.` });
+function advanceLine(s: GameState, lineId: string, events: GameEvent[]): void {
+  const line = BATTLE_LINES.find((l) => l.id === lineId);
+  if (!line) return;
+  events.push({ kind: 'shadow', text: `The shadow advances: ${line.name}.` });
+  // Front troops move first; troops at the end of the line hold position.
+  for (let i = line.path.length - 2; i >= 0; i--) {
+    const from = line.path[i];
+    const to = line.path[i + 1];
+    const n = s.shadow[from] ?? 0;
+    if (n > 0) {
+      delete s.shadow[from];
+      s.shadow[to] = (s.shadow[to] ?? 0) + n;
+      events.push({ kind: 'shadow', text: `${n} shadow troop${n > 1 ? 's' : ''} advance from ${locName(from)} to ${locName(to)}.` });
     }
   }
+  // Battles frontmost-first wherever both sides now stand.
+  for (let i = line.path.length - 1; i >= 0; i--) {
+    const loc = line.path[i];
+    if ((s.shadow[loc] ?? 0) > 0 && friendlyAt(s, loc) > 0) {
+      s.queue.unshift({ step: 'battle', location: loc, source: 'shadow' });
+    }
+  }
+  checkHavens(s, events);
 }
 
-function resolveSurge(s: GameState, rng: Rng, events: GameEvent[]): void {
-  events.push({ kind: 'shadow', text: 'ASHEN SURGE! The shadow gathers its strength.' });
-  if (s.threatIdx < THREAT_TRACK.length - 1) s.threatIdx += 1;
-  events.push({
-    kind: 'shadow',
-    text: `Threat rises: ${THREAT_TRACK[s.threatIdx]} shadow cards per turn.`,
-  });
-  // Heavy spawn at the bottom card of the shadow deck (the "deepest peril").
-  const bottom = s.shadowDeck.length > 0 ? s.shadowDeck.shift() : undefined;
-  if (bottom) {
-    if (bottom.kind === 'spawn' && bottom.location) {
-      spawnShadow(s, bottom.location, 3, events);
+function moveNazgulCloser(s: GameState, count: number, events: GameEvent[]): void {
+  const target = bearerLocation(s);
+  if (!target) return;
+  const frodoRegion = regionOf(target);
+  for (let i = 0; i < count; i++) {
+    // Closest Nazgûl not already in Frodo's region; ties: most Nazgûl, then name.
+    const candidates = Object.entries(s.wraiths)
+      .filter(([r, n]) => n > 0 && r !== frodoRegion)
+      .map(([r, n]) => ({ r, n, d: regionDistance(r, frodoRegion) }))
+      .sort((a, b) => a.d - b.d || b.n - a.n || a.r.localeCompare(b.r));
+    if (candidates.length === 0) return;
+    const from = candidates[0].r;
+    const options = regionsToward(from, frodoRegion).sort();
+    const to = options[0] ?? from;
+    s.wraiths[from] -= 1;
+    s.wraiths[to] = (s.wraiths[to] ?? 0) + 1;
+    events.push({ kind: 'shadow', text: `A Nazgûl sweeps from ${REGION_MAP[from].name} into ${REGION_MAP[to].name}.` });
+  }
+}
+
+function deployNazgulToEye(s: GameState, count: number, events: GameEvent[]): void {
+  if (s.eye === MORDOR) {
+    // Recall instead: pull from the largest group outside Mordor.
+    for (let i = 0; i < count; i++) {
+      const from = Object.entries(s.wraiths)
+        .filter(([r, n]) => n > 0 && r !== MORDOR)
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0];
+      if (!from) return;
+      s.wraiths[from[0]] -= 1;
+      s.wraiths[MORDOR] = (s.wraiths[MORDOR] ?? 0) + 1;
+      events.push({ kind: 'shadow', text: `A Nazgûl is recalled from ${REGION_MAP[from[0]].name} to Mordor.` });
+    }
+    return;
+  }
+  for (let i = 0; i < count; i++) {
+    let from: RegionId | undefined;
+    if ((s.wraiths[MORDOR] ?? 0) > 0) {
+      from = MORDOR;
     } else {
-      moveWraithsToward(s, s.wraiths.length, events);
+      from = Object.entries(s.wraiths)
+        .filter(([r, n]) => n > 0 && r !== s.eye)
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0];
     }
-    s.shadowDiscard.push(bottom);
+    if (!from) return;
+    s.wraiths[from] -= 1;
+    s.wraiths[s.eye] = (s.wraiths[s.eye] ?? 0) + 1;
+    events.push({ kind: 'shadow', text: `A Nazgûl flies from ${REGION_MAP[from].name} to the Eye in ${REGION_MAP[s.eye].name}.` });
   }
-  // A new wraith rides out from Wraithspire.
-  if (s.wraiths.length < WRAITH_COUNT_MAX) {
-    s.wraiths.push({ id: s.wraiths.length, location: 'wraithspire' });
-    events.push({ kind: 'shadow', text: 'A new wraith rides out from Wraithspire.' });
+}
+
+function resolveShadowCard(s: GameState, rng: Rng, events: GameEvent[]): void {
+  const card = drawShadowCard(s, rng);
+  if (!card) return;
+
+  if (card.special) {
+    const info = SPECIAL_SHADOW_INFO[card.special];
+    events.push({ kind: 'shadow', text: `Special shadow card: ${info.name}!` });
+    if (card.special === 'war_drums') {
+      for (const [loc, status] of Object.entries(s.siteStatus)) {
+        if (status === 'stronghold' && MAP[loc].stronghold && !s.spawnStopped[loc]) {
+          addShadow(s, loc, 1, events, true);
+          if (friendlyAt(s, loc) > 0) s.queue.unshift({ step: 'battle', location: loc, source: 'shadow' });
+        }
+      }
+    } else {
+      addShadow(s, 'isengard', 2, events, true);
+      if (friendlyAt(s, 'isengard') > 0) s.queue.unshift({ step: 'battle', location: 'isengard', source: 'shadow' });
+      advanceLine(s, 'isengard_line', events);
+    }
+    s.shadowDiscard.push(card);
+    checkHavens(s, events);
+    return;
   }
-  // The shadow discard returns to the top of the deck.
+
+  // The back of the next card on the deck decides which half resolves.
+  const nextBack = s.shadowDeck.length > 0
+    ? s.shadowDeck[s.shadowDeck.length - 1].back
+    : next(rng) < 0.5 ? 'flag' : 'banner';
+
+  if (nextBack === 'flag') {
+    advanceLine(s, card.line!, events);
+  } else {
+    const loc = card.reinforce!;
+    addShadow(s, loc, 1, events, true);
+    if ((s.shadow[loc] ?? 0) > 0 && friendlyAt(s, loc) > 0) {
+      s.queue.unshift({ step: 'battle', location: loc, source: 'shadow' });
+    }
+    checkHavens(s, events);
+    // Special order.
+    const frodoLoc = bearerLocation(s);
+    switch (card.order) {
+      case 'eye': {
+        if (!frodoLoc) break;
+        const fr = regionOf(frodoLoc);
+        if (s.eye === fr) {
+          events.push({ kind: 'shadow', text: `The Eye is already fixed on ${REGION_MAP[fr].name} — it searches for Frodo!` });
+          s.queue.unshift({ step: 'search', context: 'order', location: frodoLoc });
+        } else {
+          s.eye = fr;
+          events.push({ kind: 'shadow', text: `The Eye of Sauron turns to ${REGION_MAP[fr].name}.` });
+        }
+        break;
+      }
+      case 'hunt2':
+        moveNazgulCloser(s, 2, events);
+        break;
+      case 'deploy3':
+        deployNazgulToEye(s, 3, events);
+        break;
+    }
+  }
+  s.shadowDiscard.push(card);
+}
+
+// ---------------------------------------------------------------------------
+// Turn end: draw player cards (Skies Darken), then the shadow phase
+// ---------------------------------------------------------------------------
+
+function resolveDarken(s: GameState, rng: Rng, cardLoc: LocationId, events: GameEvent[]): void {
+  events.push({ kind: 'card', text: 'SKIES DARKEN!' });
+  // 1. Threat rises.
+  if (s.threatIdx < THREAT_TRACK.length - 1) s.threatIdx += 1;
+  events.push({ kind: 'card', text: `The threat rate rises: ${THREAT_TRACK[s.threatIdx]} shadow cards per turn.` });
+  // 2. The Eye seeks Frodo.
+  const frodoLoc = bearerLocation(s);
+  if (frodoLoc) {
+    const fr = regionOf(frodoLoc);
+    if (s.eye === fr) {
+      changeHope(s, -2, events, 'the Eye finds Frodo\'s trail');
+    } else {
+      s.eye = fr;
+      events.push({ kind: 'card', text: `The Eye of Sauron turns to ${REGION_MAP[fr].name}.` });
+    }
+  }
+  // 3. Troops muster under cover of darkness.
+  addShadow(s, cardLoc, 3, events, true);
+  if ((s.shadow[cardLoc] ?? 0) > 0 && friendlyAt(s, cardLoc) > 0) {
+    s.queue.unshift({ step: 'battle', location: cardLoc, source: 'shadow' });
+  }
+  checkHavens(s, events);
+  // 4. The danger intensifies: shadow discard returns to the top of the deck.
   if (s.shadowDiscard.length > 0) {
     const recycled = shuffle(rng, [...s.shadowDiscard]);
-    s.shadowDeck = [...s.shadowDeck, ...recycled];
+    s.shadowDeck = [...s.shadowDeck, ...recycled]; // drawn from the end = on top
     s.shadowDiscard = [];
-    events.push({ kind: 'shadow', text: 'Old perils stir again (shadow discard reshuffled).' });
+    events.push({ kind: 'card', text: 'The shadow discard pile is shuffled onto the deck — old perils stir again.' });
   }
 }
 
-// ---------------------------------------------------------------------------
-// Card play
-// ---------------------------------------------------------------------------
-
-function playCard(
-  s: GameState,
-  rng: Rng,
-  action: Extract<Action, { type: 'playCard' }>,
-  events: GameEvent[],
-): void {
+function drawPlayerCards(s: GameState, rng: Rng, count: number, events: GameEvent[]): void {
   const p = activePlayer(s);
-  const idx = p.hand.findIndex((c) => c.id === action.card);
-  if (idx < 0) throw new RuleError('That card is not in your hand.');
-  const card = p.hand[idx];
-
-  switch (card.kind) {
-    case 'ashen_surge':
-      throw new RuleError('Ashen Surge cannot be played.');
-    case 'swift_march': {
-      if (!action.hero || !action.path) throw new RuleError('Swift March needs a hero and a path.');
-      if (!playerOwnsHero(p, action.hero)) throw new RuleError('Not your hero.');
-      validatePath(s.heroes[action.hero].location, action.path, 2);
-      s.heroes[action.hero].location = action.path[action.path.length - 1];
-      events.push({
-        kind: 'card',
-        text: `${p.name} plays Swift March: ${heroName(action.hero)} hurries to ${locName(s.heroes[action.hero].location)}.`,
-      });
-      break;
-    }
-    case 'rally_banner': {
-      if (!action.location) throw new RuleError('Rally Banner needs a sanctuary.');
-      const def = MAP[action.location];
-      if (!def?.sanctuary || s.sanctuaries[action.location] === 'fallen') {
-        throw new RuleError('Rally Banner targets a standing sanctuary.');
-      }
-      const faction = def.sanctuary;
-      const amount = Math.min(2, s.supply.factions[faction]);
-      if (amount === 0) throw new RuleError(`No ${faction} troops left in the supply.`);
-      s.supply.factions[faction] -= amount;
-      const a = (s.allied[action.location] ??= {});
-      a[faction] = (a[faction] ?? 0) + amount;
-      events.push({
-        kind: 'card',
-        text: `${p.name} plays Rally Banner: ${amount} troops muster at ${locName(action.location)}.`,
-      });
-      break;
-    }
-    case 'ambush': {
-      if (!action.location) throw new RuleError('Ambush needs a target location.');
-      const near = p.heroes.some(
-        (h) =>
-          s.heroes[h].location === action.location ||
-          areAdjacent(s.heroes[h].location, action.location!),
-      );
-      if (!near) throw new RuleError('Ambush must target a location at or adjacent to one of your heroes.');
-      const removed = removeShadow(s, action.location, 2, events, true);
-      if (removed === 0) throw new RuleError('No shadow troops there to ambush.');
-      events.push({
-        kind: 'card',
-        text: `${p.name} plays Ambush: ${removed} shadow troops slain at ${locName(action.location)}.`,
-      });
-      break;
-    }
-    case 'lantern_oil':
-      if (action.cleanse) {
-        if (s.shardbearer.corruption <= 0) throw new RuleError('No corruption to cleanse.');
-        s.shardbearer.corruption -= 1;
-        events.push({
-          kind: 'card',
-          text: `${p.name} plays Lantern Oil: the Ember's grip eases (corruption ${s.shardbearer.corruption}).`,
-        });
-      } else {
-        events.push({ kind: 'card', text: `${p.name} plays Lantern Oil.` });
-        changeHope(s, 1, events, 'Lantern Oil');
-      }
-      break;
-    case 'hearthsong':
-      events.push({ kind: 'card', text: `${p.name} plays Hearthsong.` });
-      changeHope(s, 2, events, 'Hearthsong');
-      break;
-    case 'fernpath': {
-      if (action.hide) {
-        s.shardbearer.hidden = true;
-        events.push({
-          kind: 'card',
-          text: `${p.name} plays Fernpath: ${SHARDBEARER_NAME} goes to ground.`,
-        });
-      } else {
-        if (!action.path || action.path.length !== 1) {
-          throw new RuleError('Fernpath moves the shardbearer exactly 1 connection (or hides him).');
-        }
-        validatePath(s.shardbearer.location, action.path, 1);
-        s.shardbearer.location = action.path[0];
-        s.shardbearer.hidden = false;
-        events.push({
-          kind: 'card',
-          text: `${p.name} plays Fernpath: ${SHARDBEARER_NAME} steals along hidden ways to ${locName(action.path[0])}.`,
-        });
-      }
-      break;
-    }
-    case 'farsight': {
-      // Take over any already-foreseen cards (clear first so drawShadowCard
-      // doesn't hand them back to us and duplicate them).
-      const seen: ShadowCard[] = [...s.foreseen];
-      s.foreseen = [];
-      while (seen.length < 3) {
-        const c = drawShadowCard(s, rng);
-        if (!c) break;
-        seen.push(c);
-      }
-      s.foreseen = seen;
-      const names = seen.map((c) =>
-        c.kind === 'hunt' ? 'The Hunt' : locName(c.location!),
-      );
-      events.push({
-        kind: 'card',
-        text: `${p.name} plays Farsight. Coming perils: ${names.join(', ')}.`,
-      });
-      break;
-    }
-  }
-
-  p.hand.splice(idx, 1);
-  s.playerDiscard.push(card);
-}
-
-// ---------------------------------------------------------------------------
-// Path validation
-// ---------------------------------------------------------------------------
-
-function validatePath(from: LocationId, path: LocationId[], maxLen: number): void {
-  if (path.length < 1 || path.length > maxLen) {
-    throw new RuleError(`Path must be 1-${maxLen} connections.`);
-  }
-  let cur = from;
-  for (const step of path) {
-    if (!MAP[step]) throw new RuleError(`Unknown location: ${step}`);
-    if (!areAdjacent(cur, step)) {
-      throw new RuleError(`${locName(cur)} does not connect to ${locName(step)}.`);
-    }
-    cur = step;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// End of turn: draw cards, then the shadow phase
-// ---------------------------------------------------------------------------
-
-function endTurn(s: GameState, rng: Rng, events: GameEvent[]): void {
-  const p = activePlayer(s);
-
-  // Draw player cards (Nim's insight: +1).
-  const hasNim = p.heroes.includes('nim');
-  const draws = CARDS_PER_TURN + (hasNim ? 1 : 0);
-  for (let i = 0; i < draws && s.phase === 'playing'; i++) {
+  for (let i = 0; i < count && s.phase === 'playing'; i++) {
     const card = s.playerDeck.pop();
     if (!card) {
-      loseGame(s, 'time runs out — the player deck is exhausted', events);
-      break;
+      changeHope(s, -1, events, 'the player deck is empty');
+      continue;
     }
-    if (card.kind === 'ashen_surge') {
-      s.playerDiscard.push(card);
-      resolveSurge(s, rng, events);
+    if (card.kind === 'darken') {
+      s.removedCards.push(card);
+      resolveDarken(s, rng, card.location, events);
     } else {
       p.hand.push(card);
       events.push({ kind: 'turn', text: `${p.name} draws a card.` });
     }
   }
-  // Hand limit: discard newest-last extras (players should play cards, not hoard).
-  while (p.hand.length > HAND_LIMIT) {
-    const dropped = p.hand.shift()!;
-    s.playerDiscard.push(dropped);
-    events.push({ kind: 'turn', text: `${p.name} is over the hand limit and loses a card.` });
+  if (p.hand.length > HAND_LIMIT && s.phase === 'playing') {
+    s.pending = { type: 'discard', player: p.id };
+    events.push({ kind: 'turn', text: `${p.name} is over the hand limit and must discard.` });
   }
+}
 
-  // Shadow phase.
-  if (s.phase === 'playing') {
-    const count = THREAT_TRACK[s.threatIdx];
-    events.push({ kind: 'shadow', text: `The shadow stirs (${count} cards)...` });
-    for (let i = 0; i < count && s.phase === 'playing'; i++) {
-      const card = drawShadowCard(s, rng);
-      if (!card) break;
-      if (card.kind === 'spawn' && card.location) {
-        spawnShadow(s, card.location, MAP[card.location].stronghold ? 2 : 1, events);
-      } else {
-        events.push({ kind: 'hunt', text: 'The Hunt is called — every wraith rides!' });
-        moveWraithsToward(s, s.wraiths.length, events);
+/** Advance the automatic queue until a pending decision or the queue drains. */
+function pump(s: GameState, rng: Rng, events: GameEvent[]): void {
+  while (s.phase === 'playing' && !s.pending && s.queue.length > 0) {
+    const item = s.queue.shift()!;
+    switch (item.step) {
+      case 'drawPlayerCards':
+        drawPlayerCards(s, rng, item.count, events);
+        break;
+      case 'shadowDraw':
+        resolveShadowCard(s, rng, events);
+        if (item.remaining > 1) {
+          s.queue.push({ step: 'shadowDraw', remaining: item.remaining - 1 });
+        }
+        break;
+      case 'battle':
+        if ((s.shadow[item.location] ?? 0) > 0 && friendlyAt(s, item.location) > 0) {
+          rollBattle(s, rng, item.location, item.source, item.dice, events);
+        }
+        break;
+      case 'search':
+        rollSearch(s, rng, item.context, item.location, events);
+        break;
+      case 'endTurn': {
+        s.turn.playerIdx = (s.turn.playerIdx + 1) % s.players.length;
+        s.turn.actionsUsed = {};
+        s.turn.actedOrder = [];
+        s.turn.abilityUsed = {};
+        s.turnNumber += 1;
+        events.push({ kind: 'turn', text: `— Turn ${s.turnNumber}: ${activePlayer(s).name} —` });
+        break;
       }
-      s.shadowDiscard.push(card);
+      case 'winCheck':
+        break;
     }
-    huntCheck(s, rng, events);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Action budget: 4 with one character, 1 with the other, no interleaving.
+// ---------------------------------------------------------------------------
+
+export function canAct(s: GameState, character: CharacterId): boolean {
+  const p = activePlayer(s);
+  if (!p.characters.includes(character)) return false;
+  const order = s.turn.actedOrder;
+  const used = s.turn.actionsUsed[character] ?? 0;
+  if (order.length === 0) return true;
+  if (order.length === 1) {
+    if (order[0] === character) {
+      return used < ACTIONS_PRIMARY;
+    }
+    // Switching: the first character is done. Its usage decides the caps.
+    const firstUsed = s.turn.actionsUsed[order[0]] ?? 0;
+    const cap = firstUsed <= ACTIONS_SECONDARY ? ACTIONS_PRIMARY : ACTIONS_SECONDARY;
+    return used < cap;
+  }
+  // Both have acted: only the second may continue.
+  if (order[1] !== character) return false;
+  const firstUsed = s.turn.actionsUsed[order[0]] ?? 0;
+  const cap = firstUsed <= ACTIONS_SECONDARY ? ACTIONS_PRIMARY : ACTIONS_SECONDARY;
+  return used < cap;
+}
+
+function spendAction(s: GameState, character: CharacterId): void {
+  if (!canAct(s, character)) {
+    throw new RuleError(
+      `${charName(character)} cannot act: do up to ${ACTIONS_PRIMARY} actions with one character and up to ${ACTIONS_SECONDARY} with the other, finishing one before the other.`,
+    );
+  }
+  if (!s.turn.actedOrder.includes(character)) s.turn.actedOrder.push(character);
+  s.turn.actionsUsed[character] = (s.turn.actionsUsed[character] ?? 0) + 1;
+}
+
+// ---------------------------------------------------------------------------
+// Events (player cards)
+// ---------------------------------------------------------------------------
+
+function playEvent(s: GameState, rng: Rng, playerId: PlayerId, action: Extract<Action, { type: 'playEvent' }>, events: GameEvent[]): void {
+  const p = s.players.find((pl) => pl.id === playerId)!;
+  const idx = p.hand.findIndex((c) => c.id === action.card);
+  if (idx < 0) throw new RuleError('That card is not in your hand.');
+  const card = p.hand[idx];
+  if (card.kind !== 'event') throw new RuleError('Only event cards can be played this way.');
+  const def = EVENTS.find((e) => e.key === card.event)!;
+
+  // The Light of Eärendil is the one event playable during a pending search.
+  if (s.pending && !(s.pending.type === 'search' && card.event === 'phial')) {
+    throw new RuleError('Wait until the current roll is resolved.');
   }
 
-  // Next player.
-  if (s.phase === 'playing') {
-    s.turn.playerIdx = (s.turn.playerIdx + 1) % s.players.length;
-    const nextP = s.players[s.turn.playerIdx];
-    s.turn.actionsUsed = Object.fromEntries(nextP.heroes.map((h) => [h, 0]));
-    s.turn.kindleUsed = false;
-    s.turnNumber += 1;
-    events.push({ kind: 'turn', text: `— Turn ${s.turnNumber}: ${nextP.name} —` });
+  events.push({ kind: 'card', text: `${p.name} plays ${def.name}.` });
+  switch (card.event) {
+    case 'haven_cloaks': {
+      if (!action.character || !action.location) throw new RuleError('Choose a character and destination.');
+      const path = shortestFreePath(s.characters[action.character].location, action.location, 3);
+      if (!path) throw new RuleError('Destination must be within 3 connections along normal paths.');
+      s.characters[action.character].location = action.location;
+      events.push({ kind: 'card', text: `${charName(action.character)} slips away to ${locName(action.location)}.` });
+      break;
+    }
+    case 'eagles': {
+      if (!action.character || !action.location) throw new RuleError('Choose a character and a haven.');
+      if (!isHaven(s, action.location)) throw new RuleError('The eagles only fly to havens.');
+      s.characters[action.character].location = action.location;
+      events.push({ kind: 'card', text: `${charName(action.character)} is carried to ${locName(action.location)}.` });
+      break;
+    }
+    case 'athelas':
+      changeHope(s, 2, events, def.name);
+      break;
+    case 'phial': {
+      if (!s.pending || s.pending.type !== 'search') throw new RuleError('Play this during a search.');
+      s.pending.dice = s.pending.dice.map(() => 'slip');
+      events.push({ kind: 'card', text: 'A clear light drives back the darkness — every search die shows Slip By.' });
+      break;
+    }
+    case 'rohirrim_charge': {
+      if (!action.location) throw new RuleError('Choose a battle location.');
+      if ((s.shadow[action.location] ?? 0) === 0 || friendlyAt(s, action.location) === 0) {
+        throw new RuleError('Needs both friendly and shadow troops.');
+      }
+      rollBattle(s, rng, action.location, 'attack', MAX_BATTLE_DICE, events);
+      break;
+    }
+    case 'beacons': {
+      for (const l of Object.values(MAP)) {
+        if (l.muster && isHaven(s, l.id) && s.supply.factions[l.muster] > 0) {
+          s.supply.factions[l.muster] -= 1;
+          const at = (s.friendly[l.id] ??= {});
+          at[l.muster] = (at[l.muster] ?? 0) + 1;
+        }
+      }
+      events.push({ kind: 'card', text: 'Troops muster at every standing haven.' });
+      break;
+    }
+    case 'council': {
+      if (!action.symbol) throw new RuleError('Choose a symbol.');
+      if (s.supply.tokens[action.symbol] <= 0) throw new RuleError('None left in the supply.');
+      s.supply.tokens[action.symbol] -= 1;
+      p.tokens[action.symbol] += 1;
+      break;
+    }
+    case 'ranger_paths': {
+      if (!action.location || !action.character) throw new RuleError('Choose from- and to-locations.');
+      // action.character carries the from-location's id in this event? Keep it
+      // simple: move up to 3 troops from `character`'s location to `location`.
+      const from = s.characters[action.character]?.location;
+      if (!from || !connection(from, action.location)) throw new RuleError('Locations must be connected.');
+      const at = s.friendly[from] ?? {};
+      let moved = 0;
+      for (const f of Object.keys(at) as Faction[]) {
+        while ((at[f] ?? 0) > 0 && moved < 3) {
+          at[f]! -= 1;
+          const dst = (s.friendly[action.location] ??= {});
+          dst[f] = (dst[f] ?? 0) + 1;
+          moved++;
+        }
+      }
+      events.push({ kind: 'card', text: `${moved} troops march from ${locName(from)} to ${locName(action.location)}.` });
+      checkHavens(s, events);
+      break;
+    }
+    case 'palantir': {
+      const top = s.shadowDeck.slice(-3).reverse();
+      const names = top.map((c) =>
+        c.special ? SPECIAL_SHADOW_INFO[c.special].name : `${BATTLE_LINES.find((l) => l.id === c.line)?.name} / ${locName(c.reinforce!)}`,
+      );
+      events.push({ kind: 'card', text: `The Palantír reveals what comes: ${names.join(' | ')}.` });
+      break;
+    }
+    case 'mithril':
+      changeHope(s, 1, events, def.name);
+      if (s.supply.tokens.resistance > 0) {
+        s.supply.tokens.resistance -= 1;
+        p.tokens.resistance += 1;
+      }
+      break;
+    case 'ents': {
+      const loc = action.location;
+      const legal = loc === 'isengard' || (loc && connection('fangorn_forest', loc)) || loc === 'fangorn_forest';
+      if (!loc || !legal) throw new RuleError('Target Isengard or a location connected to Fangorn Forest.');
+      const n = removeShadow(s, loc, 2);
+      events.push({ kind: 'card', text: `The forest marches — ${n} shadow troops destroyed at ${locName(loc)}.` });
+      break;
+    }
+    case 'oath_dead': {
+      if (!action.location || MAP[action.location].region !== 'gondor') {
+        throw new RuleError('Target a Gondor location.');
+      }
+      const n = removeShadow(s, action.location, 2);
+      events.push({ kind: 'card', text: `The Dead sweep through ${locName(action.location)} — ${n} shadow troops destroyed.` });
+      break;
+    }
+    case 'shadowfax': {
+      if (!action.region || !REGION_MAP[action.region]) throw new RuleError('Choose a region.');
+      s.eye = action.region;
+      events.push({ kind: 'card', text: `The Eye is drawn to ${REGION_MAP[action.region].name}.` });
+      break;
+    }
+    case 'gift':
+      drawPlayerCards(s, rng, 1, events);
+      break;
   }
+  const stillThere = p.hand.indexOf(card);
+  if (stillThere >= 0) p.hand.splice(stillThere, 1);
+  s.playerDiscard.push(card);
+  checkStateObjectives(s, events);
+}
+
+/** BFS over free (uncosted) paths, up to maxLen steps. */
+function shortestFreePath(from: LocationId, to: LocationId, maxLen: number): boolean {
+  if (from === to) return false;
+  let frontier = [from];
+  const seen = new Set([from]);
+  for (let d = 0; d < maxLen; d++) {
+    const nextFrontier: LocationId[] = [];
+    for (const cur of frontier) {
+      for (const c of CONNECTIONS[cur]) {
+        if (c.cost || seen.has(c.to)) continue;
+        if (c.to === to) return true;
+        seen.add(c.to);
+        nextFrontier.push(c.to);
+      }
+    }
+    frontier = nextFrontier;
+  }
+  return false;
 }
 
 // ---------------------------------------------------------------------------
 // The reducer
 // ---------------------------------------------------------------------------
 
-export function applyAction(
-  state: GameState,
-  playerId: PlayerId,
-  action: Action,
-): ActionResult {
+export function applyAction(state: GameState, playerId: PlayerId, action: Action): ActionResult {
   if (state.phase !== 'playing') throw new RuleError('The game is over.');
-  const s = deepClone(state);
+  const s = clone(state);
   const events: GameEvent[] = [];
   const rng = makeRng(0);
   rng.state = s.rngState;
 
   const p = activePlayer(s);
+  const actor = s.players.find((pl) => pl.id === playerId);
+  if (!actor) throw new RuleError('Unknown player.');
+
+  // --- Pending-resolution actions --------------------------------------
+  if (s.pending) {
+    handlePendingAction(s, rng, playerId, action, events);
+    pump(s, rng, events);
+    s.rngState = rng.state;
+    return { state: s, events };
+  }
+
+  // --- Events may be played by any player, any turn --------------------
+  if (action.type === 'playEvent') {
+    playEvent(s, rng, playerId, action, events);
+    pump(s, rng, events);
+    s.rngState = rng.state;
+    return { state: s, events };
+  }
+
   if (p.id !== playerId) throw new RuleError(`It is ${p.name}'s turn.`);
 
-  const spendAction = (hero: HeroId) => {
-    if (!playerOwnsHero(p, hero)) throw new RuleError('Not your hero.');
-    if (!canAct(s, hero)) {
-      throw new RuleError(
-        `${heroName(hero)} has no actions left (one hero acts up to ${ACTIONS_PRIMARY} times, the other up to ${ACTIONS_SECONDARY}).`,
-      );
-    }
-    s.turn.actionsUsed[hero] = (s.turn.actionsUsed[hero] ?? 0) + 1;
-  };
-
   switch (action.type) {
-    case 'move': {
-      spendAction(action.hero);
-      const maxLen = HERO_MAP[action.hero].ability === 'swift' ? 2 : 1;
-      validatePath(s.heroes[action.hero].location, action.path, maxLen);
-      s.heroes[action.hero].location = action.path[action.path.length - 1];
-      events.push({
-        kind: 'action',
-        text: `${heroName(action.hero)} moves to ${locName(s.heroes[action.hero].location)}.`,
-      });
+    case 'travel':
+      doTravel(s, rng, p, action, events);
+      break;
+
+    case 'fellowship': {
+      const c = action.character;
+      requireOwn(p, c);
+      const here = s.characters[c].location;
+      const other = s.players.find((pl) => pl.id !== p.id && pl.characters.some((cc) => s.characters[cc]?.location === here));
+      const isFree = c === 'merry_pippin' && !s.turn.abilityUsed[c];
+      if (!isFree) spendAction(s, c);
+      else s.turn.abilityUsed[c] = true;
+      const region = regionOf(here);
+      if (action.give) {
+        const target = action.takeFrom ? s.players.find((pl) => pl.id === action.takeFrom) : other;
+        if (!target) throw new RuleError('No other player has a character here.');
+        if (!target.characters.some((cc) => s.characters[cc]?.location === here)) {
+          throw new RuleError('That player has no character here.');
+        }
+        const idx = p.hand.findIndex((cd) => cd.id === action.give);
+        if (idx < 0) throw new RuleError('Card not in your hand.');
+        const card = p.hand[idx];
+        if (card.kind !== 'region' || card.region !== region) {
+          throw new RuleError('You may only pass a region card matching the region you are in.');
+        }
+        p.hand.splice(idx, 1);
+        target.hand.push(card);
+        events.push({ kind: 'action', text: `${p.name} passes a ${REGION_MAP[region].name} card to ${target.name}.` });
+        if (target.hand.length > HAND_LIMIT) s.pending = { type: 'discard', player: target.id };
+      } else if (action.take && action.takeFrom) {
+        const target = s.players.find((pl) => pl.id === action.takeFrom);
+        if (!target || !target.characters.some((cc) => s.characters[cc]?.location === here)) {
+          throw new RuleError('That player has no character here.');
+        }
+        const idx = target.hand.findIndex((cd) => cd.id === action.take);
+        if (idx < 0) throw new RuleError('Card not in their hand.');
+        const card = target.hand[idx];
+        if (card.kind !== 'region' || card.region !== region) {
+          throw new RuleError('You may only take a region card matching the region you are in.');
+        }
+        target.hand.splice(idx, 1);
+        p.hand.push(card);
+        events.push({ kind: 'action', text: `${p.name} takes a ${REGION_MAP[region].name} card from ${target.name}.` });
+        if (p.hand.length > HAND_LIMIT) s.pending = { type: 'discard', player: p.id };
+      } else {
+        throw new RuleError('Fellowship: give or take a matching region card.');
+      }
+      break;
+    }
+
+    case 'prepare': {
+      const c = action.character;
+      requireOwn(p, c);
+      const here = s.characters[c].location;
+      if (!isHaven(s, here)) throw new RuleError('Prepare only at a haven.');
+      const idx = p.hand.findIndex((cd) => cd.id === action.card);
+      if (idx < 0) throw new RuleError('Card not in your hand.');
+      const card = p.hand[idx];
+      if (card.kind !== 'region') throw new RuleError('Discard a region card to Prepare.');
+      const take = c === 'galadriel' ? 2 : 1; // Galadriel: reconstructed
+      if (s.supply.tokens[card.symbol] <= 0) throw new RuleError('No matching tokens left in the supply.');
+      spendAction(s, c);
+      p.hand.splice(idx, 1);
+      s.playerDiscard.push(card);
+      const got = Math.min(take, s.supply.tokens[card.symbol]);
+      s.supply.tokens[card.symbol] -= got;
+      p.tokens[card.symbol] += got;
+      events.push({ kind: 'action', text: `${charName(c)} prepares: ${p.name} banks ${got} ${card.symbol} token${got > 1 ? 's' : ''}.` });
       break;
     }
 
     case 'muster': {
-      const loc = s.heroes[action.hero].location;
-      const def = MAP[loc];
-      if (!def.sanctuary) throw new RuleError('Muster only at a sanctuary.');
-      if (s.sanctuaries[loc] === 'fallen') throw new RuleError(`${def.name} has fallen.`);
-      const faction = def.sanctuary;
-      const bonus = HERO_MAP[action.hero].ability === 'muster' ? 1 : 0;
-      const amount = Math.min(MUSTER_AMOUNT + bonus, s.supply.factions[faction]);
-      if (amount === 0) throw new RuleError(`No ${faction} troops left in the supply.`);
-      spendAction(action.hero);
+      const c = action.character;
+      requireOwn(p, c);
+      const here = s.characters[c].location;
+      const faction = MAP[here].muster;
+      if (!faction) throw new RuleError('Muster only at a location with a muster icon.');
+      if (s.supply.factions[faction] <= 0) throw new RuleError('No troops of that army left.');
+      const free = c === 'eowyn' && faction === 'riders'; // from her card
+      spendAction(s, c);
+      if (!free) pay(s, p, ['friendship'], events);
+      const amount = Math.min(c === 'eomer' ? 2 : 1, s.supply.factions[faction]); // Éomer: reconstructed
       s.supply.factions[faction] -= amount;
-      const a = (s.allied[loc] ??= {});
-      a[faction] = (a[faction] ?? 0) + amount;
-      events.push({
-        kind: 'action',
-        text: `${heroName(action.hero)} musters ${amount} troops at ${def.name}.`,
-      });
+      const at = (s.friendly[here] ??= {});
+      at[faction] = (at[faction] ?? 0) + amount;
+      events.push({ kind: 'action', text: `${charName(c)} musters ${amount} troop${amount > 1 ? 's' : ''} at ${locName(here)}.` });
+      checkStateObjectives(s, events);
       break;
     }
 
-    case 'battle': {
-      const heroLoc = s.heroes[action.hero].location;
-      const ability = HERO_MAP[action.hero].ability;
-      const inRange =
-        action.location === heroLoc ||
-        (ability === 'longshot' && areAdjacent(heroLoc, action.location));
-      if (!inRange) throw new RuleError('Battle where your hero stands (Elowen: or adjacent).');
-      if ((s.shadow[action.location] ?? 0) === 0) {
-        throw new RuleError('No shadow troops there.');
-      }
-      spendAction(action.hero);
-      const dice = BATTLE_DICE + (ability === 'battle_die' ? 1 : 0);
-      let kills = 0;
-      let skulls = 0;
-      const faces: string[] = [];
-      for (let i = 0; i < dice; i++) {
-        const r = next(rng);
-        if (r < 1 / 6) {
-          faces.push('crit');
-          kills += 2;
-        } else if (r < 3 / 6) {
-          faces.push('hit');
-          kills += 1;
-        } else if (r < 5 / 6) {
-          faces.push('miss');
+    case 'attack': {
+      const c = action.character;
+      requireOwn(p, c);
+      let loc = s.characters[c].location;
+      // Legolas (reconstructed): may attack a connected location.
+      if (c === 'legolas' && action.dice < 0) throw new RuleError('bad dice');
+      if ((s.shadow[loc] ?? 0) === 0 || friendlyAt(s, loc) === 0) {
+        if (c === 'legolas') {
+          const alt = CONNECTIONS[loc].map((cn) => cn.to).find((l) => (s.shadow[l] ?? 0) > 0 && friendlyAt(s, l) > 0);
+          if (alt) loc = alt;
+          else throw new RuleError('Attack needs friendly and shadow troops together.');
         } else {
-          faces.push('skull');
-          skulls += 1;
+          throw new RuleError('Attack needs friendly and shadow troops in your location.');
         }
       }
-      const slain = removeShadow(s, action.location, kills, events, true);
-      events.push({
-        kind: 'action',
-        text: `${heroName(action.hero)} battles at ${locName(action.location)} [${faces.join(' ')}]: ${slain} shadow slain.`,
-      });
-      if (skulls > 0 && ability !== 'bulwark') {
-        const a = s.allied[action.location];
-        if (a) {
-          for (let i = 0; i < skulls; i++) {
-            const faction = (Object.keys(a) as Faction[]).find((f) => (a[f] ?? 0) > 0);
-            if (!faction) break;
-            a[faction]! -= 1;
-            s.supply.factions[faction] += 1;
-            events.push({
-              kind: 'action',
-              text: `An allied troop falls in the fighting at ${locName(action.location)}.`,
-            });
-          }
-        }
-      }
+      const maxDice = Math.min(c === 'boromir' ? 4 : MAX_BATTLE_DICE, friendlyAt(s, loc));
+      const dice = Math.max(1, Math.min(action.dice, maxDice));
+      spendAction(s, c);
+      // Attacks draw the Eye.
+      s.eye = regionOf(loc);
+      events.push({ kind: 'action', text: `${charName(c)} attacks at ${locName(loc)} — the Eye turns to ${REGION_MAP[s.eye].name}.` });
+      if (regionOf(loc) === MORDOR) completeObjective(s, 'challenge_sauron', events);
+      rollBattle(s, rng, loc, 'attack', dice, events);
       break;
     }
 
-    case 'guide': {
-      const heroLoc = s.heroes[action.hero].location;
-      if (heroLoc !== s.shardbearer.location && !areAdjacent(heroLoc, s.shardbearer.location)) {
-        throw new RuleError(`Guide requires your hero at or adjacent to ${SHARDBEARER_NAME}.`);
-      }
-      const maxLen = HERO_MAP[action.hero].ability === 'guide' ? 2 : 1;
-      validatePath(s.shardbearer.location, action.path, maxLen);
-      spendAction(action.hero);
-      s.shardbearer.location = action.path[action.path.length - 1];
-      s.shardbearer.hidden = false;
-      events.push({
-        kind: 'action',
-        text: `${heroName(action.hero)} guides ${SHARDBEARER_NAME} to ${locName(s.shardbearer.location)}.`,
-      });
-      // Rest at a standing sanctuary eases the Ember's grip.
-      const dest = s.shardbearer.location;
-      if (MAP[dest].sanctuary && s.sanctuaries[dest] !== 'fallen' && s.shardbearer.corruption > 0) {
-        s.shardbearer.corruption -= 1;
-        events.push({
-          kind: 'action',
-          text: `${SHARDBEARER_NAME} rests at ${locName(dest)} — corruption eases to ${s.shardbearer.corruption}.`,
-        });
-      }
-      break;
-    }
-
-    case 'hide': {
-      const heroLoc = s.heroes[action.hero].location;
-      if (heroLoc !== s.shardbearer.location) {
-        throw new RuleError(`Hide requires your hero to stand with ${SHARDBEARER_NAME}.`);
-      }
-      if (s.shardbearer.hidden) throw new RuleError(`${SHARDBEARER_NAME} is already hidden.`);
-      spendAction(action.hero);
-      s.shardbearer.hidden = true;
-      events.push({
-        kind: 'action',
-        text: `${heroName(action.hero)} finds ${SHARDBEARER_NAME} a hiding place.`,
-      });
-      break;
-    }
-
-    case 'kindle': {
-      if (HERO_MAP[action.hero].ability !== 'kindle') {
-        throw new RuleError('Only Maelis can Kindle.');
-      }
-      if (s.turn.kindleUsed) throw new RuleError('Kindle is once per turn.');
-      const loc = s.heroes[action.hero].location;
-      if (!MAP[loc].sanctuary || s.sanctuaries[loc] === 'fallen') {
-        throw new RuleError('Kindle requires a standing sanctuary.');
-      }
-      if (!playerOwnsHero(p, action.hero)) throw new RuleError('Not your hero.');
-      s.turn.kindleUsed = true; // free action — no spendAction
-      events.push({ kind: 'action', text: `${heroName(action.hero)} kindles the lamps.` });
-      changeHope(s, 1, events, 'Kindle');
+    case 'capture': {
+      const c = action.character;
+      requireOwn(p, c);
+      const here = s.characters[c].location;
+      if (s.siteStatus[here] !== 'stronghold') throw new RuleError('Capture a shadow stronghold.');
+      if (friendlyAt(s, here) === 0) throw new RuleError('A friendly troop must be present.');
+      if ((s.shadow[here] ?? 0) > 0) throw new RuleError('Clear the shadow troops first.');
+      const cost = c === 'gimli' ? 2 : CAPTURE_COST; // Gimli: reconstructed
+      spendAction(s, c);
+      pay(s, p, Array(cost).fill('valor') as SymbolKind[], events);
+      s.siteStatus[here] = 'haven';
+      if (MAP[here].stopsSpawnWhenCaptured) s.spawnStopped[here] = true;
+      s.eye = regionOf(here);
+      events.push({ kind: 'haven', text: `${locName(here)} is captured — it now shelters the Free Peoples! The Eye turns to ${REGION_MAP[s.eye].name}.` });
+      changeHope(s, CAPTURE_HOPE, events, `${locName(here)} captured`);
+      if (here === 'isengard') completeObjective(s, 'staff_broken', events);
+      if (here === 'moria') completeObjective(s, 'confront_balrog', events);
+      if (here === 'umbar') completeObjective(s, 'subdue_umbar', events);
+      if (here === 'dol_guldur') completeObjective(s, 'light_mirkwood', events);
       break;
     }
 
     case 'destroyEmber': {
-      if (s.shardbearer.location !== GOAL_LOCATION) {
-        throw new RuleError(`${SHARDBEARER_NAME} must stand at the Cindermaw.`);
+      if (!bearerInPlay(s)) throw new RuleError('Frodo is not in play.');
+      if (!p.characters.includes(BEARER)) throw new RuleError('Only Frodo\'s player may attempt this.');
+      if (bearerLocation(s) !== MOUNT_DOOM) throw new RuleError('Frodo must stand at Mount Doom.');
+      const remaining = s.objectives.filter((o) => !o.complete && o.id !== 'destroy_ring');
+      if (remaining.length > 0) {
+        throw new RuleError(`Complete every other objective first (${remaining.length} remain).`);
       }
-      if (s.heroes[action.hero].location !== GOAL_LOCATION) {
-        throw new RuleError('Your hero must stand at the Cindermaw to see it done.');
-      }
-      if (s.wraiths.some((w) => w.location === GOAL_LOCATION)) {
-        throw new RuleError('Wraiths bar the way — the Cindermaw must be clear of them.');
-      }
-      const complete = s.objectives.filter((o) => o.complete).length;
-      if (complete < OBJECTIVES_REQUIRED) {
-        throw new RuleError(
-          `The realm is not ready: complete ${OBJECTIVES_REQUIRED} objectives first (${complete} done).`,
-        );
-      }
-      spendAction(action.hero);
-      s.phase = 'won';
-      events.push({
-        kind: 'win',
-        text: `${SHARDBEARER_NAME} casts the Ember into the Cindermaw. The shadow breaks — the realm is saved!`,
-      });
+      spendAction(s, BEARER);
+      pay(s, p, Array(RING_DESTROY_COST).fill('resistance') as SymbolKind[], events);
+      events.push({ kind: 'action', text: 'Frodo stands at the Crack of Doom and reaches for the Ring...' });
+      s.queue.unshift({ step: 'search', context: 'final', location: MOUNT_DOOM });
       break;
     }
 
-    case 'playCard':
-      playCard(s, rng, action, events); // free action
-      checkObjectives(s, events);
+    case 'ability': {
+      const c = action.character;
+      requireOwn(p, c);
+      if (c === 'gandalf') { // reconstructed
+        if (s.turn.abilityUsed[c]) throw new RuleError('Once per turn.');
+        if (!isHaven(s, s.characters[c].location)) throw new RuleError('Gandalf must be at a haven.');
+        s.turn.abilityUsed[c] = true;
+        events.push({ kind: 'action', text: 'Gandalf kindles hope in weary hearts.' });
+        changeHope(s, 1, events, 'Gandalf');
+      } else {
+        throw new RuleError('That character has no activated ability.');
+      }
       break;
+    }
 
     case 'endTurn':
-      endTurn(s, rng, events);
+      s.queue.push({ step: 'drawPlayerCards', count: CARDS_PER_TURN });
+      s.queue.push({ step: 'shadowDraw', remaining: THREAT_TRACK[s.threatIdx] });
+      s.queue.push({ step: 'endTurn' });
       break;
 
-    default: {
-      const never: never = action;
-      throw new RuleError(`Unknown action: ${JSON.stringify(never)}`);
+    default:
+      throw new RuleError(`Unknown action: ${(action as { type: string }).type}`);
+  }
+
+  checkStateObjectives(s, events);
+  pump(s, rng, events);
+  s.rngState = rng.state;
+  return { state: s, events };
+}
+
+function requireOwn(p: PlayerState, c: CharacterId): void {
+  if (!p.characters.includes(c)) throw new RuleError('Not your character.');
+}
+
+// ---------------------------------------------------------------------------
+// Travel
+// ---------------------------------------------------------------------------
+
+function doTravel(
+  s: GameState,
+  rng: Rng,
+  p: PlayerState,
+  action: Extract<Action, { type: 'travel' }>,
+  events: GameEvent[],
+): void {
+  const c = action.character;
+  requireOwn(p, c);
+  const from = s.characters[c].location;
+  const conn = connection(from, action.to);
+  if (!conn) throw new RuleError(`${locName(from)} does not connect to ${locName(action.to)}.`);
+
+  const companions = (action.companions ?? []).filter((cc) => cc !== c);
+  for (const cc of companions) {
+    if (!s.characters[cc]) throw new RuleError(`${cc} is not in play.`);
+    if (s.characters[cc].location !== from) throw new RuleError(`${charName(cc)} is not here.`);
+  }
+  const troops = action.troops ?? {};
+  for (const [f, n] of Object.entries(troops)) {
+    if ((s.friendly[from]?.[f as Faction] ?? 0) < (n ?? 0)) {
+      throw new RuleError(`Not that many ${f} troops here.`);
     }
   }
 
-  checkObjectives(s, events);
-  s.rngState = rng.state;
-  return { state: s, events };
+  const bearerMoves = c === BEARER || companions.includes(BEARER);
+  if (bearerMoves && !action.cover) {
+    throw new RuleError('Frodo is coming along: choose stealth, a search, or the Ring.');
+  }
+
+  spendAction(s, c);
+
+  // Special path cost (Gollum travels them free — reconstructed).
+  if (conn.cost && c !== 'gollum') pay(s, p, conn.cost, events);
+
+  // Move everyone and everything.
+  s.characters[c].location = action.to;
+  for (const cc of companions) s.characters[cc].location = action.to;
+  for (const [f, n] of Object.entries(troops)) {
+    if (!n) continue;
+    const src = s.friendly[from]!;
+    src[f as Faction]! -= n;
+    const dst = (s.friendly[action.to] ??= {});
+    dst[f as Faction] = (dst[f as Faction] ?? 0) + n;
+  }
+  const extras = [
+    ...companions.map((cc) => charName(cc)),
+    ...Object.entries(troops).filter(([, n]) => n).map(([f, n]) => `${n} ${f} troops`),
+  ];
+  events.push({
+    kind: 'action',
+    text: `${charName(c)} travels to ${locName(action.to)}${extras.length ? ` with ${extras.join(', ')}` : ''}.`,
+  });
+  checkHavens(s, events);
+
+  if (bearerMoves) {
+    if (action.cover === 'stealth') {
+      pay(s, p, ['stealth'], events);
+      events.push({ kind: 'search', text: 'Frodo slips through unseen (stealth spent).' });
+    } else if (action.cover === 'ring') {
+      // Rulebook fine point: lose 1 hope, Eye to his region, search ignoring shadow troops.
+      changeHope(s, -1, events, 'Frodo puts on the Ring');
+      s.eye = regionOf(action.to);
+      events.push({ kind: 'search', text: `Frodo puts on the Ring! The Eye turns to ${REGION_MAP[s.eye].name}.` });
+      s.queue.unshift({ step: 'search', context: 'ring', location: action.to });
+    } else {
+      s.queue.unshift({ step: 'search', context: 'travel', location: action.to });
+    }
+  }
+  checkStateObjectives(s, events);
+}
+
+// ---------------------------------------------------------------------------
+// Pending handling (rerolls, valor, confirm, discards)
+// ---------------------------------------------------------------------------
+
+function handlePendingAction(s: GameState, rng: Rng, playerId: PlayerId, action: Action, events: GameEvent[]): void {
+  const pend = s.pending!;
+  const player = s.players.find((pl) => pl.id === playerId)!;
+
+  if (pend.type === 'discard') {
+    if (action.type !== 'discard') throw new RuleError(`${s.players.find((pl) => pl.id === pend.player)?.name} must discard to the hand limit first.`);
+    if (playerId !== pend.player) throw new RuleError('Not your discard.');
+    const idx = player.hand.findIndex((c) => c.id === action.card);
+    if (idx < 0) throw new RuleError('Card not in your hand.');
+    const [card] = player.hand.splice(idx, 1);
+    s.playerDiscard.push(card);
+    events.push({ kind: 'turn', text: `${player.name} discards a card.` });
+    if (player.hand.length <= HAND_LIMIT) s.pending = null;
+    return;
+  }
+
+  const presentHere = (loc: LocationId) =>
+    player.characters.some((c) => s.characters[c]?.location === loc);
+
+  switch (action.type) {
+    case 'playEvent':
+      playEvent(s, rng, playerId, action, events);
+      return;
+    case 'reroll': {
+      if (!presentHere(pend.location)) throw new RuleError('You need a character at the roll to help.');
+      if (action.die < 0 || action.die >= pend.dice.length) throw new RuleError('Bad die.');
+      pay(s, player, ['resistance'], events);
+      if (pend.type === 'search') {
+        pend.dice[action.die] = SEARCH_DIE[nextInt(rng, 6)] as SearchFace;
+      } else {
+        pend.dice[action.die] = BATTLE_DIE[nextInt(rng, 6)] as BattleFace;
+      }
+      events.push({ kind: pend.type, text: `${player.name} rerolls a die: now [${pend.dice.join(' ')}].` });
+      return;
+    }
+    case 'showValor': {
+      if (pend.type !== 'battle') throw new RuleError('Valor helps only in battles.');
+      if (!presentHere(pend.location)) throw new RuleError('You need a character at the battle.');
+      if (pend.valorKills >= (s.shadow[pend.location] ?? 0)) throw new RuleError('No shadow troops left to slay.');
+      pay(s, player, ['valor'], events);
+      pend.valorKills += 1;
+      events.push({ kind: 'battle', text: `${player.name} shows valor — another shadow troop will fall.` });
+      return;
+    }
+    case 'confirm': {
+      if (playerId !== activePlayer(s).id) throw new RuleError('The current player confirms the roll.');
+      if (pend.type === 'search') applySearch(s, events);
+      else applyBattle(s, events);
+      return;
+    }
+    default:
+      throw new RuleError('Resolve the current roll first (reroll, valor, or confirm).');
+  }
 }

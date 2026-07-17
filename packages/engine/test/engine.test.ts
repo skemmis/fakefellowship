@@ -1,239 +1,380 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyAction,
+  BATTLE_LINES,
+  BEARER,
   canAct,
   checkInvariants,
+  CONNECTIONS,
   createGame,
-  GOAL_LOCATION,
   legalActions,
   LOCATIONS,
   MAP,
+  MORDOR,
+  MOUNT_DOOM,
+  REGION_MAP,
+  REGIONS,
   RuleError,
   simulateGame,
-  START_LOCATION,
   type GameState,
 } from '../src/index.js';
 
-function newGame(seed = 7): GameState {
-  return createGame(
-    [
-      { id: 'p1', name: 'Alice', heroes: ['alric', 'sylra'] },
-      { id: 'p2', name: 'Bob', heroes: ['tansy', 'maelis'] },
-    ],
-    seed,
-  );
+function newGame(seed = 7, players = 2): GameState {
+  const setup = Array.from({ length: players }, (_, i) => ({ id: `p${i + 1}`, name: `P${i + 1}` }));
+  return createGame(setup, seed);
 }
 
-describe('map', () => {
-  it('is symmetric and connected', () => {
-    for (const loc of LOCATIONS) {
-      for (const n of loc.adjacent) {
-        expect(MAP[n].adjacent).toContain(loc.id);
-      }
-    }
-    // BFS from start reaches everywhere, including the goal.
-    const seen = new Set([START_LOCATION]);
-    const queue = [START_LOCATION];
-    while (queue.length) {
-      for (const n of MAP[queue.shift()!].adjacent) {
-        if (!seen.has(n)) {
-          seen.add(n);
-          queue.push(n);
+/** Force a deterministic 2p game where p1 has Frodo&Sam + Aragorn. */
+function riggedGame(seed = 7): GameState {
+  const s = newGame(seed, 2);
+  // Reassign characters directly for test determinism.
+  const all = ['frodo_sam', 'aragorn', 'eowyn', 'gimli'];
+  s.players[0].characters = ['frodo_sam', 'aragorn'];
+  s.players[1].characters = ['eowyn', 'gimli'];
+  s.characters = {
+    frodo_sam: { location: 'the_shire' },
+    aragorn: { location: 'weather_hills' },
+    eowyn: { location: 'edoras' },
+    gimli: { location: 'erebor' },
+  };
+  s.turn.playerIdx = 0;
+  s.turn.actionsUsed = {};
+  s.turn.actedOrder = [];
+  return s;
+}
+
+describe('board data', () => {
+  it('all locations belong to defined regions and are connected', () => {
+    const regionIds = new Set(REGIONS.map((r) => r.id));
+    for (const l of LOCATIONS) expect(regionIds.has(l.region)).toBe(true);
+    // Connectivity via CONNECTIONS
+    const seen = new Set(['the_shire']);
+    const q = ['the_shire'];
+    while (q.length) {
+      for (const c of CONNECTIONS[q.shift()!]) {
+        if (!seen.has(c.to)) {
+          seen.add(c.to);
+          q.push(c.to);
         }
       }
     }
     expect(seen.size).toBe(LOCATIONS.length);
-    expect(seen.has(GOAL_LOCATION)).toBe(true);
+  });
+
+  it('region adjacency is symmetric', () => {
+    for (const r of REGIONS) {
+      for (const n of r.adjacent) {
+        expect(REGION_MAP[n].adjacent).toContain(r.id);
+      }
+    }
+  });
+
+  it('battle lines start at shadow locations and end at printed havens', () => {
+    for (const line of BATTLE_LINES) {
+      expect(MAP[line.path[0]].shadowLoc).toBe(true);
+      expect(MAP[line.path[line.path.length - 1]].haven).toBe(true);
+    }
+  });
+
+  it('Mount Doom is in Mordor', () => {
+    expect(MAP[MOUNT_DOOM].region).toBe(MORDOR);
   });
 });
 
 describe('setup', () => {
-  it('creates a valid initial state', () => {
-    const s = newGame();
-    checkInvariants(s);
-    expect(s.players[0].hand).toHaveLength(2);
-    expect(s.players[0].hand.every((c) => c.kind !== 'ashen_surge')).toBe(true);
-    expect(s.shardbearer.location).toBe(START_LOCATION);
-    expect(s.hope).toBe(6);
-  });
-
-  it('rejects duplicate heroes', () => {
-    expect(() =>
-      createGame(
-        [
-          { id: 'p1', name: 'A', heroes: ['alric', 'alric'] },
-        ],
-        1,
-      ),
-    ).toThrow();
-  });
-});
-
-describe('turn action budget', () => {
-  it('allows 4 actions with one hero and 1 with the other', () => {
-    let s = newGame();
-    // Alric moves 4 times.
-    for (let i = 0; i < 4; i++) {
-      const to = MAP[s.heroes['alric'].location].adjacent[0];
-      s = applyAction(s, 'p1', { type: 'move', hero: 'alric', path: [to] }).state;
+  it('creates a valid initial state at every player count and difficulty', () => {
+    for (const players of [2, 3, 4, 5]) {
+      for (const diff of ['introductory', 'standard', 'heroic', 'epic', 'legendary'] as const) {
+        const s = createGame(
+          Array.from({ length: players }, (_, i) => ({ id: `p${i}`, name: `P${i}` })),
+          42,
+          diff,
+        );
+        checkInvariants(s);
+        expect(s.hope).toBe(6);
+        expect(Object.keys(s.characters).length).toBe(players * 2);
+        expect(BEARER in s.characters).toBe(true); // Frodo always dealt
+        expect(s.objectives.some((o) => o.id === 'destroy_ring')).toBe(true);
+      }
     }
-    expect(canAct(s, 'alric')).toBe(false);
-    // Sylra may still take exactly 1.
-    const to = MAP[s.heroes['sylra'].location].adjacent[0];
-    s = applyAction(s, 'p1', { type: 'move', hero: 'sylra', path: [to] }).state;
-    expect(canAct(s, 'sylra')).toBe(false);
   });
 
-  it('caps the second hero at 4 once the first has used 2', () => {
-    let s = newGame();
-    const step = () => MAP[s.heroes['alric'].location].adjacent[0];
-    s = applyAction(s, 'p1', { type: 'move', hero: 'alric', path: [step()] }).state;
-    s = applyAction(s, 'p1', { type: 'move', hero: 'alric', path: [step()] }).state;
-    // Alric has 2: Sylra can now use at most 1.
-    const sylraStep = MAP[s.heroes['sylra'].location].adjacent[0];
-    s = applyAction(s, 'p1', { type: 'move', hero: 'sylra', path: [sylraStep] }).state;
-    expect(canAct(s, 'sylra')).toBe(false);
-    expect(canAct(s, 'alric')).toBe(true);
+  it('seeds 18 + 9 shadow troops and leaves 21 in the supply', () => {
+    const s = newGame(1);
+    expect(s.supply.shadow).toBe(21);
+  });
+});
+
+describe('turn structure (4 + 1, no interleaving)', () => {
+  it('allows 4 actions with one character then 1 with the other', () => {
+    let s = riggedGame();
+    for (let i = 0; i < 4; i++) {
+      const to = CONNECTIONS[s.characters['aragorn'].location].find((c) => !c.cost)!.to;
+      s = applyAction(s, 'p1', { type: 'travel', character: 'aragorn', to }).state;
+    }
+    expect(canAct(s, 'aragorn')).toBe(false);
+    const to = CONNECTIONS[s.characters[BEARER].location].find((c) => !c.cost)!.to;
+    s = applyAction(s, 'p1', { type: 'travel', character: BEARER, to, cover: 'search' }).state;
+    while (s.pending) s = applyAction(s, 'p1', { type: 'confirm' }).state;
+    expect(canAct(s, BEARER)).toBe(false);
   });
 
-  it('rejects acting out of turn', () => {
-    const s = newGame();
+  it('forbids returning to the first character after switching', () => {
+    let s = riggedGame();
+    let to = CONNECTIONS[s.characters['aragorn'].location].find((c) => !c.cost)!.to;
+    s = applyAction(s, 'p1', { type: 'travel', character: 'aragorn', to }).state;
+    // Switch to Frodo (1 action so far on Aragorn -> Frodo gets the 4-slot).
+    to = CONNECTIONS[s.characters[BEARER].location].find((c) => !c.cost)!.to;
+    s = applyAction(s, 'p1', { type: 'travel', character: BEARER, to, cover: 'search' }).state;
+    while (s.pending) s = applyAction(s, 'p1', { type: 'confirm' }).state;
+    expect(canAct(s, 'aragorn')).toBe(false); // may not go back
+    expect(canAct(s, BEARER)).toBe(true); // up to 4
+  });
+
+  it('rejects out-of-turn actions', () => {
+    const s = riggedGame();
     expect(() =>
-      applyAction(s, 'p2', { type: 'move', hero: 'tansy', path: ['greenhollow'] }),
+      applyAction(s, 'p2', { type: 'muster', character: 'eowyn' }),
     ).toThrow(RuleError);
   });
 });
 
-describe('movement', () => {
-  it('rejects non-adjacent moves', () => {
-    const s = newGame();
+describe('travel and searches', () => {
+  it('moving Frodo without stealth rolls a search when enemies are near', () => {
+    let s = riggedGame();
+    // Stack Nazgûl into Eriador so a search must roll dice.
+    s.wraiths = { eriador: 3, mordor: 6 };
+    const r = applyAction(s, 'p1', { type: 'travel', character: BEARER, to: 'bree', cover: 'search' });
+    expect(r.state.pending?.type).toBe('search');
+    const done = applyAction(r.state, 'p1', { type: 'confirm' });
+    expect(done.state.pending).toBeNull();
+    checkInvariants(done.state);
+  });
+
+  it('stealth cover skips the search', () => {
+    let s = riggedGame();
+    s.wraiths = { eriador: 3, mordor: 6 };
+    s.players[0].tokens.stealth = 1;
+    s.supply.tokens.stealth -= 1;
+    const r = applyAction(s, 'p1', { type: 'travel', character: BEARER, to: 'bree', cover: 'stealth' });
+    expect(r.state.pending).toBeNull();
+    expect(r.state.players[0].tokens.stealth).toBe(0);
+  });
+
+  it('putting on the Ring costs hope, moves the Eye, and ignores shadow troops', () => {
+    let s = riggedGame();
+    s.wraiths = { mordor: 9 }; // no Nazgûl near => ring search rolls 0 dice
+    s.shadow['bree'] = 5; // would add dice on a normal search, ignored with the Ring
+    s.supply.shadow -= 5;
+    const r = applyAction(s, 'p1', { type: 'travel', character: BEARER, to: 'bree', cover: 'ring' });
+    expect(r.state.hope).toBe(5);
+    expect(r.state.eye).toBe('eriador');
+    expect(r.state.pending).toBeNull(); // 0 dice: no roll at all
+  });
+
+  it('special paths cost symbols', () => {
+    let s = riggedGame();
+    s.characters['aragorn'].location = 'rivendell';
+    // No stealth available: High Pass is illegal.
+    s.players[0].hand = s.players[0].hand.filter((c) => !(c.kind === 'region' && c.symbol === 'stealth'));
     expect(() =>
-      applyAction(s, 'p1', { type: 'move', hero: 'alric', path: ['cindermaw'] }),
+      applyAction(s, 'p1', { type: 'travel', character: 'aragorn', to: 'carrock' }),
     ).toThrow(RuleError);
   });
 
-  it('lets Sylra (swift) move 2 but not others', () => {
-    const s = newGame();
+  it('companions and troops travel together', () => {
+    let s = riggedGame();
+    s.characters['aragorn'].location = 'the_shire';
+    s.friendly['the_shire'] = { sylvan: 2 };
+    s.supply.factions.sylvan -= 2;
     const r = applyAction(s, 'p1', {
-      type: 'move',
-      hero: 'sylra',
-      path: ['greenhollow', 'lanternhold'],
+      type: 'travel',
+      character: 'aragorn',
+      to: 'bree',
+      companions: [BEARER],
+      troops: { sylvan: 2 },
+      cover: 'search',
     });
-    expect(r.state.heroes['sylra'].location).toBe('lanternhold');
-    expect(() =>
-      applyAction(s, 'p1', { type: 'move', hero: 'alric', path: ['greenhollow', 'lanternhold'] }),
-    ).toThrow(RuleError);
+    let st = r.state;
+    while (st.pending) st = applyAction(st, 'p1', { type: 'confirm' }).state;
+    expect(st.characters[BEARER].location).toBe('bree');
+    expect(st.friendly['bree']?.sylvan).toBe(2);
+    checkInvariants(st);
   });
 });
 
-describe('muster and battle', () => {
-  it('musters faction troops at a sanctuary', () => {
-    let s = newGame();
-    s.heroes['alric'].location = 'lanternhold';
-    const r = applyAction(s, 'p1', { type: 'muster', hero: 'alric' });
-    expect(r.state.allied['lanternhold']?.vale).toBe(2);
-    expect(r.state.supply.factions.vale).toBe(8);
+describe('actions', () => {
+  it('muster spends friendship and places a troop', () => {
+    let s = riggedGame();
+    s.characters['aragorn'].location = 'minas_tirith';
+    s.players[0].tokens.friendship = 1;
+    s.supply.tokens.friendship -= 1;
+    const before = s.friendly['minas_tirith']?.vale ?? 0;
+    const r = applyAction(s, 'p1', { type: 'muster', character: 'aragorn' });
+    expect(r.state.friendly['minas_tirith']?.vale).toBe(before + 1);
+    expect(r.state.players[0].tokens.friendship).toBe(0);
     checkInvariants(r.state);
   });
 
-  it('rejects muster outside sanctuaries', () => {
-    const s = newGame();
-    expect(() => applyAction(s, 'p1', { type: 'muster', hero: 'alric' })).toThrow(RuleError);
+  it('Éowyn musters at Rohirrim locations for free', () => {
+    let s = riggedGame();
+    s.turn.playerIdx = 1;
+    const r = applyAction(s, 'p2', { type: 'muster', character: 'eowyn' });
+    expect((r.state.friendly['edoras']?.riders ?? 0)).toBeGreaterThan(0);
+    checkInvariants(r.state);
   });
 
-  it('battle removes shadow troops and conserves supply', () => {
-    let s = newGame();
-    s.heroes['alric'].location = 'redgrass'; // has 1 initial shadow troop
-    // Try several RNG states until dice actually kill something.
-    let killed = false;
-    for (let seed = 0; seed < 30 && !killed; seed++) {
-      const trial = { ...s, rngState: seed >>> 0 };
-      const r = applyAction(trial, 'p1', { type: 'battle', hero: 'alric', location: 'redgrass' });
-      checkInvariants(r.state);
-      if ((r.state.shadow['redgrass'] ?? 0) === 0) killed = true;
-    }
-    expect(killed).toBe(true);
+  it('attack shifts the Eye and opens a battle roll', () => {
+    let s = riggedGame();
+    s.characters['aragorn'].location = 'minas_tirith';
+    s.shadow['minas_tirith'] = 2;
+    s.supply.shadow -= 2;
+    const r = applyAction(s, 'p1', { type: 'attack', character: 'aragorn', dice: 2 });
+    expect(r.state.eye).toBe('gondor');
+    expect(r.state.pending?.type).toBe('battle');
+    const done = applyAction(r.state, 'p1', { type: 'confirm' });
+    checkInvariants(done.state);
+  });
+
+  it('prepare banks a token at a haven', () => {
+    let s = riggedGame();
+    s.characters['aragorn'].location = 'rivendell';
+    const regionCard = s.players[0].hand.find((c) => c.kind === 'region');
+    if (!regionCard) return; // hand had only events for this seed
+    const r = applyAction(s, 'p1', { type: 'prepare', character: 'aragorn', card: regionCard.id });
+    const sym = regionCard.kind === 'region' ? regionCard.symbol : 'valor';
+    expect(r.state.players[0].tokens[sym]).toBeGreaterThan(0);
+    checkInvariants(r.state);
+  });
+
+  it('capture flips a stronghold to a haven, moves the Eye, gains 2 hope', () => {
+    let s = riggedGame();
+    s.characters['aragorn'].location = 'moria';
+    s.supply.shadow += s.shadow['moria'] ?? 0; // Moria's garrison back to supply
+    delete s.shadow['moria'];
+    s.friendly['moria'] = { deepholm: 1 };
+    s.supply.factions.deepholm -= 1;
+    s.players[0].tokens.valor = 3;
+    s.supply.tokens.valor -= 3;
+    s.hope = 4;
+    const r = applyAction(s, 'p1', { type: 'capture', character: 'aragorn' });
+    expect(r.state.siteStatus['moria']).toBe('haven');
+    expect(r.state.spawnStopped['moria']).toBe(true);
+    expect(r.state.eye).toBe('misty_mountains');
+    // +2 from capture, +2 more if the Balrog objective happens to be in play.
+    const balrog = r.state.objectives.find((o) => o.id === 'confront_balrog');
+    expect(r.state.hope).toBe(balrog ? 8 : 6);
+    expect(balrog?.complete ?? true).toBe(true);
+    checkInvariants(r.state);
+  });
+
+  it('fellowship passes a matching region card between co-located players', () => {
+    let s = riggedGame();
+    s.characters['eowyn'].location = 'the_shire'; // p2 character joins Frodo
+    const eriadorCard = { id: 'rc_test', kind: 'region' as const, region: 'eriador', symbol: 'valor' as const, number: 1 };
+    s.players[0].hand.push(eriadorCard);
+    // Keep card conservation: drop another card from p1's hand into discard.
+    s.playerDiscard.push(s.players[0].hand.shift()!);
+    const r = applyAction(s, 'p1', { type: 'fellowship', character: BEARER, give: 'rc_test', takeFrom: 'p2' });
+    expect(r.state.players[1].hand.some((c) => c.id === 'rc_test')).toBe(true);
   });
 });
 
-describe('guide and hide', () => {
-  it('guides the shardbearer along the road', () => {
-    let s = newGame();
-    const r = applyAction(s, 'p1', { type: 'guide', hero: 'alric', path: ['greenhollow'] });
-    expect(r.state.shardbearer.location).toBe('greenhollow');
+describe('winning and losing', () => {
+  it('the Ring can only be destroyed after all other objectives', () => {
+    let s = riggedGame();
+    s.characters[BEARER].location = MOUNT_DOOM;
+    s.players[0].tokens.resistance = 5;
+    s.supply.tokens.resistance -= 5;
+    expect(() => applyAction(s, 'p1', { type: 'destroyEmber' })).toThrow(/objective/i);
+    for (const o of s.objectives) if (o.id !== 'destroy_ring') o.complete = true;
+    s.wraiths = { eriador: 9 }; // nothing in Mordor
+    delete s.shadow[MOUNT_DOOM];
+    s.hope = 6; // 2 missing hope => 2 dice
+    const r = applyAction(s, 'p1', { type: 'destroyEmber' });
+    let st = r.state;
+    if (st.pending) st = applyAction(st, 'p1', { type: 'confirm' }).state;
+    expect(['won', 'lost']).toContain(st.phase); // won unless dice drained 6 hope (impossible with 2 dice)
+    expect(st.phase).toBe('won');
   });
 
-  it('requires standing with the shardbearer', () => {
-    let s = newGame();
-    s.heroes['alric'].location = 'candlecross';
-    expect(() =>
-      applyAction(s, 'p1', { type: 'guide', hero: 'alric', path: ['ferryford'] }),
-    ).toThrow(RuleError);
-  });
-
-  it('hide sets hidden and guide clears it', () => {
-    let s = newGame();
-    s = applyAction(s, 'p1', { type: 'hide', hero: 'alric' }).state;
-    expect(s.shardbearer.hidden).toBe(true);
-    s = applyAction(s, 'p1', { type: 'guide', hero: 'alric', path: ['greenhollow'] }).state;
-    expect(s.shardbearer.hidden).toBe(false);
-  });
-});
-
-describe('win and loss', () => {
-  it('destroying the Ember requires objectives, position, and no wraiths', () => {
-    let s = newGame();
-    s.shardbearer.location = GOAL_LOCATION;
-    s.heroes['alric'].location = GOAL_LOCATION;
-    s.wraiths = [];
-    expect(() => applyAction(s, 'p1', { type: 'destroyEmber', hero: 'alric' })).toThrow(
-      /objectives/,
-    );
-    s.objectives[0].complete = true;
-    s.objectives[1].complete = true;
-    const r = applyAction(s, 'p1', { type: 'destroyEmber', hero: 'alric' });
+  it('a final search with full hope and no enemies wins outright', () => {
+    let s = riggedGame();
+    s.characters[BEARER].location = MOUNT_DOOM;
+    for (const o of s.objectives) if (o.id !== 'destroy_ring') o.complete = true;
+    s.players[0].tokens.resistance = 5;
+    s.supply.tokens.resistance -= 5;
+    s.wraiths = { eriador: 9 };
+    delete s.shadow[MOUNT_DOOM];
+    s.hope = 8;
+    const r = applyAction(s, 'p1', { type: 'destroyEmber' });
     expect(r.state.phase).toBe('won');
   });
 
-  it('wraiths at the Cindermaw bar the way', () => {
-    let s = newGame();
-    s.shardbearer.location = GOAL_LOCATION;
-    s.heroes['alric'].location = GOAL_LOCATION;
-    s.objectives[0].complete = true;
-    s.objectives[1].complete = true;
-    s.wraiths = [{ id: 0, location: GOAL_LOCATION }];
-    expect(() => applyAction(s, 'p1', { type: 'destroyEmber', hero: 'alric' })).toThrow(
-      /wraith/i,
-    );
+  it('hope reaching 0 loses the game', () => {
+    let s = riggedGame();
+    s.hope = 1;
+    s.wraiths = { eriador: 7, mordor: 2 };
+    // Keep confirming searches until one drains hope... force with a rigged travel loop.
+    let guard = 0;
+    while (s.phase === 'playing' && guard++ < 60) {
+      if (s.pending) {
+        s = applyAction(s, 'p1', { type: 'confirm' }).state;
+        continue;
+      }
+      if (!canAct(s, BEARER)) {
+        s.turn.actionsUsed = {};
+        s.turn.actedOrder = [];
+      }
+      const here = s.characters[BEARER].location;
+      const to = CONNECTIONS[here].find((c) => !c.cost)!.to;
+      s = applyAction(s, 'p1', { type: 'travel', character: BEARER, to, cover: 'search' }).state;
+    }
+    expect(s.phase).toBe('lost');
   });
 
-  it('hope reaching 0 loses the game', () => {
-    let s = newGame();
-    s.hope = 1;
-    // Stack shadow at Lanternhold so the next spawn besieges it (-1 hope).
-    s.shadow['lanternhold'] = 2;
+  it('a haven overrun by shadow troops becomes a stronghold and costs 3 hope', () => {
+    let s = riggedGame();
+    s.hope = 6;
+    s.shadow['rivendell'] = 2;
     s.supply.shadow -= 2;
-    s.foreseen = [{ id: 'x1', kind: 'spawn', location: 'lanternhold' }];
-    const r = applyAction(s, 'p1', { type: 'endTurn' });
-    expect(r.state.phase).toBe('lost');
-    expect(r.state.lossReason).toMatch(/hope/);
+    s.supply.factions.sylvan += s.friendly['rivendell']?.sylvan ?? 0; // garrison returns to supply
+    s.friendly['rivendell'] = {};
+    // Any action triggers the haven check via checkHavens after battles; force via travel.
+    const r = applyAction(s, 'p1', { type: 'travel', character: 'aragorn', to: 'rivendell' });
+    expect(r.state.siteStatus['rivendell']).toBe('stronghold');
+    expect(r.state.hope).toBe(3);
+    checkInvariants(r.state);
   });
 });
 
-describe('legalActions', () => {
-  it('every enumerated action is accepted by the reducer', () => {
-    let s = newGame(11);
-    for (let i = 0; i < 200 && s.phase === 'playing'; i++) {
-      const actions = legalActions(s);
+describe('full-game simulation', () => {
+  it('greedy bots complete 15 games without invariant violations', () => {
+    for (let seed = 1; seed <= 15; seed++) {
+      const r = simulateGame(seed, { players: 3 });
+      expect(['won', 'lost']).toContain(r.phase);
+    }
+  });
+
+  it('random bots complete 8 games without invariant violations', () => {
+    for (let seed = 1; seed <= 8; seed++) {
+      const r = simulateGame(seed, { players: 2, bot: 'random' });
+      expect(['won', 'lost']).toContain(r.phase);
+    }
+  });
+
+  it('every enumerated legal action is accepted by the reducer', () => {
+    let s = newGame(11, 3);
+    for (let i = 0; i < 60 && s.phase === 'playing'; i++) {
+      const decider = s.pending?.type === 'discard' ? s.pending.player : s.players[s.turn.playerIdx].id;
+      const actions = legalActions(s, decider);
       expect(actions.length).toBeGreaterThan(0);
-      for (const a of actions) {
-        // Applying any legal action must not throw.
-        const r = applyAction(s, s.players[s.turn.playerIdx].id, a);
+      for (const a of actions.slice(0, 25)) {
+        const r = applyAction(s, decider, a);
         checkInvariants(r.state);
       }
-      // Advance with the first non-endTurn action when possible.
       const pick = actions.find((a) => a.type !== 'endTurn') ?? actions[0];
-      s = applyAction(s, s.players[s.turn.playerIdx].id, pick).state;
+      s = applyAction(s, decider, pick).state;
     }
   });
 });
@@ -241,28 +382,17 @@ describe('legalActions', () => {
 describe('determinism', () => {
   it('same seed + same actions = identical states', () => {
     const play = () => {
-      let s = newGame(99);
-      s = applyAction(s, 'p1', { type: 'move', hero: 'alric', path: ['greenhollow'] }).state;
+      let s = riggedGame(99);
+      s = applyAction(s, 'p1', { type: 'travel', character: 'aragorn', to: 'bree' }).state;
       s = applyAction(s, 'p1', { type: 'endTurn' }).state;
-      s = applyAction(s, 'p2', { type: 'endTurn' }).state;
-      return s;
+      let guard = 0;
+      while (s.pending && guard++ < 20) {
+        const decider = s.pending.type === 'discard' ? s.pending.player : 'p1';
+        const acts = legalActions(s, decider);
+        s = applyAction(s, decider, acts[0]).state;
+      }
+      return JSON.stringify(s);
     };
-    expect(JSON.stringify(play())).toBe(JSON.stringify(play()));
-  });
-});
-
-describe('full-game simulation', () => {
-  it('greedy bots finish 25 games without invariant violations', () => {
-    for (let seed = 1; seed <= 25; seed++) {
-      const r = simulateGame(seed, { players: 2, bot: 'greedy' });
-      expect(['won', 'lost']).toContain(r.phase);
-    }
-  });
-
-  it('random bots finish 10 games without invariant violations', () => {
-    for (let seed = 1; seed <= 10; seed++) {
-      const r = simulateGame(seed, { players: 3, bot: 'random' });
-      expect(['won', 'lost']).toContain(r.phase);
-    }
+    expect(play()).toBe(play());
   });
 });

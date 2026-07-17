@@ -1,180 +1,213 @@
 /**
- * Headless simulation harness. Plays full games with a simple heuristic bot
- * (or pure random), validating state invariants after every action. Use it to
- * shake out rules bugs and to eyeball balance:
- *
- *   npm run build -w @emberfall/engine && node packages/engine/dist/cli.js 500
+ * Headless simulation harness for the faithful ruleset. Bots play full games
+ * while conservation/bounds invariants are checked after every action.
+ * This is a CORRECTNESS tool, not a balance dial — the rules are the spec.
  */
-import { FACTION_SUPPLY, playerDeckSize, SHADOW_SUPPLY } from './data/constants.js';
-import { GOAL_LOCATION, LOCATIONS, MAP, distance } from './data/map.js';
-import { HEROES } from './data/heroes.js';
+import {
+  buildDarkenCards,
+  buildEventCards,
+  buildRegionCards,
+  DIFFICULTY_TABLE,
+  FACTION_TOTALS,
+  HOPE_MAX,
+  NAZGUL_TOTAL,
+  SETUP_BY_PLAYERS,
+  SHADOW_TROOPS_TOTAL,
+  TOKENS_PER_SYMBOL,
+} from './data/cards.js';
+import { CONNECTIONS, MAP, MOUNT_DOOM, REGION_MAP } from './data/board.js';
+import { BEARER } from './data/characters.js';
 import { legalActions } from './legal.js';
 import { makeRng, nextInt, type Rng } from './rng.js';
 import { applyAction } from './rules.js';
-import { createGame, type SetupPlayer } from './setup.js';
-import type { Action, Faction, GameState } from './types.js';
+import { createGame } from './setup.js';
+import type { Action, Difficulty, Faction, GameState, SymbolKind } from './types.js';
 
-/** Throws if the state violates a conservation or bounds invariant. */
 export function checkInvariants(s: GameState): void {
   const fail = (msg: string) => {
-    throw new Error(`INVARIANT VIOLATED: ${msg}\n${JSON.stringify(s, null, 1).slice(0, 2000)}`);
+    throw new Error(`INVARIANT VIOLATED: ${msg}`);
   };
 
   // Shadow troop conservation
-  const onBoard = Object.values(s.shadow).reduce((a, b) => a + b, 0);
-  if (onBoard + s.supply.shadow !== SHADOW_SUPPLY) {
-    fail(`shadow conservation: board ${onBoard} + supply ${s.supply.shadow} != ${SHADOW_SUPPLY}`);
+  const shadowOnBoard = Object.values(s.shadow).reduce((a, b) => a + b, 0);
+  if (shadowOnBoard + s.supply.shadow !== SHADOW_TROOPS_TOTAL) {
+    fail(`shadow troops: ${shadowOnBoard} on board + ${s.supply.shadow} supply != ${SHADOW_TROOPS_TOTAL}`);
   }
   for (const [loc, n] of Object.entries(s.shadow)) {
     if (!MAP[loc]) fail(`shadow at unknown location ${loc}`);
     if (n < 0) fail(`negative shadow at ${loc}`);
   }
 
-  // Allied troop conservation per faction
+  // Friendly troop conservation per faction
   const totals: Record<Faction, number> = { vale: 0, riders: 0, sylvan: 0, deepholm: 0 };
-  for (const [loc, byFaction] of Object.entries(s.allied)) {
-    if (!MAP[loc]) fail(`allied troops at unknown location ${loc}`);
+  for (const [loc, byFaction] of Object.entries(s.friendly)) {
+    if (!MAP[loc]) fail(`friendly troops at unknown location ${loc}`);
     for (const [f, n] of Object.entries(byFaction)) {
-      if ((n ?? 0) < 0) fail(`negative allied ${f} at ${loc}`);
+      if ((n ?? 0) < 0) fail(`negative ${f} at ${loc}`);
       totals[f as Faction] += n ?? 0;
     }
   }
   for (const f of Object.keys(totals) as Faction[]) {
-    if (totals[f] + s.supply.factions[f] !== FACTION_SUPPLY[f]) {
-      fail(`${f} conservation: board ${totals[f]} + supply ${s.supply.factions[f]} != ${FACTION_SUPPLY[f]}`);
+    if (totals[f] + s.supply.factions[f] !== FACTION_TOTALS[f]) {
+      fail(`${f}: ${totals[f]} + ${s.supply.factions[f]} != ${FACTION_TOTALS[f]}`);
     }
   }
 
-  // Bounds
-  if (s.hope < 0 || s.hope > 8) fail(`hope out of range: ${s.hope}`);
-  if (s.shardbearer.corruption < 0 || s.shardbearer.corruption > 8) {
-    fail(`corruption out of range: ${s.shardbearer.corruption}`);
-  }
-  if (!MAP[s.shardbearer.location]) fail(`shardbearer at unknown location`);
-  for (const w of s.wraiths) {
-    if (!MAP[w.location]) fail(`wraith at unknown location ${w.location}`);
-  }
-  for (const h of Object.values(s.heroes)) {
-    if (!MAP[h.location]) fail(`hero ${h.id} at unknown location`);
+  // Nazgûl conservation
+  const nazgul = Object.entries(s.wraiths).reduce((a, [r, n]) => {
+    if (!REGION_MAP[r]) fail(`Nazgûl in unknown region ${r}`);
+    if (n < 0) fail(`negative Nazgûl in ${r}`);
+    return a + n;
+  }, 0);
+  if (nazgul !== NAZGUL_TOTAL) fail(`Nazgûl count ${nazgul} != ${NAZGUL_TOTAL}`);
+
+  // Symbol token conservation
+  for (const sym of ['friendship', 'valor', 'stealth', 'resistance'] as SymbolKind[]) {
+    const held = s.players.reduce((a, p) => a + p.tokens[sym], 0);
+    if (held + s.supply.tokens[sym] !== TOKENS_PER_SYMBOL) {
+      fail(`${sym} tokens: ${held} + ${s.supply.tokens[sym]} != ${TOKENS_PER_SYMBOL}`);
+    }
+    if (s.supply.tokens[sym] < 0) fail(`negative ${sym} token supply`);
   }
 
-  // Card conservation (expected totals derived from the same data as setup)
-  const expectedPlayerCards = playerDeckSize(s.players.length);
-  const cardCount =
+  // Player card conservation
+  const regionAndEvents = 48 + SETUP_BY_PLAYERS[s.players.length].events;
+  const darken = DIFFICULTY_TABLE[s.difficulty].darken;
+  const total =
     s.playerDeck.length +
     s.playerDiscard.length +
+    s.removedCards.length +
     s.players.reduce((a, p) => a + p.hand.length, 0);
-  if (cardCount !== expectedPlayerCards) {
-    fail(`player card conservation: ${cardCount} != ${expectedPlayerCards}`);
-  }
-  const expectedShadowCards =
-    LOCATIONS.filter((l) => l.id !== GOAL_LOCATION).length +
-    LOCATIONS.filter((l) => l.stronghold).length +
-    4; // hunt cards
-  const shadowCards = s.shadowDeck.length + s.shadowDiscard.length + s.foreseen.length;
-  if (shadowCards !== expectedShadowCards) {
-    fail(`shadow card conservation: ${shadowCards} != ${expectedShadowCards}`);
+  if (total !== regionAndEvents + darken) {
+    fail(`player cards: ${total} != ${regionAndEvents + darken}`);
   }
 
-  // Turn accounting
-  const p = s.players[s.turn.playerIdx];
-  const used = p.heroes.map((h) => s.turn.actionsUsed[h] ?? 0);
-  if (Math.max(...used) > 4 || Math.min(...used) > 1) {
-    fail(`action budget exceeded: ${JSON.stringify(s.turn.actionsUsed)}`);
+  // Shadow card conservation (48 + 2 specials)
+  const shadowCards = s.shadowDeck.length + s.shadowDiscard.length;
+  if (shadowCards !== 50) fail(`shadow cards: ${shadowCards} != 50`);
+
+  // Bounds
+  if (s.hope < 0 || s.hope > HOPE_MAX) fail(`hope out of range: ${s.hope}`);
+  for (const c of Object.keys(s.characters)) {
+    if (!MAP[s.characters[c].location]) fail(`character ${c} at unknown location`);
   }
+  if (!REGION_MAP[s.eye]) fail(`Eye in unknown region ${s.eye}`);
 }
 
 export type BotKind = 'random' | 'greedy';
 
 /**
- * Greedy bot: pushes the shardbearer toward the Cindermaw, keeps him hidden
- * when wraiths close in, battles nearby shadow, musters at sanctuaries,
- * plays hope/utility cards. Not smart — just smart enough to finish games
- * and exercise most of the rules.
+ * A crude but rule-exercising bot: escorts Frodo toward Mount Doom, prepares
+ * tokens, musters, attacks, captures, and confirms rolls. Its purpose is
+ * coverage, not skill.
  */
-function pickGreedy(s: GameState, actions: Action[], rng: Rng): Action {
-  const score = (a: Action): number => {
-    switch (a.type) {
-      case 'destroyEmber':
-        return 1000;
-      case 'guide': {
-        const to = a.path[a.path.length - 1];
-        const closer =
-          distance(to, GOAL_LOCATION) < distance(s.shardbearer.location, GOAL_LOCATION);
-        return closer ? 90 : 5;
-      }
-      case 'hide': {
-        const danger = s.wraiths.some(
-          (w) =>
-            w.location === s.shardbearer.location ||
-            MAP[w.location].adjacent.includes(s.shardbearer.location),
-        );
-        return danger ? 95 : 2;
-      }
-      case 'battle': {
-        const n = s.shadow[a.location] ?? 0;
-        const sanctuaryBonus = s.sanctuaries[a.location] ? 30 : 0;
-        return 40 + n * 5 + sanctuaryBonus;
-      }
-      case 'muster':
-        return 45;
-      case 'kindle':
-        return 60;
-      case 'move': {
-        const to = a.path[a.path.length - 1];
-        // Head toward the shardbearer or toward shadow concentrations.
-        const towardBearer =
-          distance(to, s.shardbearer.location) <
-          distance(s.heroes[a.hero].location, s.shardbearer.location);
-        const towardShadow = (s.shadow[to] ?? 0) > 0;
-        return 20 + (towardBearer ? 15 : 0) + (towardShadow ? 10 : 0);
-      }
-      case 'playCard': {
-        const card = s.players[s.turn.playerIdx].hand.find((c) => c.id === a.card)!;
-        switch (card.kind) {
-          case 'hearthsong':
-            return s.hope <= 5 ? 70 : 10;
-          case 'lantern_oil':
-            if (a.cleanse) return s.shardbearer.corruption >= 4 ? 80 : 20;
-            return s.hope <= 5 ? 65 : 8;
-          case 'ambush':
-            return 55;
-          case 'rally_banner':
-            return 35;
-          case 'fernpath': {
-            if (a.hide) return 30;
-            const to = a.path![0];
-            return distance(to, GOAL_LOCATION) <
-              distance(s.shardbearer.location, GOAL_LOCATION)
-              ? 50
-              : 3;
-          }
-          case 'swift_march':
-            return 12;
-          case 'farsight':
-            return 15;
-          default:
-            return 0;
-        }
-      }
-      case 'endTurn':
-        return 1;
-      default:
-        return 0;
+function scoreAction(s: GameState, a: Action): number {
+  const frodoLoc = s.characters[BEARER]?.location;
+  const frodoRegion = frodoLoc ? MAP[frodoLoc].region : null;
+  switch (a.type) {
+    case 'destroyEmber':
+      return 10000;
+    case 'confirm':
+      return 40;
+    case 'reroll': {
+      // Reroll harmful dice when we can afford it.
+      const pend = s.pending;
+      if (!pend || pend.type === 'discard') return 0;
+      const face = pend.dice[a.die];
+      const harmful =
+        pend.type === 'search' ? face === 'weary' || face === 'exposed' : face === 'wraith' || face === 'overrun';
+      return harmful ? 55 : 1;
     }
-  };
-  let best: Action[] = [];
-  let bestScore = -Infinity;
-  for (const a of actions) {
-    const sc = score(a) + nextInt(rng, 5); // jitter breaks ties & adds variety
-    if (sc > bestScore) {
-      bestScore = sc;
-      best = [a];
-    } else if (sc === bestScore) {
-      best.push(a);
+    case 'showValor':
+      return 45;
+    case 'discard':
+      return 100;
+    case 'travel': {
+      const bearerMove = a.character === BEARER || (a.companions ?? []).includes(BEARER);
+      if (bearerMove) {
+        // Two-phase play: while objectives remain, Frodo shelters in a safe
+        // haven; once the road is the only task left, he runs for Mordor.
+        const questReady = s.objectives.filter((o) => !o.complete && o.id !== 'destroy_ring').length === 0;
+        const progressBase = questReady ? 60 : 12;
+        const progress =
+          distanceToDoom(a.to) < distanceToDoom(s.characters[a.character].location) ? progressBase : 2;
+        const shelter =
+          !questReady && s.siteStatus[a.to] === 'haven' && (s.wraiths[MAP[a.to].region] ?? 0) === 0
+            ? 34
+            : 0;
+        // Danger at the destination: Nazgûl in its region + shadow troops there.
+        const danger = (s.wraiths[MAP[a.to].region] ?? 0) + Math.min(3, s.shadow[a.to] ?? 0);
+        const desperate = s.hope <= 2 ? 25 : 0;
+        if (a.cover === 'stealth') return Math.max(progress, shelter) + 15;
+        if (a.cover === 'ring') return Math.max(progress, shelter) - danger * 25 - 20 - desperate;
+        return Math.max(progress, shelter) - danger * 40 - desperate;
+      }
+      const towardFrodo =
+        frodoLoc &&
+        distTo(a.to, frodoLoc) < distTo(s.characters[a.character].location, frodoLoc)
+          ? 18
+          : 4;
+      return towardFrodo + (a.troops ? 3 : 0);
+    }
+    case 'prepare': {
+      const card = s.players.flatMap((p) => p.hand).find((c) => c.id === a.card);
+      const sym = card && card.kind === 'region' ? card.symbol : undefined;
+      return sym === 'stealth' || sym === 'resistance' ? 38 : sym === 'valor' ? 34 : 26;
+    }
+    case 'muster': {
+      const loc = s.characters[a.character]?.location;
+      if (!loc) return 24;
+      // Garrisoning a haven is the core defensive play: garrisons fight the
+      // battles that recycle shadow troops and keep the haven standing.
+      const isHavenHere = s.siteStatus[loc] === 'haven' ? 12 : 0;
+      const own = Object.values(s.friendly[loc] ?? {}).reduce((x, y) => x + (y ?? 0), 0);
+      return 24 + isHavenHere + (own < 3 ? 6 : 0);
+    }
+    case 'attack': {
+      const loc = s.characters[a.character]?.location;
+      const region = loc ? MAP[loc].region : null;
+      // Never drag the Eye onto Frodo; prize dragging it away from him.
+      if (region && region === frodoRegion) return -50;
+      const eyeOnFrodo = frodoRegion && s.eye === frodoRegion ? 18 : 0;
+      const clearingStronghold = loc && s.siteStatus[loc] === 'stronghold' ? 16 : 0;
+      return 32 + eyeOnFrodo + clearingStronghold;
+    }
+    case 'capture':
+      return 90;
+    case 'fellowship':
+      return 8;
+    case 'ability':
+      return s.hope <= 5 ? 45 : 20;
+    case 'playEvent':
+      return 15;
+    case 'endTurn':
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+const doomCache = new Map<string, number>();
+function distTo(a: string, b: string): number {
+  const key = `${a}|${b}`;
+  if (doomCache.has(key)) return doomCache.get(key)!;
+  // BFS over CONNECTIONS ignoring costs.
+  const dist: Record<string, number> = { [a]: 0 };
+  const q = [a];
+  while (q.length) {
+    const cur = q.shift()!;
+    for (const c of CONNECTIONS[cur]) {
+      if (!(c.to in dist)) {
+        dist[c.to] = dist[cur] + 1;
+        q.push(c.to);
+      }
     }
   }
-  return best[nextInt(rng, best.length)];
+  for (const [loc, d] of Object.entries(dist)) doomCache.set(`${a}|${loc}`, d);
+  return dist[b] ?? 99;
+}
+function distanceToDoom(loc: string): number {
+  return distTo(loc, MOUNT_DOOM);
 }
 
 export interface SimResult {
@@ -184,51 +217,69 @@ export interface SimResult {
   turns: number;
   actionsTaken: number;
   finalHope: number;
-  finalCorruption: number;
   objectivesComplete: number;
+  havensLost: number;
 }
 
 export function simulateGame(
   seed: number,
-  opts: { players?: number; bot?: BotKind; maxActions?: number; trace?: boolean } = {},
+  opts: { players?: number; bot?: BotKind; difficulty?: Difficulty; maxActions?: number; trace?: boolean } = {},
 ): SimResult {
-  const nPlayers = opts.players ?? 2;
+  const nPlayers = opts.players ?? 3;
   const bot = opts.bot ?? 'greedy';
-  const maxActions = opts.maxActions ?? 5000;
+  const maxActions = opts.maxActions ?? 20000;
+  const difficulty = opts.difficulty ?? 'introductory';
 
-  const setup: SetupPlayer[] = [];
-  for (let i = 0; i < nPlayers; i++) {
-    setup.push({
-      id: `bot${i}`,
-      name: `Bot ${i + 1}`,
-      heroes: [HEROES[i * 2].id, HEROES[i * 2 + 1].id],
-    });
-  }
-  let state = createGame(setup, seed);
+  const setup = Array.from({ length: nPlayers }, (_, i) => ({
+    id: `bot${i}`,
+    name: `Bot ${i + 1}`,
+  }));
+  let state = createGame(setup, seed, difficulty);
   checkInvariants(state);
 
-  const rng = makeRng(seed ^ 0x9e3779b9);
+  const rng = makeRng(seed ^ 0x51ed270b);
   let actionsTaken = 0;
 
   while (state.phase === 'playing' && actionsTaken < maxActions) {
-    const actions = legalActions(state);
-    if (actions.length === 0) throw new Error('No legal actions — engine bug.');
-    const choice =
-      bot === 'random'
-        ? actions[nextInt(rng, actions.length)]
-        : pickGreedy(state, actions, rng);
-    const result = applyAction(state, state.players[state.turn.playerIdx].id, choice);
-    state = result.state;
-    actionsTaken++;
-    if (opts.trace) {
-      for (const e of result.events) console.log(`  ${e.text}`);
+    // Whose decision is it? Pending discard belongs to that player; everything
+    // else is driven by the active player for bot purposes.
+    const decider =
+      state.pending?.type === 'discard'
+        ? state.pending.player
+        : state.players[state.turn.playerIdx].id;
+    const actions = legalActions(state, decider);
+    if (actions.length === 0) {
+      throw new Error(`No legal actions for ${decider} (pending=${JSON.stringify(state.pending)})`);
     }
+    let choice: Action;
+    if (bot === 'random') {
+      choice = actions[nextInt(rng, actions.length)];
+    } else {
+      let best = actions[0];
+      let bestScore = -Infinity;
+      for (const a of actions) {
+        const sc = scoreAction(state, a) + nextInt(rng, 4);
+        if (sc > bestScore) {
+          bestScore = sc;
+          best = a;
+        }
+      }
+      choice = best;
+    }
+    const result = applyAction(state, decider, choice);
+    state = result.state;
+    if (opts.trace) for (const e of result.events) console.log(`  ${e.text}`);
+    actionsTaken++;
     checkInvariants(state);
   }
 
   if (state.phase === 'playing') {
     throw new Error(`Game did not terminate in ${maxActions} actions (seed ${seed}).`);
   }
+
+  const havensLost = Object.entries(state.siteStatus).filter(
+    ([loc, st]) => st === 'stronghold' && MAP[loc].haven,
+  ).length;
 
   return {
     seed,
@@ -237,7 +288,7 @@ export function simulateGame(
     turns: state.turnNumber,
     actionsTaken,
     finalHope: state.hope,
-    finalCorruption: state.shardbearer.corruption,
     objectivesComplete: state.objectives.filter((o) => o.complete).length,
+    havensLost,
   };
 }
