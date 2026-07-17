@@ -379,6 +379,61 @@ describe('full-game simulation', () => {
   });
 });
 
+describe('solo variant', () => {
+  it('deals Frodo & Sam plus 4 characters to one player with a rotating token', () => {
+    const s = createGame([{ id: 'solo', name: 'Solo' }], 5);
+    checkInvariants(s);
+    expect(s.players[0].characters).toHaveLength(5);
+    expect(s.players[0].characters[0]).toBe('frodo_sam');
+    expect(s.solo?.order).toHaveLength(4);
+    expect(s.solo?.order).not.toContain('frodo_sam');
+  });
+
+  it('only the token character (4 actions) and Frodo (1 action) may act; the token rotates', () => {
+    let s = createGame([{ id: 'solo', name: 'Solo' }], 5);
+    const token = s.solo!.order[0];
+    const other = s.solo!.order[1];
+    expect(canAct(s, token)).toBe(true);
+    expect(canAct(s, BEARER)).toBe(true);
+    expect(canAct(s, other)).toBe(false);
+    // Frodo takes his single bonus action.
+    const to = CONNECTIONS[s.characters[BEARER].location].find((c) => !c.cost)!.to;
+    s = applyAction(s, 'solo', { type: 'travel', character: BEARER, to, cover: 'search' }).state;
+    while (s.pending) s = applyAction(s, 'solo', { type: 'confirm' }).state;
+    if (s.phase !== 'playing') return; // an unlucky search can end a rigged short game
+    expect(canAct(s, BEARER)).toBe(false);
+    expect(canAct(s, token)).toBe(true);
+    // End the turn: the token passes to the next character.
+    s = applyAction(s, 'solo', { type: 'endTurn' }).state;
+    let guard = 0;
+    while (s.pending && guard++ < 30) {
+      const acts = legalActions(s, 'solo');
+      s = applyAction(s, 'solo', acts[0]).state;
+    }
+    if (s.phase === 'playing') expect(s.solo!.idx).toBe(1);
+  });
+
+  it('solo games skip Fellowship and restrict Prepare to matching regions', () => {
+    const s = createGame([{ id: 'solo', name: 'Solo' }], 9);
+    const acts = legalActions(s, 'solo');
+    expect(acts.some((a) => a.type === 'fellowship')).toBe(false);
+    for (const a of acts) {
+      if (a.type === 'prepare') {
+        const card = s.players[0].hand.find((c) => c.id === a.card)!;
+        const here = s.characters[a.character].location;
+        expect(card.kind === 'region' && card.region === MAP[here].region).toBe(true);
+      }
+    }
+  });
+
+  it('solo bots complete 8 games without invariant violations', () => {
+    for (let seed = 1; seed <= 8; seed++) {
+      const r = simulateGame(seed, { players: 1 });
+      expect(['won', 'lost']).toContain(r.phase);
+    }
+  });
+});
+
 describe('determinism', () => {
   it('same seed + same actions = identical states', () => {
     const play = () => {

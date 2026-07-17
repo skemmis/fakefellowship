@@ -230,6 +230,12 @@ export interface GameState {
   pending: Pending | null;
   queue: QueueItem[];
   turnNumber: number;
+  /**
+   * Solo variant: one player runs Frodo & Sam plus four characters. The solo
+   * token rotates through `order`; the token character takes up to 4 actions
+   * and Frodo & Sam take 1 bonus action each turn.
+   */
+  solo?: { order: CharacterId[]; idx: number };
 }
 
 // ---------------------------------------------------------------------------

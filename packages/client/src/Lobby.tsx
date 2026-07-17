@@ -105,15 +105,12 @@ export function Lobby({ room, playerId }: { room: RoomInfo | null; playerId: str
         </div>
         <p className="hint">
           Each player is dealt 2 random characters (Frodo &amp; Sam are always in play). Hands are
-          public — this is a fully cooperative game, so talk it out.
+          public — this is a fully cooperative game, so talk it out. Solo: one player runs
+          Frodo &amp; Sam plus 4 characters with a rotating action token.
         </p>
         {me?.isHost ? (
-          <button
-            className="primary start"
-            disabled={room.players.length < 2}
-            onClick={() => net.send({ type: 'start' })}
-          >
-            {room.players.length < 2 ? 'Waiting for at least 2 players…' : 'Begin the journey'}
+          <button className="primary start" onClick={() => net.send({ type: 'start' })}>
+            {room.players.length === 1 ? 'Begin a solo journey (you run 5 characters)' : 'Begin the journey'}
           </button>
         ) : (
           <p className="hint">Waiting for the host to begin…</p>

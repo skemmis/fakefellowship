@@ -47,8 +47,8 @@ export function createGame(
   seed: number,
   difficulty: Difficulty = 'introductory',
 ): GameState {
-  if (players.length < 2 || players.length > 5) {
-    throw new Error('Supported player counts: 2-5 (solo variant not yet implemented).');
+  if (players.length < 1 || players.length > 5) {
+    throw new Error('Supported player counts: 1-5.');
   }
   const rng = makeRng(seed);
   const setupCfg = SETUP_BY_PLAYERS[players.length];
@@ -95,20 +95,24 @@ export function createGame(
     { id: finale.id, complete: false },
   ];
 
-  // --- Characters: deal 2 random characters to each player.
-  const charPool = shuffle(rng, CHARACTERS.map((c) => c.id));
-  // Ensure the ring-bearers are always in play: move them to the front slots.
-  const bearerIdx = charPool.indexOf('frodo_sam');
-  const dealt = charPool.slice(0, players.length * 2);
-  if (!dealt.includes('frodo_sam')) {
+  // --- Characters. Multiplayer: 2 random characters each (Frodo always in
+  // play). Solo: Frodo & Sam plus 4 random characters, all run by one player.
+  const solo = players.length === 1;
+  const charPool = shuffle(rng, CHARACTERS.map((c) => c.id).filter((c) => c !== 'frodo_sam'));
+  let playerChars: CharacterId[][];
+  let soloState: GameState['solo'];
+  if (solo) {
+    const four = charPool.slice(0, 4);
+    playerChars = [['frodo_sam', ...four]];
+    soloState = { order: four, idx: 0 };
+  } else {
+    const dealt = charPool.slice(0, players.length * 2);
     dealt[nextInt(rng, dealt.length)] = 'frodo_sam';
-  } else if (bearerIdx >= players.length * 2) {
-    // unreachable, kept for clarity
+    playerChars = players.map((_, i) => [dealt[i * 2], dealt[i * 2 + 1]]);
   }
   const characters: GameState['characters'] = {};
-  const playerChars: CharacterId[][] = players.map((_, i) => [dealt[i * 2], dealt[i * 2 + 1]]);
-  for (const pair of playerChars) {
-    for (const c of pair) {
+  for (const group of playerChars) {
+    for (const c of group) {
       characters[c] = { location: CHARACTERS.find((d) => d.id === c)!.start };
     }
   }
@@ -195,5 +199,6 @@ export function createGame(
     pending: null,
     queue: [],
     turnNumber: 1,
+    ...(soloState ? { solo: soloState } : {}),
   };
 }

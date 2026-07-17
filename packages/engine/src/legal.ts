@@ -152,7 +152,7 @@ export function legalActions(s: GameState, playerId?: string): Action[] {
 
     // Fellowship: give/take a region card matching this region with a co-located player.
     const region = MAP[here].region;
-    for (const other of s.players) {
+    for (const other of s.solo ? [] : s.players) {
       if (other.id === p.id) continue;
       if (!other.characters.some((c) => s.characters[c]?.location === here)) continue;
       for (const card of p.hand) {
@@ -167,10 +167,14 @@ export function legalActions(s: GameState, playerId?: string): Action[] {
       }
     }
 
-    // Prepare
+    // Prepare (solo: the card must match the character's current region)
     if (s.siteStatus[here] === 'haven') {
       for (const card of p.hand) {
-        if (card.kind === 'region' && s.supply.tokens[card.symbol] > 0) {
+        if (
+          card.kind === 'region' &&
+          s.supply.tokens[card.symbol] > 0 &&
+          (!s.solo || card.region === MAP[here].region)
+        ) {
           out.push({ type: 'prepare', character, card: card.id });
         }
       }

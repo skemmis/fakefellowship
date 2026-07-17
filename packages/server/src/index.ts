@@ -164,8 +164,8 @@ function handleMessage(ws: WebSocket, ctx: ConnCtx, msg: ClientMessage): void {
       if (!room || !player) return;
       if (player.id !== room.hostId) return send(ws, { type: 'error', message: 'Only the host can start the game.' });
       if (room.state) return send(ws, { type: 'error', message: 'Already started.' });
-      if (room.players.length < 2 || room.players.length > 5) {
-        return send(ws, { type: 'error', message: 'This digital edition supports 2-5 players.' });
+      if (room.players.length < 1 || room.players.length > 5) {
+        return send(ws, { type: 'error', message: 'This digital edition supports 1-5 players.' });
       }
       try {
         room.state = createGame(

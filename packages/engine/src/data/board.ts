@@ -21,18 +21,18 @@ import type {
 export const REGIONS: RegionDef[] = [
   // The rulebook's Nazgûl example implies the Misty Mountains do not border
   // Eriador directly (movement from there goes via Rhudaur or Enedwaith).
-  { id: 'eriador', name: 'Eriador', adjacent: ['rhudaur', 'enedwaith'], x: 200, y: 330 },
-  { id: 'rhudaur', name: 'Rhudaur', adjacent: ['eriador', 'misty_mountains'], x: 430, y: 135 },
-  { id: 'misty_mountains', name: 'Misty Mountains', adjacent: ['rhudaur', 'enedwaith', 'rohan', 'mirkwood'], x: 495, y: 330 },
-  { id: 'enedwaith', name: 'Enedwaith', adjacent: ['eriador', 'misty_mountains', 'rohan', 'gondor'], x: 300, y: 430 },
-  { id: 'rohan', name: 'Rohan', adjacent: ['enedwaith', 'misty_mountains', 'mirkwood', 'rhovanion', 'gondor'], x: 555, y: 415 },
-  { id: 'gondor', name: 'Gondor', adjacent: ['enedwaith', 'rohan', 'ithilien', 'haradwaith'], x: 430, y: 600 },
-  { id: 'ithilien', name: 'Ithilien', adjacent: ['gondor', 'mordor', 'haradwaith', 'rhovanion'], x: 730, y: 640 },
-  { id: 'mordor', name: 'Mordor', adjacent: ['ithilien', 'rhovanion', 'haradwaith'], x: 880, y: 560 },
-  { id: 'rhovanion', name: 'Rhovanion', adjacent: ['rohan', 'mirkwood', 'dale', 'mordor', 'ithilien'], x: 800, y: 330 },
-  { id: 'mirkwood', name: 'Mirkwood', adjacent: ['misty_mountains', 'rohan', 'rhovanion', 'dale'], x: 665, y: 235 },
-  { id: 'dale', name: 'Dale', adjacent: ['mirkwood', 'rhovanion'], x: 835, y: 95 },
-  { id: 'haradwaith', name: 'Haradwaith', adjacent: ['gondor', 'ithilien', 'mordor'], x: 650, y: 800 },
+  { id: 'eriador', name: 'Eriador', adjacent: ['rhudaur', 'enedwaith'], x: 200, y: 345 },
+  { id: 'rhudaur', name: 'Rhudaur', adjacent: ['eriador', 'misty_mountains'], x: 385, y: 68 },
+  { id: 'misty_mountains', name: 'Misty Mountains', adjacent: ['rhudaur', 'enedwaith', 'rohan', 'mirkwood'], x: 490, y: 318 },
+  { id: 'enedwaith', name: 'Enedwaith', adjacent: ['eriador', 'misty_mountains', 'rohan', 'gondor'], x: 285, y: 425 },
+  { id: 'rohan', name: 'Rohan', adjacent: ['enedwaith', 'misty_mountains', 'mirkwood', 'rhovanion', 'gondor'], x: 585, y: 448 },
+  { id: 'gondor', name: 'Gondor', adjacent: ['enedwaith', 'rohan', 'ithilien', 'haradwaith'], x: 380, y: 735 },
+  { id: 'ithilien', name: 'Ithilien', adjacent: ['gondor', 'mordor', 'haradwaith', 'rhovanion'], x: 800, y: 700 },
+  { id: 'mordor', name: 'Mordor', adjacent: ['ithilien', 'rhovanion', 'haradwaith'], x: 905, y: 435 },
+  { id: 'rhovanion', name: 'Rhovanion', adjacent: ['rohan', 'mirkwood', 'dale', 'mordor', 'ithilien'], x: 815, y: 340 },
+  { id: 'mirkwood', name: 'Mirkwood', adjacent: ['misty_mountains', 'rohan', 'rhovanion', 'dale'], x: 640, y: 222 },
+  { id: 'dale', name: 'Dale', adjacent: ['mirkwood', 'rhovanion'], x: 862, y: 42 },
+  { id: 'haradwaith', name: 'Haradwaith', adjacent: ['gondor', 'ithilien', 'mordor'], x: 620, y: 810 },
 ];
 
 const L = (
@@ -83,12 +83,12 @@ export const LOCATIONS: LocationDef[] = [
   L('north_ithilien', 'North Ithilien', 'ithilien', 745, 500),
   L('south_ithilien', 'South Ithilien', 'ithilien', 730, 655),
   // Mordor
-  L('minas_morgul', 'Minas Morgul', 'mordor', 790, 620, { shadowLoc: true, stronghold: true }),
-  L('mount_doom', 'Mount Doom', 'mordor', 855, 555),
-  L('plateau_of_gorgoroth', 'Plateau of Gorgoroth', 'mordor', 880, 620, { shadowLoc: false }),
-  L('barad_dur', 'Barad-dûr', 'mordor', 915, 520, { shadowLoc: true, stronghold: true }),
-  L('udun', 'Udûn', 'mordor', 835, 470, { stronghold: true }),
-  L('nurn', 'Núrn', 'mordor', 965, 655, { shadowLoc: true }),
+  L('minas_morgul', 'Minas Morgul', 'mordor', 775, 625, { shadowLoc: true, stronghold: true }),
+  L('mount_doom', 'Mount Doom', 'mordor', 858, 545),
+  L('plateau_of_gorgoroth', 'Plateau of Gorgoroth', 'mordor', 900, 638, { shadowLoc: false }),
+  L('barad_dur', 'Barad-dûr', 'mordor', 925, 512, { shadowLoc: true, stronghold: true }),
+  L('udun', 'Udûn', 'mordor', 830, 462, { stronghold: true }),
+  L('nurn', 'Núrn', 'mordor', 975, 705, { shadowLoc: true }),
   // Rhovanion
   L('brown_lands', 'Brown Lands', 'rhovanion', 705, 335),
   L('emyn_muil', 'Emyn Muil', 'rhovanion', 700, 415),

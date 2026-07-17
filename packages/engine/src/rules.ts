@@ -623,7 +623,15 @@ function pump(s: GameState, rng: Rng, events: GameEvent[]): void {
         s.turn.actedOrder = [];
         s.turn.abilityUsed = {};
         s.turnNumber += 1;
-        events.push({ kind: 'turn', text: `— Turn ${s.turnNumber}: ${activePlayer(s).name} —` });
+        if (s.solo) {
+          s.solo.idx = (s.solo.idx + 1) % s.solo.order.length;
+          events.push({
+            kind: 'turn',
+            text: `— Turn ${s.turnNumber}: the solo token passes to ${charName(s.solo.order[s.solo.idx])} (plus 1 Frodo & Sam action) —`,
+          });
+        } else {
+          events.push({ kind: 'turn', text: `— Turn ${s.turnNumber}: ${activePlayer(s).name} —` });
+        }
         break;
       }
       case 'winCheck':
@@ -639,8 +647,16 @@ function pump(s: GameState, rng: Rng, events: GameEvent[]): void {
 export function canAct(s: GameState, character: CharacterId): boolean {
   const p = activePlayer(s);
   if (!p.characters.includes(character)) return false;
-  const order = s.turn.actedOrder;
   const used = s.turn.actionsUsed[character] ?? 0;
+  // Solo variant: the token character takes up to 4 actions; Frodo & Sam
+  // take 1 bonus action; nobody else acts this turn.
+  if (s.solo) {
+    const token = s.solo.order[s.solo.idx];
+    if (character === token) return used < ACTIONS_PRIMARY;
+    if (character === BEARER) return used < ACTIONS_SECONDARY;
+    return false;
+  }
+  const order = s.turn.actedOrder;
   if (order.length === 0) return true;
   if (order.length === 1) {
     if (order[0] === character) {
@@ -863,6 +879,7 @@ export function applyAction(state: GameState, playerId: PlayerId, action: Action
       break;
 
     case 'fellowship': {
+      if (s.solo) throw new RuleError('Solo games skip the Fellowship action — your characters already share one hand.');
       const c = action.character;
       requireOwn(p, c);
       const here = s.characters[c].location;
@@ -917,6 +934,9 @@ export function applyAction(state: GameState, playerId: PlayerId, action: Action
       if (idx < 0) throw new RuleError('Card not in your hand.');
       const card = p.hand[idx];
       if (card.kind !== 'region') throw new RuleError('Discard a region card to Prepare.');
+      if (s.solo && card.region !== regionOf(here)) {
+        throw new RuleError('Solo rule: Prepare only with a card matching the region you are in.');
+      }
       const take = c === 'galadriel' ? 2 : 1; // Galadriel: reconstructed
       if (s.supply.tokens[card.symbol] <= 0) throw new RuleError('No matching tokens left in the supply.');
       spendAction(s, c);
