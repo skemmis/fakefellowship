@@ -1,0 +1,16 @@
+{
+  "name": "fakefellowship",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Emberfall — a cooperative fantasy strategy game for 1-4 players, playable online in real time.",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build -w @emberfall/engine && npm run build -w @emberfall/server && npm run build -w @emberfall/client",
+    "test": "npm run test -w @emberfall/engine",
+    "dev:server": "npm run dev -w @emberfall/server",
+    "dev:client": "npm run dev -w @emberfall/client",
+    "start": "npm run start -w @emberfall/server"
+  }
+}
