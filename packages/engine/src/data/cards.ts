@@ -441,16 +441,29 @@ export const OBJECTIVES: ObjectiveDef[] = [
   {
     id: 'secure_anduin',
     name: 'Secure the Crossing of the Anduin',
-    text: 'Setup: 1 shadow troop in Osgiliath. Faramir may Capture Osgiliath (though it is no stronghold) for the usual 3 Valor. Done when Osgiliath is a haven: 1 Gondor troop may muster there. If shadow troops later overrun it, lose 3 hope and the haven is gone.',
+    text: 'Setup: 1 shadow troop in Osgiliath. Faramir may Capture Osgiliath (though it is no stronghold) for the usual 3 Valor — or 2 Resistance + 1 Stealth. Done when Osgiliath is a haven: 1 Gondor troop may muster there. If shadow troops later overrun it, lose 3 hope and the haven is gone.',
     uses: ['faramir'],
     setupShadow: { osgiliath: 1 },
-    uncertain: 'alternative Capture cost unreadable — only the usual 3 Valor implemented',
   },
 ];
 
 export const OBJECTIVE_MAP: Record<string, ObjectiveDef> = Object.fromEntries(
   OBJECTIVES.map((o) => [o.id, o]),
 );
+
+/**
+ * Alternative Capture costs granted by objective cards (instead of the
+ * usual 3 Valor). Owner-confirmed entries only; the rest await their cards'
+ * fine print.
+ */
+export const ALT_CAPTURE: {
+  objective: string;
+  location: LocationId;
+  character?: CharacterId;
+  cost: SymbolKind[];
+}[] = [
+  { objective: 'secure_anduin', location: 'osgiliath', character: 'faramir', cost: ['resistance', 'resistance', 'stealth'] },
+];
 
 /** Starting board pressure (all values from the rulebook setup pages). */
 export const INITIAL_SHADOW: Record<LocationId, number> = {

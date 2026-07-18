@@ -327,7 +327,12 @@ export type Action =
   | { type: 'prepare'; character: CharacterId; card: string }
   | { type: 'muster'; character: CharacterId }
   | { type: 'attack'; character: CharacterId; dice: number }
-  | { type: 'capture'; character: CharacterId }
+  | {
+      type: 'capture';
+      character: CharacterId;
+      /** Pay an objective card's alternative cost instead of 3 Valor. */
+      alt?: boolean;
+    }
   | { type: 'destroyEmber' }
   | {
       type: 'ability';

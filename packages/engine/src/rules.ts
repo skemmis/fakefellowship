@@ -1,6 +1,7 @@
 import {
   ACTIONS_PRIMARY,
   ACTIONS_SECONDARY,
+  ALT_CAPTURE,
   BATTLE_DIE,
   CAPTURE_COST,
   CAPTURE_HOPE,
@@ -1534,9 +1535,21 @@ export function applyAction(state: GameState, playerId: PlayerId, action: Action
       if (s.siteStatus[here] === 'haven') throw new RuleError('Already a haven.');
       if (friendlyAt(s, here) === 0) throw new RuleError('A friendly troop must be present.');
       if ((s.shadow[here] ?? 0) > 0) throw new RuleError('Clear the shadow troops first.');
-      const cost = c === 'boromir' ? CAPTURE_COST - 1 : CAPTURE_COST;
-      spendAction(s, c);
-      pay(s, p, Array(cost).fill('valor') as SymbolKind[], events);
+      if (action.alt) {
+        const grant = ALT_CAPTURE.find(
+          (g) =>
+            g.location === here &&
+            (!g.character || g.character === c) &&
+            objectiveActive(s, g.objective),
+        );
+        if (!grant) throw new RuleError('No alternative Capture cost applies here.');
+        spendAction(s, c);
+        pay(s, p, grant.cost, events);
+      } else {
+        const cost = c === 'boromir' ? CAPTURE_COST - 1 : CAPTURE_COST;
+        spendAction(s, c);
+        pay(s, p, Array(cost).fill('valor') as SymbolKind[], events);
+      }
       s.siteStatus[here] = 'haven';
       // Captured strongholds no longer receive card-driven shadow troops.
       s.spawnStopped[here] = true;

@@ -667,6 +667,14 @@ function CharacterPanel({
           >
             Capture
           </button>
+          {legal.some((a) => a.type === 'capture' && a.character === character && a.alt) && (
+            <button
+              onClick={() => onAct({ type: 'capture', character, alt: true })}
+              title="An objective card's alternative Capture cost (instead of 3 Valor)."
+            >
+              Capture (alt cost)
+            </button>
+          )}
           {fellowships.length > 0 && (
             <button onClick={() => onAct(fellowships[0])} title="Trade a region card matching this region with a co-located player.">
               Fellowship

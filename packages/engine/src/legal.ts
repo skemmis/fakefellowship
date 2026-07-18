@@ -1,6 +1,6 @@
 import { CONNECTIONS, MAP, MOUNT_DOOM, REGIONS } from './data/board.js';
 import { BEARER } from './data/characters.js';
-import { MAX_BATTLE_DICE, RING_DESTROY_COST } from './data/cards.js';
+import { ALT_CAPTURE, MAX_BATTLE_DICE, RING_DESTROY_COST } from './data/cards.js';
 import { canAct } from './rules.js';
 import type {
   Action,
@@ -290,14 +290,19 @@ export function legalActions(s: GameState, playerId?: string): Action[] {
       s.siteStatus[here] !== 'haven' &&
       ((here === 'osgiliath' && character === 'faramir' && objectiveOpen(s, 'secure_anduin')) ||
         (here === 'dunland' && objectiveOpen(s, 'frecas_heirs')));
-    if (
+    const captureSite =
       character !== 'gollum' &&
       (s.siteStatus[here] === 'stronghold' || objCapture) &&
       friendlyAt(s, here) > 0 &&
-      (s.shadow[here] ?? 0) === 0 &&
-      canPayList(p, Array(character === 'boromir' ? 2 : 3).fill('valor') as SymbolKind[])
-    ) {
+      (s.shadow[here] ?? 0) === 0;
+    if (captureSite && canPayList(p, Array(character === 'boromir' ? 2 : 3).fill('valor') as SymbolKind[])) {
       out.push({ type: 'capture', character });
+    }
+    if (captureSite) {
+      const grant = ALT_CAPTURE.find(
+        (g) => g.location === here && (!g.character || g.character === character) && objectiveOpen(s, g.objective),
+      );
+      if (grant && canPayList(p, grant.cost)) out.push({ type: 'capture', character, alt: true });
     }
 
     // Objective-card actions
