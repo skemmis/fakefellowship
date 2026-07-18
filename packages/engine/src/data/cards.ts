@@ -297,10 +297,9 @@ export const OBJECTIVES: ObjectiveDef[] = [
   {
     id: 'blessing_elves',
     name: 'Attain the Blessing of the Elves',
-    text: 'Setup: 3 Elven troops wait on this card. As an action, a character in Rivendell spends 3 Friendship with another character present. Done: the waiting troops join the supply, each player with a character in Rivendell may take a Friendship token, and hope rises 1.',
+    text: 'Setup: 3 Elven troops wait on this card. As an action, a character in Rivendell spends 3 Valor or 3 Stealth with another character present. Done: the waiting troops join the supply, each player with a character in Rivendell may take a Friendship token, and hope rises 1.',
     star: 'black',
     reserve: { faction: 'sylvan', count: 3 },
-    uncertain: 'symbol spent (read as Friendship ×3) and token granted',
   },
   {
     id: 'staff_broken',
@@ -352,16 +351,14 @@ export const OBJECTIVES: ObjectiveDef[] = [
   {
     id: 'unseat_denethor',
     name: 'Unseat Denethor',
-    text: 'Setup: 4 Gondor troops wait on this card. As an action, a character in Minas Tirith spends 2 Stealth, 1 Resistance, and 1 Valor with another character present. Done: the waiting troops join the supply, up to 3 Gondor troops muster in Minas Tirith, and hope rises 1.',
+    text: 'Setup: 4 Gondor troops wait on this card. As an action, a character in Minas Tirith spends 2 Stealth, 1 Friendship, and 1 Valor with another character present. Done: the waiting troops join the supply, up to 3 Gondor troops muster in Minas Tirith, and hope rises 1.',
     reserve: { faction: 'vale', count: 4 },
-    uncertain: 'exact symbol cost unreadable — using 2 Stealth + 1 Resistance + 1 Valor',
   },
   {
     id: 'shelobs_lair',
     name: 'Shelob’s Lair',
-    text: 'Sam spends an action in Minas Morgul to brave the lair, rolling 3 battle dice with Gollum present: an overrun costs 1 hope, an exchange 2, a Nazgûl 3; a lone foe is harmless. Done: if Frodo lost no hope doing it, he may take 1 extra action this turn.',
+    text: 'Sam spends an action in Minas Morgul to brave the lair, rolling 3 battle dice with Gollum present: an overrun costs 1 hope, an exchange 2, a Nazgûl 3; a lone foe is harmless — plus 1 hope per Resistance (card or token) the Gollum player holds (solo: per Resistance card in hand). Sam may spend Valor to ignore dice and Friendship to prevent hope losses. Done: if Frodo lost no hope doing it, he may take 1 extra action this turn.',
     uses: ['gollum'],
-    uncertain: 'the Gollum-player hand penalty and Sam’s spend-to-mitigate lines are not yet implemented',
   },
   {
     id: 'hobbits_loyalty',
@@ -380,14 +377,13 @@ export const OBJECTIVES: ObjectiveDef[] = [
     name: 'Free Théoden’s Mind',
     text: 'Setup: 4 Rohirrim troops wait on this card. As an action, a character in Edoras spends 2 Friendship and 1 Resistance with another character present. Done: the waiting troops join the supply, up to 2 Rohirrim muster in Edoras, and hope rises 1.',
     reserve: { faction: 'riders', count: 4 },
-    uncertain: 'exact symbol cost unreadable — using 2 Friendship + 1 Resistance',
   },
   {
     id: 'infiltrate_morgul',
     name: 'Infiltrate Minas Morgul',
-    text: 'Setup: 1 extra shadow troop in Minas Morgul. Done when Minas Morgul is a haven: the current player may take 2 Stealth tokens, and the top 2 shadow cards are removed from the game.',
+    text: 'Setup: 1 extra shadow troop in Minas Morgul. It may be Captured for the usual 3 Valor or 3 Stealth. Done when it is a haven: the current player may take 2 Stealth tokens, and the top 2 shadow cards are removed from the game.',
     setupShadow: { minas_morgul: 1 },
-    uncertain: 'alternative Capture cost still unreadable; deck-surgery choice is automated (both cards removed)',
+    uncertain: 'deck-surgery choice is automated (both cards removed)',
   },
   {
     id: 'ride_eored',
@@ -398,9 +394,8 @@ export const OBJECTIVES: ObjectiveDef[] = [
   {
     id: 'confront_balrog',
     name: 'Confront the Balrog',
-    text: 'Gandalf spends an action in Moria to face the terror, rolling 3 battle dice: an overrun costs 1 hope, an exchange 2, a Nazgûl 3; a lone foe is harmless. Done: Gandalf falls from the board — when the next Skies Darken card is drawn he returns to Lórien as Gandalf the White, and hope rises 2.',
+    text: 'Gandalf spends an action in Moria to face the terror, rolling 3 battle dice: an overrun costs 1 hope, an exchange 2, a Nazgûl 3; a lone foe is harmless. He may spend Resistance to ignore dice and Valor to prevent hope losses. Done: Gandalf falls from the board — when the next Skies Darken card is drawn he returns to Lórien as Gandalf the White (hope rises 2), and thereafter 1 Valor lets him set any dice of a roll to the results the players want.',
     uses: ['gandalf'],
-    uncertain: 'Gandalf’s spend-to-mitigate lines and Gandalf the White’s upgraded reroll are not yet implemented',
   },
   {
     id: 'rangers_eriador',
@@ -423,16 +418,14 @@ export const OBJECTIVES: ObjectiveDef[] = [
   {
     id: 'frecas_heirs',
     name: 'Deal with Freca’s Heirs',
-    text: 'Dunland may be Captured (though it is no stronghold) for the usual 3 Valor. Done when Dunland is a haven with at least 2 Rohirrim troops: 1 more Rohirrim may muster there. If shadow troops later overrun Dunland, lose 3 hope and the haven is gone.',
-    uncertain: 'alternative Capture cost unreadable — only the usual 3 Valor implemented',
+    text: 'Dunland may be Captured (though it is no stronghold) for the usual 3 Valor or 3 Friendship. Done when Dunland is a haven with at least 2 Rohirrim troops: 1 more Rohirrim may muster there. If shadow troops later overrun Dunland, lose 3 hope and the haven is gone.',
   },
   {
     id: 'lay_bare_pits',
     name: 'Lay Bare the Pits',
-    text: 'Setup: 1 extra shadow troop in Dol Guldur. Galadriel leads the assault. Done when Dol Guldur is a haven with at least 3 Elven troops: if Galadriel stands there, hope rises 1 more (beyond the Capture’s 2).',
+    text: 'Setup: 1 extra shadow troop in Dol Guldur. Galadriel may Capture it for the usual 3 Valor or 2 Resistance + 1 Valor. Done when Dol Guldur is a haven with at least 3 Elven troops: if Galadriel stands there, hope rises 1 more (beyond the Capture’s 2).',
     uses: ['galadriel'],
     setupShadow: { dol_guldur: 1 },
-    uncertain: 'her alternative Capture cost unreadable — only the usual 3 Valor implemented',
   },
   {
     id: 'secure_anduin',
@@ -459,6 +452,9 @@ export const ALT_CAPTURE: {
   cost: SymbolKind[];
 }[] = [
   { objective: 'secure_anduin', location: 'osgiliath', character: 'faramir', cost: ['resistance', 'resistance', 'stealth'] },
+  { objective: 'infiltrate_morgul', location: 'minas_morgul', cost: ['stealth', 'stealth', 'stealth'] },
+  { objective: 'frecas_heirs', location: 'dunland', cost: ['friendship', 'friendship', 'friendship'] },
+  { objective: 'lay_bare_pits', location: 'dol_guldur', character: 'galadriel', cost: ['resistance', 'resistance', 'valor'] },
 ];
 
 /** Starting board pressure (all values from the rulebook setup pages). */

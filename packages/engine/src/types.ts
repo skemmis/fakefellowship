@@ -186,6 +186,23 @@ export interface PendingDiscard {
   player: PlayerId;
 }
 
+/**
+ * An objective-card ordeal (Confront the Balrog / Shelob's Lair): 3 battle
+ * dice whose faces cost hope, mitigated by the hero spending symbols before
+ * confirming.
+ */
+export interface PendingOrdeal {
+  type: 'ordeal';
+  objective: 'confront_balrog' | 'shelobs_lair';
+  player: PlayerId;
+  location: LocationId;
+  dice: BattleFace[];
+  /** Dice bought off (Balrog: 1 Resistance each; Shelob: 1 Valor each). */
+  ignored: number[];
+  /** Hope losses bought off (Balrog: 1 Valor each; Shelob: 1 Friendship). */
+  prevented: number;
+}
+
 /** The Wheels of Saruman: the current player picks one of three woes. */
 export interface PendingWheels {
   type: 'wheels';
@@ -197,7 +214,7 @@ export interface PendingWheels {
   remaining?: number;
 }
 
-export type Pending = PendingSearch | PendingBattle | PendingDiscard | PendingWheels;
+export type Pending = PendingSearch | PendingBattle | PendingDiscard | PendingWheels | PendingOrdeal;
 
 // ---------------------------------------------------------------------------
 // Automatic step queue (shadow phase, darken steps, queued battles)
@@ -319,8 +336,8 @@ export type Action =
       type: 'objective';
       id: string;
       character: CharacterId;
-      /** Card ids discarded to pay symbol costs, matching the card's needs. */
-      pay?: string[];
+      /** Blessing of the Elves: which of the two printed costs to pay. */
+      variant?: 'valor' | 'stealth';
       /** Hobbits' pledge: the Friendship region card discarded. */
       card?: string;
     }
@@ -373,6 +390,8 @@ export type Action =
   | { type: 'ignoreDie'; die: number } // Sam's aid: 1 friendship neutralizes a harmful search die
   | { type: 'showValor' } // battle only: spend 1 valor, remove 1 shadow troop
   | { type: 'eowynStrike'; die: number } // Shieldmaiden card: 2 valor turns a battle die to the Nazgûl face
+  | { type: 'preventHope' } // ordeal only: buy off 1 hope of the pending loss
+  | { type: 'gandalfWhite'; faces: string[] } // Gandalf the White: 1 valor sets the roll's dice
   | { type: 'confirm' } // apply the pending roll and continue
   | { type: 'discard'; card: string } // resolve a pending hand-limit discard
   | {

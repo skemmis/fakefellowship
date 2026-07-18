@@ -855,6 +855,55 @@ function PendingPanel({
     );
   }
 
+  if (pend.type === 'ordeal') {
+    const balrog = pend.objective === 'confront_balrog';
+    const mine = pend.player === playerId;
+    const hero = state.players.find((p) => p.id === pend.player);
+    const atStake = pend.dice.reduce(
+      (a, f, i) => a + (pend.ignored.includes(i) ? 0 : ({ rout: 0, overrun: 1, exchange: 2, wraith: 3 } as Record<string, number>)[f]),
+      0,
+    );
+    return (
+      <section className="panel pending">
+        <h3>{balrog ? '🔥 The Bridge of Khazad-dûm' : '🕸 Shelob’s Lair'}</h3>
+        <p className="hint">
+          {balrog
+            ? <>Each die costs hope (overrun 1, exchange 2, Nazgûl 3). Gandalf may spend <Sym s="resistance" /> to ignore a die and <Sym s="valor" /> to prevent 1 hope loss.</>
+            : <>Each die costs hope (overrun 1, exchange 2, Nazgûl 3), plus 1 per Resistance the Gollum player holds. Sam may spend <Sym s="valor" /> to ignore a die and <Sym s="friendship" /> to prevent 1 hope loss.</>}
+          {' '}~{Math.max(0, atStake - pend.prevented)} hope at stake from the dice.
+        </p>
+        <div className="dice-row">
+          {pend.dice.map((f, i) => (
+            <div key={i} className={`die die-${f} ${pend.ignored.includes(i) ? 'ignored' : ''}`}>
+              <span className="die-face">
+                <DieFace f={f} /> {pend.ignored.includes(i) && '✗'}
+              </span>
+              {mine && legal.some((a) => a.type === 'ignoreDie' && a.die === i) && (
+                <button className="mini" onClick={() => onAct({ type: 'ignoreDie', die: i })}>
+                  ✗ <Sym s={balrog ? 'resistance' : 'valor'} />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+        <div className="pending-actions">
+          {mine && legal.some((a) => a.type === 'preventHope') && (
+            <button onClick={() => onAct({ type: 'preventHope' })}>
+              Prevent 1 hope loss (<Sym s={balrog ? 'valor' : 'friendship'} />)
+            </button>
+          )}
+          {mine ? (
+            <button className="primary" onClick={() => onAct({ type: 'confirm' })}>
+              Face it — resolve
+            </button>
+          ) : (
+            <p className="hint">Waiting for {hero?.name} to resolve the ordeal…</p>
+          )}
+        </div>
+      </section>
+    );
+  }
+
   const isSearch = pend.type === 'search';
   const faces = pend.dice;
   const canReroll = legal.some((a) => a.type === 'reroll');
@@ -927,6 +976,17 @@ function PendingPanel({
             🎵 Play Tom Bombadil (reroll up to 3 dice)
           </button>
         )}
+        {(() => {
+          const white = legal.find((a) => a.type === 'gandalfWhite');
+          return white ? (
+            <button
+              onClick={() => onAct(white)}
+              title="Gandalf the White: spend 1 Valor to set every die of this roll to the result you want (this sets them all to the harmless face)."
+            >
+              Gandalf the White: command the roll (<Sym s="valor" />)
+            </button>
+          ) : null;
+        })()}
         {canConfirm ? (
           <button className="primary" onClick={() => onAct({ type: 'confirm' })}>
             Confirm & resolve

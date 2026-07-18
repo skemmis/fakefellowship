@@ -55,6 +55,20 @@ export function legalActions(s: GameState, playerId?: string): Action[] {
       }
       return out;
     }
+    if (pend.type === 'ordeal') {
+      if (player.id === pend.player) {
+        const ignoreCost = pend.objective === 'confront_balrog' ? 'resistance' : 'valor';
+        const preventCost = pend.objective === 'confront_balrog' ? 'valor' : 'friendship';
+        if (canPayList(player, [ignoreCost as SymbolKind])) {
+          for (let i = 0; i < pend.dice.length; i++) {
+            if (!pend.ignored.includes(i) && pend.dice[i] !== 'rout') out.push({ type: 'ignoreDie', die: i });
+          }
+        }
+        if (canPayList(player, [preventCost as SymbolKind])) out.push({ type: 'preventHope' });
+        out.push({ type: 'confirm' });
+      }
+      return out;
+    }
     if (pend.type === 'wheels') {
       if (!pend.mode && pend.remaining === undefined) {
         if (player.id === active.id) {
@@ -114,6 +128,18 @@ export function legalActions(s: GameState, playerId?: string): Action[] {
     }
     if (pend.type === 'battle' && present && canPayList(player, ['valor']) && pend.valorKills < (s.shadow[pend.location] ?? 0)) {
       out.push({ type: 'showValor' });
+    }
+    // Gandalf the White may command the whole roll for 1 Valor. Bots take
+    // the obvious best result; the UI composes richer picks.
+    if (
+      (pend.type === 'search' || pend.type === 'battle') &&
+      (s.objProgress['gandalf_white'] ?? 0) > 0 &&
+      player.characters.includes('gandalf') &&
+      s.characters['gandalf']?.location === pend.location &&
+      canPayList(player, ['valor']) &&
+      pend.dice.some((f) => (pend.type === 'search' ? f !== 'slip' : f !== 'rout'))
+    ) {
+      out.push({ type: 'gandalfWhite', faces: pend.dice.map(() => (pend.type === 'search' ? 'slip' : 'rout')) });
     }
     // Shieldmaiden No Longer: Éowyn may turn a battle die to the Nazgûl face.
     if (
@@ -318,8 +344,9 @@ export function legalActions(s: GameState, playerId?: string): Action[] {
     }
 
     // Objective-card actions
-    if (objectiveOpen(s, 'blessing_elves') && here === 'rivendell' && othersAt(s, here, character) && canPayList(p, ['friendship', 'friendship', 'friendship'])) {
-      out.push({ type: 'objective', id: 'blessing_elves', character });
+    if (objectiveOpen(s, 'blessing_elves') && here === 'rivendell' && othersAt(s, here, character)) {
+      if (canPayList(p, ['valor', 'valor', 'valor'])) out.push({ type: 'objective', id: 'blessing_elves', character, variant: 'valor' });
+      if (canPayList(p, ['stealth', 'stealth', 'stealth'])) out.push({ type: 'objective', id: 'blessing_elves', character, variant: 'stealth' });
     }
     if (objectiveOpen(s, 'challenge_sauron') && here === 'north_ithilien') {
       const at = s.friendly[here] ?? {};
@@ -333,7 +360,7 @@ export function legalActions(s: GameState, playerId?: string): Action[] {
         out.push({ type: 'objective', id: 'arwen_banner', character });
       }
     }
-    if (objectiveOpen(s, 'unseat_denethor') && here === 'minas_tirith' && othersAt(s, here, character) && canPayList(p, ['stealth', 'stealth', 'resistance', 'valor'])) {
+    if (objectiveOpen(s, 'unseat_denethor') && here === 'minas_tirith' && othersAt(s, here, character) && canPayList(p, ['stealth', 'stealth', 'friendship', 'valor'])) {
       out.push({ type: 'objective', id: 'unseat_denethor', character });
     }
     if (objectiveOpen(s, 'free_theoden') && here === 'edoras' && othersAt(s, here, character) && canPayList(p, ['friendship', 'friendship', 'resistance'])) {

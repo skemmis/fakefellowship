@@ -42,6 +42,7 @@ import type {
   GameEvent,
   GameState,
   LocationId,
+  PendingOrdeal,
   PlayerId,
   PlayerState,
   RegionId,
@@ -554,16 +555,29 @@ function winGame(s: GameState, events: GameEvent[]): void {
  * Objective-card ordeal (Balrog / Shelob): 3 battle dice, hope losses by
  * face — overrun 1, exchange 2, Nazgûl 3, rout none (owner-confirmed).
  */
-function rollChallenge(rng: Rng): { lost: number; faces: BattleFace[] } {
-  const HOPE_LOSS: Record<BattleFace, number> = { rout: 0, overrun: 1, exchange: 2, wraith: 3 };
-  let lost = 0;
-  const faces: BattleFace[] = [];
-  for (let i = 0; i < 3; i++) {
-    const f = BATTLE_DIE[nextInt(rng, 6)];
-    faces.push(f);
-    lost += HOPE_LOSS[f];
+const ORDEAL_HOPE_LOSS: Record<BattleFace, number> = { rout: 0, overrun: 1, exchange: 2, wraith: 3 };
+
+function rollChallenge(rng: Rng): BattleFace[] {
+  return Array.from({ length: 3 }, () => BATTLE_DIE[nextInt(rng, 6)]);
+}
+
+/** Hope at stake in a pending ordeal: unignored die losses + Shelob's ring
+ * penalty (1 per Resistance the Gollum player holds; solo: per Resistance
+ * card in hand), minus what has been bought off. */
+function ordealLoss(s: GameState, pend: PendingOrdeal): number {
+  let loss = pend.dice.reduce((a, f, i) => a + (pend.ignored.includes(i) ? 0 : ORDEAL_HOPE_LOSS[f]), 0);
+  if (pend.objective === 'shelobs_lair') {
+    if (s.solo) {
+      const gp = s.players[0];
+      loss += gp.hand.filter((cd) => cd.kind === 'region' && cd.symbol === 'resistance').length;
+    } else {
+      const gp = s.players.find((pl) => pl.characters.includes('gollum'));
+      if (gp) {
+        loss += gp.tokens.resistance + gp.hand.filter((cd) => cd.kind === 'region' && cd.symbol === 'resistance').length;
+      }
+    }
   }
-  return { lost, faces };
+  return Math.max(0, loss - pend.prevented);
 }
 
 function rollBattle(s: GameState, rng: Rng, loc: LocationId, source: 'attack' | 'shadow', requested: number | undefined, events: GameEvent[], attacker?: CharacterId): void {
@@ -1588,8 +1602,9 @@ export function applyAction(state: GameState, playerId: PlayerId, action: Action
         case 'blessing_elves': {
           if (here !== 'rivendell') throw new RuleError('This takes an action in Rivendell.');
           if (!othersHere) throw new RuleError('Another character must be present.');
+          const sym = action.variant === 'stealth' ? 'stealth' : 'valor';
           spendAction(s, c);
-          pay(s, p, ['friendship', 'friendship', 'friendship'], events);
+          pay(s, p, [sym, sym, sym], events);
           completeObjective(s, 'blessing_elves', events);
           break;
         }
@@ -1620,7 +1635,7 @@ export function applyAction(state: GameState, playerId: PlayerId, action: Action
           if (here !== 'minas_tirith') throw new RuleError('This takes an action in Minas Tirith.');
           if (!othersHere) throw new RuleError('Another character must be present.');
           spendAction(s, c);
-          pay(s, p, ['stealth', 'stealth', 'resistance', 'valor'], events);
+          pay(s, p, ['stealth', 'stealth', 'friendship', 'valor'], events);
           completeObjective(s, 'unseat_denethor', events);
           break;
         }
@@ -1690,31 +1705,18 @@ export function applyAction(state: GameState, playerId: PlayerId, action: Action
           if (here !== 'minas_morgul') throw new RuleError('This happens at Minas Morgul.');
           if (s.characters['gollum']?.location !== here) throw new RuleError('Gollum must be present to lead the way.');
           spendAction(s, c);
-          // Owner-confirmed table: 3 battle dice; overrun −1 hope,
-          // exchange −2, Nazgûl −3, lone rout harmless.
-          const { lost, faces } = rollChallenge(rng);
-          events.push({ kind: 'objective', text: `Sam faces the lair: [${faces.join(' ')}].` });
-          if (lost > 0) changeHope(s, -lost, events, "Shelob's lair");
-          completeObjective(s, 'shelobs_lair', events);
-          if (lost === 0 && s.phase === 'playing') {
-            s.turn.actionsUsed[c] = Math.max(0, (s.turn.actionsUsed[c] ?? 0) - 1);
-            events.push({ kind: 'objective', text: 'Frodo comes through unscathed — he may take 1 extra action this turn.' });
-          }
+          const dice = rollChallenge(rng);
+          s.pending = { type: 'ordeal', objective: 'shelobs_lair', player: p.id, location: here, dice, ignored: [], prevented: 0 };
+          events.push({ kind: 'objective', text: `Sam braves the lair: [${dice.join(' ')}] — spend Valor to ignore dice, Friendship to prevent hope loss, then confirm.` });
           break;
         }
         case 'confront_balrog': {
           if (c !== 'gandalf') throw new RuleError('Only Gandalf may face the Balrog.');
           if (here !== 'moria') throw new RuleError('The terror waits in Moria.');
           spendAction(s, c);
-          // Owner-confirmed table (same as Shelob's Lair).
-          const { lost, faces } = rollChallenge(rng);
-          events.push({ kind: 'objective', text: `Gandalf stands upon the bridge: [${faces.join(' ')}].` });
-          if (lost > 0) changeHope(s, -lost, events, 'the Balrog');
-          if (s.phase !== 'playing') break;
-          completeObjective(s, 'confront_balrog', events);
-          s.objProgress['gandalf_away'] = 1;
-          delete s.characters['gandalf'];
-          events.push({ kind: 'objective', text: 'Gandalf falls with the Balrog into the deep — until the skies next darken.' });
+          const dice = rollChallenge(rng);
+          s.pending = { type: 'ordeal', objective: 'confront_balrog', player: p.id, location: here, dice, ignored: [], prevented: 0 };
+          events.push({ kind: 'objective', text: `Gandalf stands upon the bridge: [${dice.join(' ')}] — spend Resistance to ignore dice, Valor to prevent hope loss, then confirm.` });
           break;
         }
         default:
@@ -2159,6 +2161,46 @@ function handlePendingAction(s: GameState, rng: Rng, playerId: PlayerId, action:
     return;
   }
 
+  if (pend.type === 'ordeal') {
+    if (playerId !== pend.player) throw new RuleError('The hero facing the ordeal decides.');
+    const ignoreCost: SymbolKind = pend.objective === 'confront_balrog' ? 'resistance' : 'valor';
+    const preventCost: SymbolKind = pend.objective === 'confront_balrog' ? 'valor' : 'friendship';
+    if (action.type === 'ignoreDie') {
+      if (action.die < 0 || action.die >= pend.dice.length) throw new RuleError('Bad die.');
+      if (pend.ignored.includes(action.die)) throw new RuleError('Already ignored.');
+      if (ORDEAL_HOPE_LOSS[pend.dice[action.die]] === 0) throw new RuleError('That die is harmless.');
+      pay(s, player, [ignoreCost], events);
+      pend.ignored.push(action.die);
+      events.push({ kind: 'objective', text: `A ${pend.dice[action.die]} die is shrugged off.` });
+      return;
+    }
+    if (action.type === 'preventHope') {
+      if (ordealLoss(s, pend) <= 0) throw new RuleError('No hope loss left to prevent.');
+      pay(s, player, [preventCost], events);
+      pend.prevented += 1;
+      events.push({ kind: 'objective', text: `1 hope loss is warded off (${ordealLoss(s, pend)} still at stake).` });
+      return;
+    }
+    if (action.type === 'confirm') {
+      const lost = ordealLoss(s, pend);
+      const obj = pend.objective;
+      s.pending = null;
+      if (lost > 0) changeHope(s, -lost, events, obj === 'confront_balrog' ? 'the Balrog' : "Shelob's lair");
+      if (s.phase !== 'playing') return;
+      completeObjective(s, obj, events);
+      if (obj === 'confront_balrog') {
+        s.objProgress['gandalf_away'] = 1;
+        delete s.characters['gandalf'];
+        events.push({ kind: 'objective', text: 'Gandalf falls with the Balrog into the deep — until the skies next darken.' });
+      } else if (lost === 0) {
+        s.turn.actionsUsed['frodo_sam'] = Math.max(0, (s.turn.actionsUsed['frodo_sam'] ?? 0) - 1);
+        events.push({ kind: 'objective', text: 'Frodo comes through unscathed — he may take 1 extra action this turn.' });
+      }
+      return;
+    }
+    throw new RuleError('Resolve the ordeal first (ignore dice, prevent hope, or confirm).');
+  }
+
   const presentHere = (loc: LocationId) =>
     player.characters.some((c) => s.characters[c]?.location === loc);
 
@@ -2220,6 +2262,26 @@ function handlePendingAction(s: GameState, rng: Rng, playerId: PlayerId, action:
       pay(s, player, ['valor'], events);
       pend.valorKills += 1;
       events.push({ kind: 'battle', text: `${player.name} shows valor — another shadow troop will fall.` });
+      return;
+    }
+    case 'gandalfWhite': {
+      // Gandalf the White's mastered flame: 1 Valor sets any dice of this
+      // roll to the results the players want.
+      if (pend.type !== 'search' && pend.type !== 'battle') throw new RuleError('No roll to command.');
+      if (!(s.objProgress['gandalf_white'] ?? 0)) throw new RuleError('Gandalf has not yet returned in white.');
+      if (!player.characters.includes('gandalf') || s.characters['gandalf']?.location !== pend.location) {
+        throw new RuleError('Gandalf must be present at the roll.');
+      }
+      if (!action.faces || action.faces.length !== pend.dice.length) throw new RuleError('Give a result for every die.');
+      const legalFaces: string[] = pend.type === 'search' ? [...SEARCH_DIE] : [...BATTLE_DIE];
+      for (const f of action.faces) {
+        if (!legalFaces.includes(f)) throw new RuleError(`Not a ${pend.type} face: ${f}.`);
+      }
+      pay(s, player, ['valor'], events);
+      for (let i = 0; i < pend.dice.length; i++) {
+        (pend.dice as string[])[i] = action.faces[i];
+      }
+      events.push({ kind: pend.type, text: `Gandalf the White commands the roll: [${pend.dice.join(' ')}].` });
       return;
     }
     case 'eowynStrike': {
