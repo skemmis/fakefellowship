@@ -13,8 +13,10 @@ import {
   SYMBOL_INFO,
   THREAT_TRACK,
   type Action,
+  type BattleFace,
   type CharacterId,
   type Faction,
+  type SearchFace,
   type GameEvent,
   type GameState,
   type LocationId,
@@ -23,6 +25,7 @@ import {
 } from '@emberfall/engine';
 import { net } from './net.js';
 import { MapView } from './MapView.js';
+import { DieFace, GIcon, Sym } from './icons.js';
 
 const SYMBOL_GLYPH: Record<SymbolKind, string> = {
   friendship: '❤',
@@ -454,7 +457,7 @@ export function Game({
                 <span className="tokens">
                   {(Object.keys(SYMBOL_GLYPH) as SymbolKind[]).map((sym) => (
                     <span key={sym} className="token" title={`${SYMBOL_INFO[sym].name} tokens — ${SYMBOL_INFO[sym].note}`}>
-                      {SYMBOL_GLYPH[sym]}
+                      <Sym s={sym} />
                       {me.tokens[sym]}
                     </span>
                   ))}
@@ -475,8 +478,8 @@ export function Game({
                 {me.hand.length === 0 && <p className="hint">No cards. You draw 2 at the end of your turn.</p>}
               </div>
               <p className="hint">
-                Region cards are spent for their symbol {SYMBOL_GLYPH.friendship}❤=muster, {SYMBOL_GLYPH.valor}=battle/capture,{' '}
-                {SYMBOL_GLYPH.stealth}=hide Frodo, {SYMBOL_GLYPH.resistance}=reroll — or banked as tokens with Prepare at a haven.
+                Region cards are spent for their symbol: <Sym s="friendship" />=muster, <Sym s="valor" />=battle/capture,{' '}
+                <Sym s="stealth" />=hide Frodo, <Sym s="resistance" />=reroll — or banked as tokens with Prepare at a haven.
               </p>
             </section>
           )}
@@ -510,8 +513,12 @@ export function Game({
                     {p.hand.length} cards
                     {(Object.keys(SYMBOL_GLYPH) as SymbolKind[])
                       .filter((sym) => p.tokens[sym] > 0)
-                      .map((sym) => ` · ${SYMBOL_GLYPH[sym]}×${p.tokens[sym]}`)
-                      .join('')}
+                      .map((sym) => (
+                        <span key={sym}>
+                          {' · '}
+                          <Sym s={sym} />×{p.tokens[sym]}
+                        </span>
+                      ))}
                   </div>
                 </li>
               ))}
@@ -724,7 +731,7 @@ function CardView({
     return (
       <div className="card region-card" title={`Region card: spend for ${card.symbol} anywhere, Prepare it at a haven, or pass it with Fellowship while in ${region?.name}.`}>
         <span className="card-name">{region?.name}</span>
-        <span className="card-symbol">{SYMBOL_GLYPH[card.symbol]}</span>
+        <span className="card-symbol"><Sym s={card.symbol} /></span>
         <span className="card-number">{card.number}</span>
       </div>
     );
@@ -858,12 +865,14 @@ function PendingPanel({
   return (
     <section className="panel pending">
       <h3>
-        {isSearch ? '🔎 Search' : '⚔ Battle'} at {MAP[pend.location].name}
+        <GIcon name={isSearch ? 'die_search' : 'die_battle'} size={22} /> {isSearch ? 'Search' : 'Battle'} at {MAP[pend.location].name}
       </h3>
       <p className="hint">
-        {isSearch
-          ? 'The enemy hunts for Frodo. Anyone with a character here may spend Resistance ◎ to reroll a die. Then the current player confirms.'
-          : 'Anyone with a character here may spend Resistance ◎ to reroll a die, or Valor ⚔ to slay an extra shadow troop. Then the current player confirms.'}
+        {isSearch ? (
+          <>The enemy hunts for Frodo. Anyone with a character here may spend Resistance <Sym s="resistance" /> to reroll a die. Then the current player confirms.</>
+        ) : (
+          <>Anyone with a character here may spend Resistance <Sym s="resistance" /> to reroll a die, or Valor <Sym s="valor" /> to slay an extra shadow troop. Then the current player confirms.</>
+        )}
       </p>
       <div className="dice-row">
         {faces.map((f, i) => {
@@ -872,10 +881,12 @@ function PendingPanel({
           const canFree = legal.some((a) => a.type === 'reroll' && a.die === i && a.free);
           return (
             <div key={i} className={`die die-${f} ${ignored ? 'ignored' : ''}`} title={(isSearch ? SEARCH_FACE_INFO : BATTLE_FACE_INFO)[f]}>
-              <span className="die-face">{ignored ? `${f} ✗` : f}</span>
+              <span className="die-face">
+                <DieFace f={f} /> {ignored && '✗'}
+              </span>
               {canReroll && !ignored && (
                 <button className="mini" onClick={() => onAct({ type: 'reroll', die: i })} title="Spend 1 Resistance to reroll this die (Valor works too when Gandalf stands here)">
-                  ↻ ◎
+                  ↻ <Sym s="resistance" />
                 </button>
               )}
               {canFree && !ignored && (
@@ -885,12 +896,13 @@ function PendingPanel({
               )}
               {canIgnore && (
                 <button className="mini" onClick={() => onAct({ type: 'ignoreDie', die: i })} title="Sam's aid: spend 1 Friendship to shrug off this result">
-                  ✗ ❤
+                  ✗ <Sym s="friendship" />
                 </button>
               )}
               {legal.some((a) => a.type === 'eowynStrike' && a.die === i) && (
                 <button className="mini" onClick={() => onAct({ type: 'eowynStrike', die: i })} title="Shieldmaiden No Longer: spend 2 Valor to turn this die to the Nazgûl face (Éowyn then destroys a Nazgûl in this region)">
-                  ⚔⚔ → 🐉
+                  <Sym s="valor" />
+                  <Sym s="valor" /> → <GIcon name="wraith" size={18} />
                 </button>
               )}
             </div>
@@ -900,14 +912,14 @@ function PendingPanel({
       <div className="dice-legend hint">
         {Object.entries(isSearch ? SEARCH_FACE_INFO : BATTLE_FACE_INFO).map(([k, v]) => (
           <div key={k}>
-            <strong>{k}</strong>: {v.split('— ')[1]}
+            <DieFace f={k as SearchFace | BattleFace} /> <strong>{k}</strong>: {v.split('— ')[1]}
           </div>
         ))}
       </div>
       <div className="pending-actions">
         {canValor && pend.type === 'battle' && (
           <button onClick={() => onAct({ type: 'showValor' })} title="Spend 1 Valor: one more shadow troop falls">
-            Show Valor ⚔ (+1 slain{pend.valorKills > 0 ? `, ${pend.valorKills} so far` : ''})
+            Show Valor <Sym s="valor" /> (+1 slain{pend.valorKills > 0 ? `, ${pend.valorKills} so far` : ''})
           </button>
         )}
         {bombadil && (
@@ -963,7 +975,13 @@ function TravelDialog({
       </h3>
       {conn?.cost && (
         <p className="hint">
-          Special path — costs {conn.cost.map((c) => `${SYMBOL_GLYPH[c]} ${c}`).join(' + ')}
+          Special path — costs{' '}
+          {conn.cost.map((c, i) => (
+            <span key={i}>
+              {i > 0 && ' + '}
+              <Sym s={c} /> {c}
+            </span>
+          ))}
           {plan.character === 'gollum' ? ' (free for Gollum)' : ''}.
         </p>
       )}
@@ -1019,16 +1037,16 @@ function TravelDialog({
           </p>
           <div className="cover-buttons">
             <button disabled={stealthAvailable < 1} onClick={() => onGo('stealth')} title="Spend 1 Stealth: no search at all.">
-              🌿 Stealth ({stealthAvailable} available)
+              <Sym s="stealth" /> Stealth ({stealthAvailable} available)
             </button>
             <button onClick={() => onGo('search')} title="Risk it: roll the search dice at the destination.">
-              🎲 Risk a search ({searchDice} dice)
+              <GIcon name="die_search" size={18} /> Risk a search ({searchDice} dice)
             </button>
             <button
               onClick={() => onGo('ring')}
               title="Put on the Ring: lose 1 hope, the Eye moves to Frodo's region, but the search ignores shadow troops."
             >
-              💍 Put on the Ring ({Math.min(7, state.wraiths[destRegion] ?? 0)} dice, −1 hope, Eye follows)
+              <Sym s="resistance" /> Put on the Ring ({Math.min(7, state.wraiths[destRegion] ?? 0)} dice, −1 hope, Eye follows)
             </button>
           </div>
         </div>

@@ -519,13 +519,10 @@ function applySearch(s: GameState, events: GameEvent[]): void {
         }
         break;
       case 'recall': {
+        // Only a Nazgûl in Frodo's region is recalled; no effect in Mordor
+        // or when none are present.
         if (regionOf(loc) === MORDOR) break;
-        // Move 1 Nazgûl to Mordor: take from Frodo's region if possible,
-        // otherwise from the largest group.
-        const from =
-          (s.wraiths[regionOf(loc)] ?? 0) > 0
-            ? regionOf(loc)
-            : Object.entries(s.wraiths).sort((a, b) => b[1] - a[1]).find(([, n]) => n > 0)?.[0];
+        const from = (s.wraiths[regionOf(loc)] ?? 0) > 0 ? regionOf(loc) : undefined;
         if (from) {
           s.wraiths[from] -= 1;
           s.wraiths[MORDOR] = (s.wraiths[MORDOR] ?? 0) + 1;

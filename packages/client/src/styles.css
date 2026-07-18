@@ -929,3 +929,21 @@ select {
   0% { transform: translateX(-50%) scale(0.8); opacity: 0; }
   100% { transform: translateX(-50%) scale(1); opacity: 1; }
 }
+
+/* ---- Real game iconography (cropped from the owner's rulebook scan) ---- */
+.gicon {
+  height: 1.15em;
+  vertical-align: -0.2em;
+  border-radius: 3px;
+  display: inline-block;
+}
+.die .die-face .gicon {
+  height: 30px;
+  border-radius: 5px;
+}
+.dice-legend .gicon {
+  height: 20px;
+}
+.token .gicon {
+  margin-right: 2px;
+}

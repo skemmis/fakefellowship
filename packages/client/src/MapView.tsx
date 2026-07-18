@@ -22,9 +22,9 @@ function FxMarker({ m }: { m: FxMarkerState }) {
   return (
     <g className="fx-marker" style={{ transform: `translate(${x}px, ${y}px)` }}>
       {m.piece === 'eye' ? (
-        <text textAnchor="middle" className="fx-eye">👁</text>
+        <image href="/icons/eye.png" x={-26} y={-26} width={52} height={52} />
       ) : m.piece === 'nazgul' ? (
-        <text textAnchor="middle" className="fx-nazgul">🐉</text>
+        <image href="/icons/nazgul.png" x={-24} y={-24} width={48} height={48} />
       ) : (
         <>
           <circle r={22} fill={m.color} stroke="#14120e" strokeWidth={3} />
@@ -74,14 +74,21 @@ export function MapView({
         const wraiths = state.wraiths[r.id] ?? 0;
         const hasEye = state.eye === r.id;
         if (wraiths === 0 && !hasEye) return null;
-        const label = `${hasEye ? '👁 ' : ''}${wraiths > 0 ? `🐉×${wraiths}` : ''}`;
-        const w = 60 + label.length * 16;
+        const w = 24 + (hasEye ? 54 : 0) + (wraiths > 0 ? 100 : 0);
+        const left = r.x - w / 2 + 12;
+        const nazX = hasEye ? left + 54 : left;
         return (
           <g key={r.id} className="region-chip">
-            <rect x={r.x - w / 2} y={r.y - 26} width={w} height={52} rx={14} className="chip-bg" />
-            <text x={r.x} y={r.y + 12} textAnchor="middle" className="chip-text">
-              {label}
-            </text>
+            <rect x={r.x - w / 2} y={r.y - 28} width={w} height={56} rx={14} className="chip-bg" />
+            {hasEye && <image href="/icons/eye.png" x={left - 2} y={r.y - 24} width={48} height={48} />}
+            {wraiths > 0 && (
+              <>
+                <image href="/icons/nazgul.png" x={nazX} y={r.y - 22} width={44} height={44} />
+                <text x={nazX + 52} y={r.y + 13} className="chip-text">
+                  ×{wraiths}
+                </text>
+              </>
+            )}
             <title>
               {r.name}: {wraiths} Nazgûl{hasEye ? ' — the Eye of Sauron watches this region' : ''}
             </title>
@@ -171,9 +178,7 @@ export function MapView({
                 </circle>
               ))}
               {frodoLoc === loc.id && (
-                <text x={loc.x} y={loc.y - 48} textAnchor="middle" className="frodo-mark">
-                  💍
-                </text>
+                <image href="/icons/resistance.png" x={loc.x - 16} y={loc.y - 76} width={32} height={32} className="frodo-mark" />
               )}
             </g>
           </Fragment>
