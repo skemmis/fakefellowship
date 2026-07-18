@@ -1,4 +1,4 @@
-import { Fragment } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import {
   CHARACTER_MAP,
   LOCATIONS,
@@ -7,6 +7,37 @@ import {
   type GameState,
   type LocationId,
 } from '@emberfall/engine';
+import type { FxMarkerState, FxPulseState, FxTrailState } from './Game.js';
+
+/** A piece gliding from its origin to its destination. */
+function FxMarker({ m }: { m: FxMarkerState }) {
+  const [go, setGo] = useState(false);
+  useEffect(() => {
+    setGo(false);
+    const raf = requestAnimationFrame(() => requestAnimationFrame(() => setGo(true)));
+    return () => cancelAnimationFrame(raf);
+  }, [m.id]);
+  const x = go ? m.x2 : m.x1;
+  const y = go ? m.y2 : m.y1;
+  return (
+    <g className="fx-marker" style={{ transform: `translate(${x}px, ${y}px)` }}>
+      {m.piece === 'eye' ? (
+        <text textAnchor="middle" className="fx-eye">👁</text>
+      ) : m.piece === 'nazgul' ? (
+        <text textAnchor="middle" className="fx-nazgul">🐉</text>
+      ) : (
+        <>
+          <circle r={22} fill={m.color} stroke="#14120e" strokeWidth={3} />
+          {m.count && m.count > 1 && (
+            <text textAnchor="middle" dy={9} className="fx-count">
+              {m.count}
+            </text>
+          )}
+        </>
+      )}
+    </g>
+  );
+}
 
 /**
  * The illustrated board is the play surface: the game state is drawn as an
@@ -20,11 +51,17 @@ export function MapView({
   highlights,
   selectedLoc,
   onClickLocation,
+  fxMarker,
+  fxTrails,
+  fxPulse,
 }: {
   state: GameState;
   highlights: Map<LocationId, string>;
   selectedLoc: LocationId | null;
   onClickLocation: (loc: LocationId) => void;
+  fxMarker?: FxMarkerState | null;
+  fxTrails?: FxTrailState[];
+  fxPulse?: FxPulseState | null;
 }) {
   const frodoLoc = state.characters['frodo_sam']?.location;
 
@@ -142,6 +179,20 @@ export function MapView({
           </Fragment>
         );
       })}
+
+      {/* Animation layer: trails, pulses, moving pieces */}
+      {(fxTrails ?? []).map((t) => (
+        <line key={t.id} x1={t.x1} y1={t.y1} x2={t.x2} y2={t.y2} stroke={t.color} className="fx-trail" />
+      ))}
+      {fxPulse && (
+        <g key={fxPulse.id}>
+          <circle cx={fxPulse.x} cy={fxPulse.y} r={30} className="fx-pulse" />
+          <text x={fxPulse.x} y={fxPulse.y - 54} textAnchor="middle" className="fx-spawn-text">
+            +{fxPulse.count}
+          </text>
+        </g>
+      )}
+      {fxMarker && <FxMarker m={fxMarker} />}
     </svg>
   );
 }

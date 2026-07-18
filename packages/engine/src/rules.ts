@@ -155,6 +155,13 @@ function checkHavens(s: GameState, events: GameEvent[]): void {
   }
 }
 
+/** Shift the Eye of Sauron, emitting an animation payload. */
+function setEye(s: GameState, region: RegionId, events: GameEvent[], why: string): void {
+  if (s.eye === region) return;
+  s.eye = region;
+  events.push({ kind: 'shadow', text: `The Eye of Sauron turns to ${REGION_MAP[region].name} (${why}).`, fx: { fx: 'eye', to: region } });
+}
+
 function addShadow(s: GameState, loc: LocationId, n: number, events: GameEvent[], fromCard: boolean): void {
   if (fromCard && s.spawnStopped[loc]) {
     events.push({ kind: 'shadow', text: `${locName(loc)} is held by the Free Peoples — no shadow troops appear.` });
@@ -171,7 +178,11 @@ function addShadow(s: GameState, loc: LocationId, n: number, events: GameEvent[]
     placed++;
   }
   if (placed > 0) {
-    events.push({ kind: 'shadow', text: `${placed} shadow troop${placed > 1 ? 's' : ''} muster at ${locName(loc)} (${s.shadow[loc]}).` });
+    events.push({
+      kind: 'shadow',
+      text: `${placed} shadow troop${placed > 1 ? 's' : ''} muster at ${locName(loc)} (${s.shadow[loc]}).`,
+      fx: { fx: 'spawn', location: loc, count: placed },
+    });
   }
 }
 
@@ -308,7 +319,11 @@ function applySearch(s: GameState, events: GameEvent[]): void {
         if (from) {
           s.wraiths[from] -= 1;
           s.wraiths[MORDOR] = (s.wraiths[MORDOR] ?? 0) + 1;
-          events.push({ kind: 'search', text: `A Nazgûl is recalled from ${REGION_MAP[from].name} to Mordor.` });
+          events.push({
+            kind: 'search',
+            text: `A Nazgûl is recalled from ${REGION_MAP[from].name} to Mordor.`,
+            fx: { fx: 'move', piece: 'nazgul', from, to: MORDOR },
+          });
         }
         break;
       }
@@ -423,7 +438,11 @@ function advanceLine(s: GameState, lineId: string, events: GameEvent[]): void {
     if (n > 0) {
       delete s.shadow[from];
       s.shadow[to] = (s.shadow[to] ?? 0) + n;
-      events.push({ kind: 'shadow', text: `${n} shadow troop${n > 1 ? 's' : ''} advance from ${locName(from)} to ${locName(to)}.` });
+      events.push({
+        kind: 'shadow',
+        text: `${n} shadow troop${n > 1 ? 's' : ''} advance from ${locName(from)} to ${locName(to)}.`,
+        fx: { fx: 'move', piece: 'shadow', from, to, count: n },
+      });
     }
   }
   // Battles frontmost-first wherever both sides now stand.
@@ -452,7 +471,11 @@ function moveNazgulCloser(s: GameState, count: number, events: GameEvent[]): voi
     const to = options[0] ?? from;
     s.wraiths[from] -= 1;
     s.wraiths[to] = (s.wraiths[to] ?? 0) + 1;
-    events.push({ kind: 'shadow', text: `A Nazgûl sweeps from ${REGION_MAP[from].name} into ${REGION_MAP[to].name}.` });
+    events.push({
+      kind: 'shadow',
+      text: `A Nazgûl sweeps from ${REGION_MAP[from].name} into ${REGION_MAP[to].name}.`,
+      fx: { fx: 'move', piece: 'nazgul', from, to },
+    });
   }
 }
 
@@ -466,7 +489,11 @@ function deployNazgulToEye(s: GameState, count: number, events: GameEvent[]): vo
       if (!from) return;
       s.wraiths[from[0]] -= 1;
       s.wraiths[MORDOR] = (s.wraiths[MORDOR] ?? 0) + 1;
-      events.push({ kind: 'shadow', text: `A Nazgûl is recalled from ${REGION_MAP[from[0]].name} to Mordor.` });
+      events.push({
+        kind: 'shadow',
+        text: `A Nazgûl is recalled from ${REGION_MAP[from[0]].name} to Mordor.`,
+        fx: { fx: 'move', piece: 'nazgul', from: from[0], to: MORDOR },
+      });
     }
     return;
   }
@@ -482,7 +509,11 @@ function deployNazgulToEye(s: GameState, count: number, events: GameEvent[]): vo
     if (!from) return;
     s.wraiths[from] -= 1;
     s.wraiths[s.eye] = (s.wraiths[s.eye] ?? 0) + 1;
-    events.push({ kind: 'shadow', text: `A Nazgûl flies from ${REGION_MAP[from].name} to the Eye in ${REGION_MAP[s.eye].name}.` });
+    events.push({
+      kind: 'shadow',
+      text: `A Nazgûl flies from ${REGION_MAP[from].name} to the Eye in ${REGION_MAP[s.eye].name}.`,
+      fx: { fx: 'move', piece: 'nazgul', from, to: s.eye },
+    });
   }
 }
 
@@ -492,7 +523,11 @@ function resolveShadowCard(s: GameState, rng: Rng, events: GameEvent[]): void {
 
   if (card.special) {
     const info = SPECIAL_SHADOW_INFO[card.special];
-    events.push({ kind: 'shadow', text: `Special shadow card: ${info.name}!` });
+    events.push({
+      kind: 'shadow',
+      text: `Special shadow card: ${info.name}!`,
+      fx: { fx: 'shadowCard', half: 'special', specialName: info.name },
+    });
     if (card.special === 'war_drums') {
       for (const [loc, status] of Object.entries(s.siteStatus)) {
         if (status === 'stronghold' && MAP[loc].stronghold && !s.spawnStopped[loc]) {
@@ -515,9 +550,20 @@ function resolveShadowCard(s: GameState, rng: Rng, events: GameEvent[]): void {
     ? s.shadowDeck[s.shadowDeck.length - 1].back
     : next(rng) < 0.5 ? 'flag' : 'banner';
 
+  const lineDef = BATTLE_LINES.find((l) => l.id === card.line);
   if (nextBack === 'flag') {
+    events.push({
+      kind: 'shadow',
+      text: `Shadow card: the ${lineDef?.name ?? card.line} line ADVANCES.`,
+      fx: { fx: 'shadowCard', half: 'advance', lineName: lineDef?.name, lineColor: lineDef?.color, reinforce: card.reinforce, order: card.order },
+    });
     advanceLine(s, card.line!, events);
   } else {
+    events.push({
+      kind: 'shadow',
+      text: `Shadow card: REINFORCE ${locName(card.reinforce!)}.`,
+      fx: { fx: 'shadowCard', half: 'reinforce', lineName: lineDef?.name, lineColor: lineDef?.color, reinforce: card.reinforce, order: card.order },
+    });
     const loc = card.reinforce!;
     addShadow(s, loc, 1, events, true);
     if ((s.shadow[loc] ?? 0) > 0 && friendlyAt(s, loc) > 0) {
@@ -535,7 +581,7 @@ function resolveShadowCard(s: GameState, rng: Rng, events: GameEvent[]): void {
           s.queue.unshift({ step: 'search', context: 'order', location: frodoLoc });
         } else {
           s.eye = fr;
-          events.push({ kind: 'shadow', text: `The Eye of Sauron turns to ${REGION_MAP[fr].name}.` });
+          events.push({ kind: 'shadow', text: `The Eye of Sauron turns to ${REGION_MAP[fr].name}.`, fx: { fx: 'eye', to: fr } });
         }
         break;
       }
@@ -555,7 +601,7 @@ function resolveShadowCard(s: GameState, rng: Rng, events: GameEvent[]): void {
 // ---------------------------------------------------------------------------
 
 function resolveDarken(s: GameState, rng: Rng, cardLoc: LocationId, events: GameEvent[]): void {
-  events.push({ kind: 'card', text: 'SKIES DARKEN!' });
+  events.push({ kind: 'card', text: 'SKIES DARKEN!', fx: { fx: 'darken', location: cardLoc } });
   // 1. Threat rises.
   if (s.threatIdx < THREAT_TRACK.length - 1) s.threatIdx += 1;
   events.push({ kind: 'card', text: `The threat rate rises: ${THREAT_TRACK[s.threatIdx]} shadow cards per turn.` });
@@ -567,7 +613,7 @@ function resolveDarken(s: GameState, rng: Rng, cardLoc: LocationId, events: Game
       changeHope(s, -2, events, 'the Eye finds Frodo\'s trail');
     } else {
       s.eye = fr;
-      events.push({ kind: 'card', text: `The Eye of Sauron turns to ${REGION_MAP[fr].name}.` });
+      events.push({ kind: 'card', text: `The Eye of Sauron turns to ${REGION_MAP[fr].name}.`, fx: { fx: 'eye', to: fr } });
     }
   }
   // 3. Troops muster under cover of darkness.
@@ -1198,7 +1244,11 @@ export function applyAction(state: GameState, playerId: PlayerId, action: Action
       }
       // Attacks draw the Eye.
       s.eye = regionOf(loc);
-      events.push({ kind: 'action', text: `${charName(c)} attacks at ${locName(loc)} — the Eye turns to ${REGION_MAP[s.eye].name}.` });
+      events.push({
+        kind: 'action',
+        text: `${charName(c)} attacks at ${locName(loc)} — the Eye turns to ${REGION_MAP[s.eye].name}.`,
+        fx: { fx: 'eye', to: s.eye },
+      });
       if (regionOf(loc) === MORDOR) completeObjective(s, 'challenge_sauron', events);
       rollBattle(s, rng, loc, 'attack', dice, events);
       break;
@@ -1219,7 +1269,11 @@ export function applyAction(state: GameState, playerId: PlayerId, action: Action
       // Captured strongholds no longer receive card-driven shadow troops.
       s.spawnStopped[here] = true;
       s.eye = regionOf(here);
-      events.push({ kind: 'haven', text: `${locName(here)} is captured — it now shelters the Free Peoples! The Eye turns to ${REGION_MAP[s.eye].name}.` });
+      events.push({
+        kind: 'haven',
+        text: `${locName(here)} is captured — it now shelters the Free Peoples! The Eye turns to ${REGION_MAP[s.eye].name}.`,
+        fx: { fx: 'eye', to: s.eye },
+      });
       changeHope(s, CAPTURE_HOPE, events, `${locName(here)} captured`);
       if (here === 'isengard') completeObjective(s, 'staff_broken', events);
       if (here === 'moria') completeObjective(s, 'confront_balrog', events);
@@ -1542,6 +1596,7 @@ function doTravel(
   events.push({
     kind: 'action',
     text: `${charName(c)} travels to ${locName(action.to)}${extras.length ? ` with ${extras.join(', ')}` : ''}${gandalfRide ? ' (riding hard, two roads)' : ''}.`,
+    fx: { fx: 'move', piece: 'character', from, to: action.to, character: c },
   });
   // Faramir leading troops may spring a free Attack at his destination.
   if (c === 'faramir' && Object.values(troops).some((n) => (n ?? 0) > 0)) {
@@ -1557,7 +1612,7 @@ function doTravel(
       // Rulebook fine point: lose 1 hope, Eye to his region, search ignoring shadow troops.
       changeHope(s, -1, events, 'Frodo puts on the Ring');
       s.eye = regionOf(action.to);
-      events.push({ kind: 'search', text: `Frodo puts on the Ring! The Eye turns to ${REGION_MAP[s.eye].name}.` });
+      events.push({ kind: 'search', text: `Frodo puts on the Ring! The Eye turns to ${REGION_MAP[s.eye].name}.`, fx: { fx: 'eye', to: s.eye } });
       s.queue.unshift({ step: 'search', context: 'ring', location: action.to });
     } else {
       s.queue.unshift({ step: 'search', context: 'travel', location: action.to });

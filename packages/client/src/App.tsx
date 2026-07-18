@@ -22,6 +22,7 @@ function GameApp() {
   const [playerId, setPlayerId] = useState<string | null>(null);
   const [game, setGame] = useState<GameState | null>(null);
   const [log, setLog] = useState<GameEvent[]>([]);
+  const [batch, setBatch] = useState<{ events: GameEvent[]; id: number }>({ events: [], id: 0 });
   const [chat, setChat] = useState<{ from: string; text: string }[]>([]);
   const [error, setError] = useState<string | null>(null);
 
@@ -35,15 +36,16 @@ function GameApp() {
         case 'room':
           setRoom(msg.info);
           break;
-        case 'game':
+        case 'game': {
           setGame(msg.state);
+          const isReplay = msg.events.length > 20;
           setLog((prev) =>
             // A full-history replay (reconnect) replaces the log; otherwise append.
-            msg.events.length > 20 && prev.length === 0
-              ? msg.events
-              : [...prev, ...msg.events].slice(-400),
+            isReplay && prev.length === 0 ? msg.events : [...prev, ...msg.events].slice(-400),
           );
+          if (!isReplay) setBatch((b) => ({ events: msg.events, id: b.id + 1 }));
           break;
+        }
         case 'chat':
           setChat((prev) => [...prev.slice(-100), { from: msg.from, text: msg.text }]);
           break;
@@ -71,7 +73,7 @@ function GameApp() {
       )}
       {error && <div className="banner banner-error">{error}</div>}
       {game && playerId ? (
-        <Game state={game} playerId={playerId} log={log} chat={chat} />
+        <Game state={game} playerId={playerId} log={log} chat={chat} batch={batch} />
       ) : (
         <Lobby room={room} playerId={playerId} />
       )}

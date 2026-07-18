@@ -335,6 +335,29 @@ export type Action =
   | { type: 'confirm' } // apply the pending roll and continue
   | { type: 'discard'; card: string }; // resolve a pending hand-limit discard
 
+/** Structured visual payload so the client can animate what happened. */
+export type EventFx =
+  | {
+      fx: 'move';
+      piece: 'shadow' | 'friendly' | 'nazgul' | 'character';
+      from: string; // LocationId, or RegionId for nazgul
+      to: string;
+      count?: number;
+      character?: CharacterId;
+    }
+  | { fx: 'eye'; to: RegionId }
+  | { fx: 'spawn'; location: LocationId; count: number }
+  | {
+      fx: 'shadowCard';
+      half: 'advance' | 'reinforce' | 'special';
+      lineName?: string;
+      lineColor?: string;
+      reinforce?: LocationId;
+      order?: ShadowOrder;
+      specialName?: string;
+    }
+  | { fx: 'darken'; location: LocationId };
+
 export interface GameEvent {
   text: string;
   kind:
@@ -348,6 +371,8 @@ export interface GameEvent {
     | 'turn'
     | 'win'
     | 'loss';
+  /** Optional animation payload. */
+  fx?: EventFx;
 }
 
 export interface ActionResult {

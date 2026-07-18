@@ -142,13 +142,11 @@ export function buildEventCards(): EventCard[] {
 }
 
 /** 12 Skies Darken cards; each targets a location for its troop drop. (targets reconstructed) */
-/**
- * Skies Darken step-3 troop-drop targets. 'dorwinion' is transcribed from a
- * physical card; the other 11 are placeholders awaiting transcription.
- */
+/** Skies Darken step-3 troop-drop targets — all 12 transcribed from the cards. */
 const DARKEN_TARGETS: LocationId[] = [
-  'dorwinion', 'south_ithilien', 'dunland', 'rhun', 'near_harad', 'hollin',
-  'brown_lands', 'old_forest_road', 'fords_of_isen', 'lake_town', 'osgiliath', 'harondor',
+  'druadan_forest', 'dorwinion', 'gladden_fields', 'hollin', 'mount_doom',
+  'north_ithilien', 'south_ithilien', 'southern_mirkwood', 'tharbad',
+  'fangorn_forest', 'druwaith_iaur', 'emyn_muil',
 ];
 
 export function buildDarkenCards(): DarkenCard[] {

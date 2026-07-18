@@ -50,17 +50,152 @@ type TravelPlan = {
   troops: Partial<Record<Faction, number>>;
 };
 
+// ---------------------------------------------------------------------------
+// Animation of engine fx: moving pieces, trails, card reveals.
+// ---------------------------------------------------------------------------
+
+export interface FxMarkerState {
+  id: number;
+  piece: 'shadow' | 'friendly' | 'nazgul' | 'character' | 'eye';
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  count?: number;
+  color?: string;
+}
+export interface FxTrailState {
+  id: number;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  color: string;
+}
+export interface FxPulseState {
+  id: number;
+  x: number;
+  y: number;
+  count: number;
+}
+export interface FxRevealState {
+  id: number;
+  title: string;
+  detail: string;
+  color?: string;
+  dark?: boolean;
+}
+
+function fxPos(id: string): { x: number; y: number } | null {
+  const loc = MAP[id];
+  if (loc) return { x: loc.x, y: loc.y };
+  const region = REGION_MAP[id];
+  if (region) return { x: region.x, y: region.y };
+  return null;
+}
+
+function useFx(batch: { events: GameEvent[]; id: number }) {
+  const [marker, setMarker] = useState<FxMarkerState | null>(null);
+  const [trails, setTrails] = useState<FxTrailState[]>([]);
+  const [pulse, setPulse] = useState<FxPulseState | null>(null);
+  const [reveal, setReveal] = useState<FxRevealState | null>(null);
+  const queue = useRef<NonNullable<GameEvent['fx']>[]>([]);
+  const busy = useRef(false);
+  const seq = useRef(0);
+
+  const pump = () => {
+    if (busy.current) return;
+    const fx = queue.current.shift();
+    if (!fx) return;
+    busy.current = true;
+    const id = ++seq.current;
+    const done = (ms: number) => {
+      setTimeout(() => {
+        busy.current = false;
+        pump();
+      }, ms);
+    };
+    if (fx.fx === 'move') {
+      const a = fxPos(fx.from);
+      const b = fxPos(fx.to);
+      if (!a || !b) return done(0);
+      const color =
+        fx.piece === 'shadow' ? '#c0392b' : fx.piece === 'friendly' ? '#3c8b4a' : fx.piece === 'nazgul' ? '#222' : CHARACTER_MAP[fx.character ?? '']?.color ?? '#ddd';
+      setMarker({ id, piece: fx.piece, x1: a.x, y1: a.y, x2: b.x, y2: b.y, count: fx.count, color });
+      setTimeout(() => {
+        setMarker(null);
+        setTrails((t) => [...t.slice(-7), { id, x1: a.x, y1: a.y, x2: b.x, y2: b.y, color }]);
+        setTimeout(() => setTrails((t) => t.filter((x) => x.id !== id)), 6000);
+      }, 850);
+      done(900);
+    } else if (fx.fx === 'eye') {
+      const b = fxPos(fx.to);
+      if (!b) return done(0);
+      setMarker({ id, piece: 'eye', x1: b.x, y1: b.y - 220, x2: b.x, y2: b.y, color: '#c0392b' });
+      setTimeout(() => setMarker(null), 850);
+      done(900);
+    } else if (fx.fx === 'spawn') {
+      const a = fxPos(fx.location);
+      if (!a) return done(0);
+      setPulse({ id, x: a.x, y: a.y, count: fx.count });
+      setTimeout(() => setPulse(null), 800);
+      done(850);
+    } else if (fx.fx === 'shadowCard') {
+      setReveal({
+        id,
+        title:
+          fx.half === 'special'
+            ? `SPECIAL: ${fx.specialName}`
+            : fx.half === 'advance'
+              ? 'SHADOW CARD — ADVANCE'
+              : 'SHADOW CARD — REINFORCE',
+        detail:
+          fx.half === 'advance'
+            ? `The ${fx.lineName ?? ''} line marches one step`
+            : fx.half === 'reinforce'
+              ? `+1 troop at ${MAP[fx.reinforce ?? '']?.name ?? ''} · order: ${fx.order === 'eye' ? 'the Eye seeks Frodo' : fx.order === 'hunt2' ? '2 Nazgûl close in' : '3 Nazgûl deploy to the Eye'}`
+              : '',
+        color: fx.lineColor,
+      });
+      setTimeout(() => setReveal((r) => (r?.id === id ? null : r)), 2600);
+      done(1100);
+    } else if (fx.fx === 'darken') {
+      setReveal({
+        id,
+        title: 'SKIES DARKEN',
+        detail: `Threat rises · the Eye seeks Frodo · 3 troops at ${MAP[fx.location]?.name ?? ''} · old perils return`,
+        dark: true,
+      });
+      setTimeout(() => setReveal((r) => (r?.id === id ? null : r)), 3200);
+      done(1400);
+    } else {
+      done(0);
+    }
+  };
+
+  useEffect(() => {
+    for (const e of batch.events) if (e.fx) queue.current.push(e.fx);
+    pump();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [batch.id]);
+
+  return { marker, trails, pulse, reveal };
+}
+
 export function Game({
   state,
   playerId,
   log,
   chat,
+  batch,
 }: {
   state: GameState;
   playerId: string;
   log: GameEvent[];
   chat: { from: string; text: string }[];
+  batch: { events: GameEvent[]; id: number };
 }) {
+  const fx = useFx(batch);
   const me = state.players.find((p) => p.id === playerId);
   const active = state.players[state.turn.playerIdx];
   const myTurn = active.id === playerId && state.phase === 'playing';
@@ -227,7 +362,16 @@ export function Game({
             highlights={highlights}
             selectedLoc={mode.kind === 'travel' ? state.characters[mode.character]?.location ?? null : null}
             onClickLocation={onClickLocation}
+            fxMarker={fx.marker}
+            fxTrails={fx.trails}
+            fxPulse={fx.pulse}
           />
+          {fx.reveal && (
+            <div className={`fx-reveal ${fx.reveal.dark ? 'dark' : ''}`} style={fx.reveal.color ? { borderColor: fx.reveal.color } : undefined}>
+              <div className="fx-reveal-title">{fx.reveal.title}</div>
+              <div className="fx-reveal-detail">{fx.reveal.detail}</div>
+            </div>
+          )}
           <button
             className="board-only-toggle"
             title="Toggle the game overlay to see the board art underneath"

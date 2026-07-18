@@ -843,3 +843,89 @@ select {
   right: 10px;
   opacity: 0.85;
 }
+
+/* ---------- Animation layer ---------- */
+.fx-marker {
+  transition: transform 800ms ease-in-out;
+  pointer-events: none;
+}
+.fx-eye {
+  font-size: 64px;
+  filter: drop-shadow(0 0 10px #c0392b);
+}
+.fx-nazgul {
+  font-size: 52px;
+  filter: drop-shadow(0 0 8px #000);
+}
+.fx-count {
+  fill: #fff;
+  font-size: 26px;
+  font-weight: bold;
+}
+.fx-trail {
+  stroke-width: 8;
+  stroke-dasharray: 4 14;
+  stroke-linecap: round;
+  animation: trailfade 6s forwards;
+  pointer-events: none;
+}
+@keyframes trailfade {
+  0% { opacity: 0.9; }
+  100% { opacity: 0; }
+}
+.fx-pulse {
+  fill: none;
+  stroke: #c0392b;
+  stroke-width: 8;
+  animation: pulseout 0.8s ease-out forwards;
+  pointer-events: none;
+}
+@keyframes pulseout {
+  0% { r: 12; stroke-opacity: 1; }
+  100% { r: 70; stroke-opacity: 0; }
+}
+.fx-spawn-text {
+  fill: #ff6b5b;
+  font-size: 40px;
+  font-weight: bold;
+  paint-order: stroke;
+  stroke: #14120e;
+  stroke-width: 6px;
+  animation: trailfade 0.8s forwards;
+  pointer-events: none;
+}
+.fx-reveal {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(38, 36, 31, 0.95);
+  border: 3px solid var(--accent);
+  border-radius: 10px;
+  padding: 10px 22px;
+  text-align: center;
+  animation: revealpop 0.3s ease-out;
+  pointer-events: none;
+  max-width: 70%;
+}
+.fx-reveal.dark {
+  background: rgba(15, 10, 20, 0.96);
+  border-color: #7a2e2e;
+}
+.fx-reveal-title {
+  font-weight: bold;
+  font-size: 19px;
+  color: var(--accent);
+  letter-spacing: 1px;
+}
+.fx-reveal.dark .fx-reveal-title {
+  color: #e07a6a;
+}
+.fx-reveal-detail {
+  font-size: 14px;
+  color: var(--ink);
+}
+@keyframes revealpop {
+  0% { transform: translateX(-50%) scale(0.8); opacity: 0; }
+  100% { transform: translateX(-50%) scale(1); opacity: 1; }
+}
