@@ -63,23 +63,46 @@ repository is paraphrased, and no artwork or card text is copied.
   interleave.
 - Captured strongholds never receive card-driven shadow troops.
 
-**Reconstructed (mechanically plausible stand-ins, marked ≈ in the UI —
-correct these against the physical game and edit the data files):**
+**Transcribed from the physical cards (photos supplied by the owner):**
+
+- The full shadow deck: all 48 regular cards (battle-line endpoints,
+  reinforce origins, 16/16/16 special orders) with their real printed backs
+  (25 red-flag / 25 Eye-banner), plus both specials — The Drums of War
+  (+1 troop at every Mordor shadow stronghold) and The Wheels of Saruman
+  (the current player picks: remove 2 friendly troops / one player gives up
+  2 cards or tokens / lose 1 hope).
+- All 14 event cards, all 48 region cards (symbols + corner numbers), and
+  all 12 Skies Darken troop-drop locations.
+- All 24 objective cards: character-binding setup ("use X" cards pull that
+  character into the game), extra setup shadow troops, troops reserved on
+  cards, objective-card actions, plain-location Captures (Osgiliath,
+  Dunland), counters (Legolas's tally, Éomer's pinned troops, the hobbits'
+  pledges, Éowyn's Nazgûl), Aragorn's once-per-game ride, Boromir's last
+  stand and replacement, and Gandalf's fall and return in white.
+
+**Reconstructed (stand-ins pending confirmation — see `uncertain` notes in
+`engine/src/data/cards.ts`):**
 
 - The exact routes of some paths and battle lines (`engine/src/data/board.ts`)
-  — read from a board photo, a few orderings are judgment calls.
-- Search/battle die face distributions (`SEARCH_DIE` / `BATTLE_DIE`).
-- The 14 event cards' effects, objective requirements and rewards, the 2
-  special shadow cards' effects, region-card flavor numbers, and Skies
-  Darken troop-drop locations. (Region cards do carry 12 of each symbol,
-  which matches the reference sheet's count of 12 Resistance in the game.)
+  — being trued up with the in-browser board editor.
+- Search/battle die face distributions (`SEARCH_DIE` / `BATTLE_DIE`) —
+  face effects are confirmed; per-die counts still needed.
+- A few unreadable objective-card details: some alternative Capture costs,
+  three symbol costs (Unseat Denethor, Free Théoden, Attain the Blessing),
+  the reward token types, and the exact die-outcome tables for Confront the
+  Balrog and Shelob's Lair.
+- Gandalf the White's upgraded battle magic and Éowyn's die-changing grant
+  (not yet implemented).
 
 **Not yet implemented:**
 
 - Consent prompts when traveling with another player's character (the UI
   notes "ask their player!" and the log announces it; the move is allowed).
-- The full 24-objective deck (9 objectives implemented; each game deals the
-  finale plus 3–5 others per difficulty).
+- Optional troop-repositioning rewards on a few objectives (Subdue Umbar,
+  Rangers Secure Eriador, Bring Light to Mirkwood, Avenge Balin) — the
+  objective completes; the free move is skipped.
+- Infiltrate Minas Morgul's deck surgery is automated (both top shadow
+  cards are removed rather than player-chosen).
 
 **Solo variant (implemented):** one player runs Frodo & Sam plus 4 random
 characters. A solo token rotates each turn: the token character takes up to
@@ -91,7 +114,7 @@ interleave.
 
 ## Known state
 
-- 28 engine tests green; 1000+ headless bot games run with zero invariant
+- 32 engine tests green; 1000+ headless bot games run with zero invariant
   violations and guaranteed termination.
 - The built-in bots lose essentially every game — they are coverage tools,
   not competent players. Two humans coordinating stealth, garrisons, and Eye

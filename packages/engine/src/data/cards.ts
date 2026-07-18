@@ -1,7 +1,9 @@
 import type {
+  CharacterId,
   DarkenCard,
   Difficulty,
   EventCard,
+  Faction,
   LocationId,
   RegionCard,
   RegionId,
@@ -254,8 +256,12 @@ export const SPECIAL_SHADOW_INFO: Record<string, { name: string; text: string }>
 };
 
 // ---------------------------------------------------------------------------
-// Objectives. The finale's procedure is from the rulebook; the others use
-// real card names from the scenario lists with reconstructed requirements.
+// Objectives: all 24 transcribed from the physical cards (text paraphrased).
+// A card marked `uses` forces that character into the game at setup.
+// `setupShadow` places extra shadow troops; `reserve` sets troops aside on
+// the card (unusable until the objective completes). `uncertain` flags a
+// detail that could not be read from the photos and awaits confirmation —
+// the engine uses a conservative stand-in until then.
 // ---------------------------------------------------------------------------
 
 export interface ObjectiveDef {
@@ -263,25 +269,175 @@ export interface ObjectiveDef {
   name: string;
   text: string;
   finale?: boolean;
-  reconstructed: boolean;
+  /** red = always in play (the finale); black = suggested first-game set. */
+  star?: 'red' | 'black';
+  uses?: CharacterId[];
+  setupShadow?: Partial<Record<LocationId, number>>;
+  reserve?: { faction: Faction; count: number };
+  uncertain?: string;
 }
 
 export const OBJECTIVES: ObjectiveDef[] = [
   {
     id: 'destroy_ring',
     name: 'Destroy the One Ring',
-    text: 'Complete every other objective first. Then, with Frodo at Mount Doom, spend 5 Resistance and survive a final search (1 die per Nazgûl in Mordor, per shadow troop at Mount Doom, and per missing hope — max 7). Win if any hope remains.',
+    text: 'Complete every other objective first. Then, as an action, Frodo spends 5 Resistance at Mount Doom and survives a final search with 1 extra die per missing hope (7 dice max). Win if he endures.',
     finale: true,
-    reconstructed: false,
+    star: 'red',
+    uses: ['frodo_sam'],
   },
-  { id: 'blessing_elves', name: 'Attain the Blessing of the Elves', text: 'Frodo is at Rivendell with no shadow troops present. Reward: +1 hope and 1 Stealth token.', reconstructed: true },
-  { id: 'staff_broken', name: 'Saruman, Your Staff Is Broken', text: 'Capture Isengard. Reward: +1 hope.', reconstructed: true },
-  { id: 'challenge_sauron', name: 'Challenge Sauron', text: 'Do the Attack action in Mordor (drawing the Eye there). Reward: +2 hope.', reconstructed: true },
-  { id: 'confront_balrog', name: 'Confront the Balrog', text: 'Capture Moria. Reward: +1 hope.', reconstructed: true },
-  { id: 'oathbreakers', name: 'Oathbreakers Fulfill Their Duty', text: 'Have 5 or more Gondor troops on the board. Reward: +1 hope.', reconstructed: true },
-  { id: 'subdue_umbar', name: 'Subdue Umbar', text: 'Capture Umbar. Reward: +1 hope.', reconstructed: true },
-  { id: 'ride_eored', name: 'Ride with the Éored', text: 'Have 6 or more Rohirrim troops on the board. Reward: +1 hope.', reconstructed: true },
-  { id: 'light_mirkwood', name: 'Bring Light to Mirkwood', text: 'Capture Dol Guldur. Reward: +1 hope.', reconstructed: true },
+  {
+    id: 'blessing_elves',
+    name: 'Attain the Blessing of the Elves',
+    text: 'Setup: 3 Elven troops wait on this card. As an action, a character in Rivendell spends 3 Friendship with another character present. Done: the waiting troops join the supply, each player with a character in Rivendell may take a Friendship token, and hope rises 1.',
+    star: 'black',
+    reserve: { faction: 'sylvan', count: 3 },
+    uncertain: 'symbol spent (read as Friendship ×3) and token granted',
+  },
+  {
+    id: 'staff_broken',
+    name: '“Saruman, Your Staff Is Broken”',
+    text: 'Setup: 2 extra shadow troops in Isengard. Done when Isengard is a haven AND Rohan holds no shadow troops or shadow strongholds. The current player may take 1 token.',
+    star: 'black',
+    setupShadow: { isengard: 2 },
+    uncertain: 'which token the reward grants (using Stealth)',
+  },
+  {
+    id: 'challenge_sauron',
+    name: 'Challenge Sauron',
+    text: 'A character spends an action in North Ithilien while 2 Rohirrim, 2 Elven, and 3 Gondor troops are present. Done: the Eye shifts to Ithilien and every shadow troop in Mordor falls back to Udûn.',
+    star: 'black',
+  },
+  {
+    id: 'subdue_umbar',
+    name: 'Subdue Umbar',
+    text: 'Done when Umbar is a haven, OR every Haradwaith location holds a friendly troop with no shadow troops in Haradwaith. (The reward repositioning to Pelargir is not automated yet.)',
+  },
+  {
+    id: 'avenge_balin',
+    name: 'Avenge Balin!',
+    text: 'Done when Moria is a haven with at least 2 Dwarven troops inside. If at least 4 Dwarven troops stand in Moria, the current player may take 2 Valor tokens.',
+    uncertain: 'first completion clause partially unreadable — using “Moria is a haven”',
+  },
+  {
+    id: 'oathbreakers',
+    name: 'Oathbreakers Fulfill Their Duty',
+    text: 'Once per game Aragorn rides from Edoras to Erech (an action): 2 shadow troops muster at Pelargir, Umbar’s shadow troops march there too, and up to 3 Gondor troops rally at Erech. Done once he has ridden AND Gondor holds no shadow troops or strongholds: hope rises 1.',
+    uses: ['aragorn'],
+  },
+  {
+    id: 'light_mirkwood',
+    name: 'Bring Light to Mirkwood',
+    text: 'Setup: 1 shadow troop each in Old Forest Road and Southern Mirkwood. Done when Mirkwood holds no shadow troops (Dol Guldur may stay uncaptured) and every Mirkwood location has an Elven troop: hope rises 1.',
+    setupShadow: { old_forest_road: 1, southern_mirkwood: 1 },
+  },
+  {
+    id: 'arwen_banner',
+    name: 'Arwen Unfurls the Banner',
+    text: 'Arwen spends an action and 1 Friendship in Minas Tirith while it is a haven holding at least 1 Gondor, 1 Rohirrim, 1 Elven, and 1 Dwarven troop. Done: hope rises 1.',
+    uses: ['arwen'],
+    uncertain: 'symbol spent (read as 1 Friendship)',
+  },
+  {
+    id: 'boromir_honor',
+    name: 'Boromir Reclaims His Honor',
+    text: 'Done when Boromir and another character stand where the last friendly troop falls in battle: up to 2 shadow troops are driven off, and Boromir leaves the game. When the next objective completes, a new character takes his place.',
+    uses: ['boromir'],
+  },
+  {
+    id: 'unseat_denethor',
+    name: 'Unseat Denethor',
+    text: 'Setup: 4 Gondor troops wait on this card. As an action, a character in Minas Tirith spends 2 Stealth, 1 Resistance, and 1 Valor with another character present. Done: the waiting troops join the supply, up to 3 Gondor troops muster in Minas Tirith, and hope rises 1.',
+    reserve: { faction: 'vale', count: 4 },
+    uncertain: 'exact symbol cost unreadable — using 2 Stealth + 1 Resistance + 1 Valor',
+  },
+  {
+    id: 'shelobs_lair',
+    name: 'Shelob’s Lair',
+    text: 'Sam spends an action in Minas Morgul to brave the lair, rolling 3 search dice with Gollum present (hope losses per the card). Done: if Frodo lost no hope doing it, he may take 1 extra action this turn.',
+    uses: ['gollum'],
+    uncertain: 'die-face outcome table and Gollum-player penalty pending confirmation — using search-die harm as stand-in',
+  },
+  {
+    id: 'hobbits_loyalty',
+    name: 'Hobbits Pledge Their Loyalty',
+    text: 'In a haven, Merry & Pippin may spend an action to discard a Friendship region card matching their region, pledging that people (a Friendship token goes on the card). Done at 2 pledges from different peoples: their player keeps the 2 tokens and hope rises 1.',
+    uses: ['merry_pippin'],
+  },
+  {
+    id: 'that_makes_six',
+    name: '“That Makes Six!”',
+    text: 'Shadow troops Legolas removes with his Sure Shot gather on this card. Done at 6: they return to the supply and hope rises 1.',
+    uses: ['legolas'],
+  },
+  {
+    id: 'free_theoden',
+    name: 'Free Théoden’s Mind',
+    text: 'Setup: 4 Rohirrim troops wait on this card. As an action, a character in Edoras spends 2 Friendship and 1 Resistance with another character present. Done: the waiting troops join the supply, up to 2 Rohirrim muster in Edoras, and hope rises 1.',
+    reserve: { faction: 'riders', count: 4 },
+    uncertain: 'exact symbol cost unreadable — using 2 Friendship + 1 Resistance',
+  },
+  {
+    id: 'infiltrate_morgul',
+    name: 'Infiltrate Minas Morgul',
+    text: 'Setup: 1 extra shadow troop in Minas Morgul. Done when Minas Morgul is a haven: the current player may take 2 tokens, and the top 2 shadow cards are removed from the game.',
+    setupShadow: { minas_morgul: 1 },
+    uncertain: 'alternative Capture cost and reward token type; deck-surgery choice is automated (both cards removed)',
+  },
+  {
+    id: 'ride_eored',
+    name: 'Ride with the Éored',
+    text: 'When Éomer’s Attack with Rohirrim present fells shadow troops, one may be pinned to this card’s spot for his region (Rohan and each adjacent region, 1 each). Done at 4 pinned: they return to the supply and hope rises 1.',
+    uses: ['eomer'],
+  },
+  {
+    id: 'confront_balrog',
+    name: 'Confront the Balrog',
+    text: 'Gandalf spends an action in Moria to face the terror, rolling 3 search dice (hope losses per the card). Done: Gandalf falls from the board — when the next Skies Darken card is drawn he returns to Lórien as Gandalf the White, and hope rises 2.',
+    uses: ['gandalf'],
+    uncertain: 'die-face outcome table pending confirmation — using search-die harm as stand-in; Gandalf the White’s upgraded reroll not yet implemented',
+  },
+  {
+    id: 'rangers_eriador',
+    name: 'Rangers Secure Eriador',
+    text: 'Done when Eriador holds no shadow troops or strongholds and every Eriador location has a friendly troop: hope rises 1. (The reward repositioning is not automated yet.)',
+  },
+  {
+    id: 'dwarven_lands',
+    name: 'Lift Shadow from Dwarven Lands',
+    text: 'Setup: 1 shadow troop in Ered Luin. Done when Ered Luin holds no shadow troops but at least 4 Dwarven troops, and Dale has no shadow troops or strongholds: the current player may take 2 Valor tokens and hope rises 1.',
+    uses: ['gimli'],
+    setupShadow: { ered_luin: 1 },
+  },
+  {
+    id: 'shieldmaiden',
+    name: '“Shieldmaiden No Longer”',
+    text: 'Done when Éowyn has destroyed at least 2 Nazgûl and Rohan holds no shadow troops or strongholds: hope rises 1.',
+    uses: ['eowyn'],
+    uncertain: 'her battle die-changing grant pending confirmation — not yet implemented',
+  },
+  {
+    id: 'frecas_heirs',
+    name: 'Deal with Freca’s Heirs',
+    text: 'Dunland may be Captured (though it is no stronghold) for the usual 3 Valor. Done when Dunland is a haven with at least 2 Rohirrim troops: 1 more Rohirrim may muster there. If shadow troops later overrun Dunland, lose 3 hope and the haven is gone.',
+    uncertain: 'alternative Capture cost unreadable — only the usual 3 Valor implemented',
+  },
+  {
+    id: 'lay_bare_pits',
+    name: 'Lay Bare the Pits',
+    text: 'Setup: 1 extra shadow troop in Dol Guldur. Galadriel leads the assault. Done when Dol Guldur is a haven with at least 3 Elven troops: if Galadriel stands there, hope rises 1 more (beyond the Capture’s 2).',
+    uses: ['galadriel'],
+    setupShadow: { dol_guldur: 1 },
+    uncertain: 'her alternative Capture cost unreadable — only the usual 3 Valor implemented',
+  },
+  {
+    id: 'secure_anduin',
+    name: 'Secure the Crossing of the Anduin',
+    text: 'Setup: 1 shadow troop in Osgiliath. Faramir may Capture Osgiliath (though it is no stronghold) for the usual 3 Valor. Done when Osgiliath is a haven: 1 Gondor troop may muster there. If shadow troops later overrun it, lose 3 hope and the haven is gone.',
+    uses: ['faramir'],
+    setupShadow: { osgiliath: 1 },
+    uncertain: 'alternative Capture cost unreadable — only the usual 3 Valor implemented',
+  },
 ];
 
 export const OBJECTIVE_MAP: Record<string, ObjectiveDef> = Object.fromEntries(

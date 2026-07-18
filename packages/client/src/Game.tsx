@@ -485,14 +485,11 @@ export function Game({
           <section className="panel">
             <h3>Objectives {objectivesLeft > 0 ? `(${objectivesLeft} to go, then Mount Doom)` : '— the way is open!'}</h3>
             <ul className="objectives">
-              {state.objectives.map((o) => {
-                const def = { destroy_ring: null }; // names resolved below
-                return (
-                  <li key={o.id} className={o.complete ? 'done' : ''}>
-                    {o.complete ? '✅' : '⬜'} <ObjectiveText id={o.id} />
-                  </li>
-                );
-              })}
+              {state.objectives.map((o) => (
+                <li key={o.id} className={o.complete ? 'done' : ''}>
+                  {o.complete ? '✅' : '⬜'} <ObjectiveText id={o.id} />
+                </li>
+              ))}
             </ul>
           </section>
 
@@ -506,7 +503,7 @@ export function Game({
                   {p.id === active.id && ' ← playing'} {p.id === playerId && ' (you)'}
                   <div className="hint">
                     {p.characters
-                      .map((c) => `${CHARACTER_MAP[c].name} — ${MAP[state.characters[c].location].name}`)
+                      .map((c) => `${CHARACTER_MAP[c].name} — ${state.characters[c] ? MAP[state.characters[c].location].name : 'fallen (for now)'}`)
                       .join(' · ')}
                   </div>
                   <div className="hint">
@@ -680,6 +677,18 @@ function CharacterPanel({
             .map((a, i) => (
               <button key={i} onClick={() => onAct(a)} title={def.abilityText}>
                 {abilityLabel(a)}
+              </button>
+            ))}
+          {legal
+            .filter((a): a is Extract<Action, { type: 'objective' }> => a.type === 'objective' && a.character === character)
+            .map((a) => (
+              <button
+                key={a.id}
+                className="primary"
+                onClick={() => onAct(a)}
+                title={OBJECTIVE_MAP[a.id]?.text}
+              >
+                ★ {OBJECTIVE_MAP[a.id]?.name}
               </button>
             ))}
           {destroy && character === BEARER && (

@@ -30,7 +30,7 @@ import {
   regionDistance,
   regionsToward,
 } from './data/board.js';
-import { BEARER, CHARACTER_MAP } from './data/characters.js';
+import { BEARER, CHARACTER_MAP, CHARACTERS } from './data/characters.js';
 import { makeRng, next, nextInt, shuffle, type Rng } from './rng.js';
 import type {
   Action,
@@ -150,7 +150,13 @@ function checkHavens(s: GameState, events: GameEvent[]): void {
   for (const [loc, status] of Object.entries(s.siteStatus)) {
     if (status !== 'haven') continue;
     if ((s.shadow[loc] ?? 0) > 0 && friendlyAt(s, loc) === 0) {
-      s.siteStatus[loc] = 'stronghold';
+      // Printed sites flip to shadow strongholds; havens created on plain
+      // locations by objective cards simply lose their haven token.
+      if (MAP[loc].haven || MAP[loc].stronghold) {
+        s.siteStatus[loc] = 'stronghold';
+      } else {
+        delete s.siteStatus[loc];
+      }
       events.push({ kind: 'haven', text: `${locName(loc)} is overrun and falls to the shadow!` });
       changeHope(s, -HAVEN_LOST_HOPE, events, `${locName(loc)} lost`);
     }
@@ -221,42 +227,243 @@ function removeFriendly(s: GameState, loc: LocationId, n: number, events: GameEv
 // Objectives
 // ---------------------------------------------------------------------------
 
+/** Release troops reserved on an objective card back to the supply. */
+function releaseReserve(s: GameState, id: string, events: GameEvent[]): void {
+  const r = s.objReserves[id];
+  if (!r) return;
+  s.supply.factions[r.faction] += r.count;
+  delete s.objReserves[id];
+  events.push({ kind: 'objective', text: `${r.count} ${FACTION_NAMES[r.faction]} troops waiting on the card join the supply.` });
+}
+
+/** Muster troops straight from the supply (objective rewards). */
+function musterReward(s: GameState, loc: LocationId, faction: Faction, n: number, events: GameEvent[]): void {
+  const add = Math.min(n, s.supply.factions[faction]);
+  if (add <= 0) return;
+  s.supply.factions[faction] -= add;
+  const at = (s.friendly[loc] ??= {});
+  at[faction] = (at[faction] ?? 0) + add;
+  events.push({ kind: 'objective', text: `${add} ${FACTION_NAMES[faction]} troop${add > 1 ? 's' : ''} muster at ${locName(loc)}.` });
+}
+
+function objectiveActive(s: GameState, id: string): boolean {
+  return s.objectives.some((o) => o.id === id && !o.complete);
+}
+
 function completeObjective(s: GameState, id: string, events: GameEvent[]): void {
   const obj = s.objectives.find((o) => o.id === id);
   if (!obj || obj.complete) return;
   obj.complete = true;
   const def = OBJECTIVE_MAP[id];
   events.push({ kind: 'objective', text: `Objective complete: ${def.name}!` });
-  // Rewards (reconstructed).
+
+  // Rewards, per the transcribed cards.
   switch (id) {
     case 'blessing_elves': {
+      releaseReserve(s, id, events);
+      for (const p of s.players) {
+        const here = p.characters.some((c) => s.characters[c]?.location === 'rivendell');
+        if (here) gainToken(s, p, 'friendship', events, 'the Elves’ blessing');
+      }
       changeHope(s, 1, events, def.name);
-      if (s.supply.tokens.stealth > 0) {
-        s.supply.tokens.stealth -= 1;
-        activePlayer(s).tokens.stealth += 1;
-        events.push({ kind: 'objective', text: `${activePlayer(s).name} takes a stealth token.` });
+      break;
+    }
+    case 'staff_broken':
+      gainToken(s, activePlayer(s), 'stealth', events, def.name);
+      break;
+    case 'challenge_sauron': {
+      setEye(s, 'ithilien', events, 'Sauron answers the challenge');
+      let pulled = 0;
+      for (const l of Object.values(MAP)) {
+        if (l.region === MORDOR && l.id !== 'udun' && (s.shadow[l.id] ?? 0) > 0) {
+          const n = s.shadow[l.id]!;
+          delete s.shadow[l.id];
+          s.shadow['udun'] = (s.shadow['udun'] ?? 0) + n;
+          pulled += n;
+        }
+      }
+      if (pulled > 0) events.push({ kind: 'objective', text: `${pulled} shadow troops in Mordor fall back to Udûn.` });
+      break;
+    }
+    case 'avenge_balin': {
+      const dwarves = s.friendly['moria']?.deepholm ?? 0;
+      if (dwarves >= 4) {
+        gainToken(s, activePlayer(s), 'valor', events, def.name);
+        gainToken(s, activePlayer(s), 'valor', events, def.name);
       }
       break;
     }
-    case 'challenge_sauron':
-      changeHope(s, 2, events, def.name);
+    case 'oathbreakers':
+    case 'light_mirkwood':
+    case 'arwen_banner':
+    case 'rangers_eriador':
+    case 'shieldmaiden':
+    case 'hobbits_loyalty':
+      changeHope(s, 1, events, def.name);
       break;
-    default:
-      // Reconstructed reward: completed objectives rekindle hope.
-      changeHope(s, 2, events, def.name);
+    case 'unseat_denethor':
+      releaseReserve(s, id, events);
+      musterReward(s, 'minas_tirith', 'vale', 3, events);
+      changeHope(s, 1, events, def.name);
+      break;
+    case 'free_theoden':
+      releaseReserve(s, id, events);
+      musterReward(s, 'edoras', 'riders', 2, events);
+      changeHope(s, 1, events, def.name);
+      break;
+    case 'that_makes_six': {
+      const held = s.objProgress['that_makes_six'] ?? 0;
+      s.supply.shadow += held;
+      s.objProgress['that_makes_six'] = 0;
+      events.push({ kind: 'objective', text: `${held} felled shadow troops return to the supply.` });
+      changeHope(s, 1, events, def.name);
+      break;
+    }
+    case 'ride_eored': {
+      const held = s.objProgress['ride_eored'] ?? 0;
+      s.supply.shadow += held;
+      s.objProgress['ride_eored'] = 0;
+      events.push({ kind: 'objective', text: `${held} pinned shadow troops return to the supply.` });
+      changeHope(s, 1, events, def.name);
+      break;
+    }
+    case 'dwarven_lands':
+      gainToken(s, activePlayer(s), 'valor', events, def.name);
+      gainToken(s, activePlayer(s), 'valor', events, def.name);
+      changeHope(s, 1, events, def.name);
+      break;
+    case 'infiltrate_morgul': {
+      gainToken(s, activePlayer(s), 'stealth', events, def.name);
+      gainToken(s, activePlayer(s), 'stealth', events, def.name);
+      // Deck surgery (automated): the top 2 shadow cards leave the game.
+      const gone = s.shadowDeck.splice(-2, 2);
+      if (gone.length > 0) {
+        events.push({ kind: 'objective', text: `${gone.length} shadow card${gone.length > 1 ? 's' : ''} are plucked from the top of the deck and removed from the game.` });
+      }
+      break;
+    }
+    case 'secure_anduin':
+      musterReward(s, 'osgiliath', 'vale', 1, events);
+      break;
+    case 'frecas_heirs':
+      musterReward(s, 'dunland', 'riders', 1, events);
+      break;
+    case 'subdue_umbar':
+      events.push({ kind: 'objective', text: 'The corsairs are subdued — troops in Haradwaith may be redeployed to Pelargir on later turns.' });
+      break;
+    case 'lay_bare_pits':
+      if (s.characters['galadriel']?.location === 'dol_guldur') {
+        changeHope(s, 1, events, 'Galadriel casts down the pits herself');
+      }
+      break;
+    case 'boromir_honor':
+      // Effects are applied at the battle that completes it.
+      break;
+    case 'confront_balrog':
+      // Gandalf's fall and return are handled by the balrog action + darken.
+      break;
+    case 'shelobs_lair':
+      // The extra-action grant is applied by the lair action itself.
+      break;
+  }
+
+  // Boromir's replacement arrives when the NEXT objective is completed.
+  if (id !== 'boromir_honor' && (s.objProgress['boromir_fallen'] ?? 0) === 1) {
+    s.objProgress['boromir_fallen'] = 2; // replacement delivered
+    const inPlay = new Set(s.players.flatMap((p) => p.characters));
+    const candidates = CHARACTERS.map((c) => c.id).filter((c) => !inPlay.has(c) && c !== 'boromir');
+    if (candidates.length > 0) {
+      const pick = candidates[Math.abs(s.rngState) % candidates.length];
+      const ownerIdx = s.objProgress['boromir_player'] ?? 0;
+      const owner = s.players[ownerIdx];
+      owner.characters = owner.characters.map((c) => (c === 'boromir' ? pick : c));
+      if (s.solo) s.solo.order = s.solo.order.map((c) => (c === 'boromir' ? pick : c));
+      s.characters[pick] = { location: CHARACTER_MAP[pick].start };
+      events.push({ kind: 'objective', text: `${CHARACTER_MAP[pick].name} answers the call, taking Boromir's place (starting at ${locName(CHARACTER_MAP[pick].start)}).` });
+    }
   }
 }
 
+/** Objectives whose conditions are read from the board state at any time. */
 function checkStateObjectives(s: GameState, events: GameEvent[]): void {
-  const gondorTroops = Object.values(s.friendly).reduce((a, f) => a + (f.vale ?? 0), 0);
-  const riderTroops = Object.values(s.friendly).reduce((a, f) => a + (f.riders ?? 0), 0);
-  if (gondorTroops >= 5) completeObjective(s, 'oathbreakers', events);
-  if (riderTroops >= 6) completeObjective(s, 'ride_eored', events);
+  const regionClear = (r: RegionId) =>
+    Object.values(MAP).every(
+      (l) => l.region !== r || ((s.shadow[l.id] ?? 0) === 0 && s.siteStatus[l.id] !== 'stronghold'),
+    );
+  const troopsIn = (loc: LocationId, f?: Faction) =>
+    f ? (s.friendly[loc]?.[f] ?? 0) : friendlyAt(s, loc);
+
+  if (objectiveActive(s, 'staff_broken') && s.siteStatus['isengard'] === 'haven' && regionClear('rohan')) {
+    completeObjective(s, 'staff_broken', events);
+  }
+  if (objectiveActive(s, 'subdue_umbar')) {
+    const haradClear = Object.values(MAP)
+      .filter((l) => l.region === 'haradwaith')
+      .every((l) => (s.shadow[l.id] ?? 0) === 0);
+    const haradHeld = Object.values(MAP)
+      .filter((l) => l.region === 'haradwaith')
+      .every((l) => troopsIn(l.id) > 0);
+    if (s.siteStatus['umbar'] === 'haven' || (haradClear && haradHeld)) {
+      completeObjective(s, 'subdue_umbar', events);
+    }
+  }
+  if (objectiveActive(s, 'avenge_balin') && s.siteStatus['moria'] === 'haven' && troopsIn('moria', 'deepholm') >= 2) {
+    completeObjective(s, 'avenge_balin', events);
+  }
   if (
-    bearerLocation(s) === 'rivendell' &&
-    (s.shadow['rivendell'] ?? 0) === 0
+    objectiveActive(s, 'oathbreakers') &&
+    (s.objProgress['oathbreakers_ride'] ?? 0) > 0 &&
+    regionClear('gondor')
   ) {
-    completeObjective(s, 'blessing_elves', events);
+    completeObjective(s, 'oathbreakers', events);
+  }
+  if (objectiveActive(s, 'light_mirkwood')) {
+    const mirkwoodLocs = Object.values(MAP).filter((l) => l.region === 'mirkwood');
+    const noShadow = mirkwoodLocs.every((l) => (s.shadow[l.id] ?? 0) === 0);
+    const elvesEverywhere = mirkwoodLocs.every((l) => troopsIn(l.id, 'sylvan') > 0);
+    if (noShadow && elvesEverywhere) completeObjective(s, 'light_mirkwood', events);
+  }
+  if (objectiveActive(s, 'rangers_eriador')) {
+    const locs = Object.values(MAP).filter((l) => l.region === 'eriador');
+    if (regionClear('eriador') && locs.every((l) => troopsIn(l.id) > 0)) {
+      completeObjective(s, 'rangers_eriador', events);
+    }
+  }
+  if (objectiveActive(s, 'dwarven_lands')) {
+    if (
+      (s.shadow['ered_luin'] ?? 0) === 0 &&
+      troopsIn('ered_luin', 'deepholm') >= 4 &&
+      regionClear('dale')
+    ) {
+      completeObjective(s, 'dwarven_lands', events);
+    }
+  }
+  if (
+    objectiveActive(s, 'shieldmaiden') &&
+    (s.objProgress['eowyn_kills'] ?? 0) >= 2 &&
+    regionClear('rohan')
+  ) {
+    completeObjective(s, 'shieldmaiden', events);
+  }
+  if (objectiveActive(s, 'infiltrate_morgul') && s.siteStatus['minas_morgul'] === 'haven') {
+    completeObjective(s, 'infiltrate_morgul', events);
+  }
+  if (objectiveActive(s, 'secure_anduin') && s.siteStatus['osgiliath'] === 'haven') {
+    completeObjective(s, 'secure_anduin', events);
+  }
+  if (
+    objectiveActive(s, 'frecas_heirs') &&
+    s.siteStatus['dunland'] === 'haven' &&
+    troopsIn('dunland', 'riders') >= 2
+  ) {
+    completeObjective(s, 'frecas_heirs', events);
+  }
+  if (
+    objectiveActive(s, 'lay_bare_pits') &&
+    s.siteStatus['dol_guldur'] === 'haven' &&
+    troopsIn('dol_guldur', 'sylvan') >= 3
+  ) {
+    completeObjective(s, 'lay_bare_pits', events);
   }
 }
 
@@ -345,7 +552,7 @@ function winGame(s: GameState, events: GameEvent[]): void {
   });
 }
 
-function rollBattle(s: GameState, rng: Rng, loc: LocationId, source: 'attack' | 'shadow', requested: number | undefined, events: GameEvent[]): void {
+function rollBattle(s: GameState, rng: Rng, loc: LocationId, source: 'attack' | 'shadow', requested: number | undefined, events: GameEvent[], attacker?: CharacterId): void {
   let diceCount: number;
   if (source === 'attack') {
     const cap = Math.min(requested ?? MAX_BATTLE_DICE, friendlyAt(s, loc));
@@ -356,7 +563,7 @@ function rollBattle(s: GameState, rng: Rng, loc: LocationId, source: 'attack' | 
   if (diceCount <= 0) return;
   const dice: BattleFace[] = [];
   for (let i = 0; i < diceCount; i++) dice.push(BATTLE_DIE[nextInt(rng, 6)]);
-  s.pending = { type: 'battle', location: loc, source, dice, valorKills: 0 };
+  s.pending = { type: 'battle', location: loc, source, dice, valorKills: 0, ...(attacker ? { attacker } : {}) };
   events.push({
     kind: 'battle',
     text: `Battle at ${locName(loc)}: [${dice.join(' ')}] — spend resistance to reroll or valor to slay, then confirm.`,
@@ -391,6 +598,7 @@ function applyBattle(s: GameState, events: GameEvent[]): void {
           if (eowynHere) {
             s.wraiths[region] -= 1;
             s.wraiths[MORDOR] = (s.wraiths[MORDOR] ?? 0) + 1;
+            s.objProgress['eowyn_kills'] = (s.objProgress['eowyn_kills'] ?? 0) + 1;
             events.push({ kind: 'battle', text: `Éowyn strikes — a Nazgûl in ${REGION_MAP[region].name} is destroyed and returns to Mordor.` });
           } else {
             friendlyLost += 2;
@@ -408,9 +616,50 @@ function applyBattle(s: GameState, events: GameEvent[]): void {
     friendlyLost -= 1;
     events.push({ kind: 'battle', text: 'Éomer rallies the Rohirrim — one loss is turned aside.' });
   }
+  const hadFriendly = friendlyAt(s, loc);
   const slain = removeShadow(s, loc, shadowKilled);
   if (slain > 0) events.push({ kind: 'battle', text: `${slain} shadow troop${slain > 1 ? 's' : ''} slain at ${locName(loc)}.` });
+
+  // Ride with the Éored: Éomer's attack with Rohirrim present may pin one
+  // felled shadow troop to the card's spot for his region (one per region,
+  // Rohan and its neighbors only).
+  if (
+    slain > 0 &&
+    pend.attacker === 'eomer' &&
+    objectiveActive(s, 'ride_eored') &&
+    (s.friendly[loc]?.riders ?? 0) > 0
+  ) {
+    const eligible = region === 'rohan' || REGION_MAP['rohan'].adjacent.includes(region);
+    if (eligible && !(s.objProgress[`ride_eored_${region}`] ?? 0)) {
+      s.objProgress[`ride_eored_${region}`] = 1;
+      s.objProgress['ride_eored'] = (s.objProgress['ride_eored'] ?? 0) + 1;
+      s.supply.shadow -= 1; // the pinned troop sits on the card, not the supply
+      events.push({ kind: 'objective', text: `Éomer pins a felled shadow troop to the Éored muster roll (${s.objProgress['ride_eored']}/4).` });
+      if (s.objProgress['ride_eored'] >= 4) completeObjective(s, 'ride_eored', events);
+    }
+  }
+
+  const lostAll = friendlyLost >= hadFriendly && hadFriendly > 0;
   if (friendlyLost > 0) removeFriendly(s, loc, friendlyLost, events);
+
+  // Boromir Reclaims His Honor: he and a companion stand where the last
+  // friendly troop falls.
+  if (
+    lostAll &&
+    objectiveActive(s, 'boromir_honor') &&
+    s.characters['boromir']?.location === loc &&
+    Object.entries(s.characters).some(([cid, st]) => cid !== 'boromir' && st.location === loc)
+  ) {
+    const driven = removeShadow(s, loc, 2);
+    if (driven > 0) events.push({ kind: 'objective', text: `Boromir's last stand drives off ${driven} shadow troop${driven > 1 ? 's' : ''}.` });
+    const ownerIdx = s.players.findIndex((pl) => pl.characters.includes('boromir'));
+    s.objProgress['boromir_fallen'] = 1;
+    s.objProgress['boromir_player'] = Math.max(0, ownerIdx);
+    delete s.characters['boromir'];
+    events.push({ kind: 'objective', text: 'Boromir falls, his honor reclaimed. A new hero will answer when the next objective is met.' });
+    completeObjective(s, 'boromir_honor', events);
+  }
+
   checkHavens(s, events);
   checkStateObjectives(s, events);
 }
@@ -610,6 +859,14 @@ function resolveShadowCard(s: GameState, rng: Rng, events: GameEvent[]): void {
 
 function resolveDarken(s: GameState, rng: Rng, cardLoc: LocationId, events: GameEvent[]): void {
   events.push({ kind: 'card', text: 'SKIES DARKEN!', fx: { fx: 'darken', location: cardLoc } });
+  // Gandalf the White returns with the storm.
+  if ((s.objProgress['gandalf_away'] ?? 0) === 1) {
+    s.objProgress['gandalf_away'] = 0;
+    s.objProgress['gandalf_white'] = 1;
+    s.characters['gandalf'] = { location: 'lorien' };
+    events.push({ kind: 'objective', text: 'Gandalf returns in Lórien, robed in white!' });
+    changeHope(s, 2, events, 'Gandalf the White');
+  }
   // 1. Threat rises.
   if (s.threatIdx < THREAT_TRACK.length - 1) s.threatIdx += 1;
   events.push({ kind: 'card', text: `The threat rate rises: ${THREAT_TRACK[s.threatIdx]} shadow cards per turn.` });
@@ -1257,8 +1514,7 @@ export function applyAction(state: GameState, playerId: PlayerId, action: Action
         text: `${charName(c)} attacks at ${locName(loc)} — the Eye turns to ${REGION_MAP[s.eye].name}.`,
         fx: { fx: 'eye', to: s.eye },
       });
-      if (regionOf(loc) === MORDOR) completeObjective(s, 'challenge_sauron', events);
-      rollBattle(s, rng, loc, 'attack', dice, events);
+      rollBattle(s, rng, loc, 'attack', dice, events, c);
       break;
     }
 
@@ -1267,7 +1523,15 @@ export function applyAction(state: GameState, playerId: PlayerId, action: Action
       requireOwn(p, c);
       if (c === 'gollum') throw new RuleError('Gollum will not storm fortresses.');
       const here = s.characters[c].location;
-      if (s.siteStatus[here] !== 'stronghold') throw new RuleError('Capture a shadow stronghold.');
+      // Objective cards open two plain red locations to Capture: Osgiliath
+      // (Faramir only) and Dunland (anyone).
+      const objCapture =
+        (here === 'osgiliath' && c === 'faramir' && objectiveActive(s, 'secure_anduin')) ||
+        (here === 'dunland' && objectiveActive(s, 'frecas_heirs'));
+      if (s.siteStatus[here] !== 'stronghold' && !objCapture) {
+        throw new RuleError('Capture a shadow stronghold.');
+      }
+      if (s.siteStatus[here] === 'haven') throw new RuleError('Already a haven.');
       if (friendlyAt(s, here) === 0) throw new RuleError('A friendly troop must be present.');
       if ((s.shadow[here] ?? 0) > 0) throw new RuleError('Clear the shadow troops first.');
       const cost = c === 'boromir' ? CAPTURE_COST - 1 : CAPTURE_COST;
@@ -1283,10 +1547,168 @@ export function applyAction(state: GameState, playerId: PlayerId, action: Action
         fx: { fx: 'eye', to: s.eye },
       });
       changeHope(s, CAPTURE_HOPE, events, `${locName(here)} captured`);
-      if (here === 'isengard') completeObjective(s, 'staff_broken', events);
-      if (here === 'moria') completeObjective(s, 'confront_balrog', events);
-      if (here === 'umbar') completeObjective(s, 'subdue_umbar', events);
-      if (here === 'dol_guldur') completeObjective(s, 'light_mirkwood', events);
+      checkStateObjectives(s, events);
+      break;
+    }
+
+    case 'objective': {
+      const c = action.character;
+      requireOwn(p, c);
+      if (!s.characters[c]) throw new RuleError('That character is not on the board.');
+      if (!objectiveActive(s, action.id)) throw new RuleError('That objective is not in play (or already done).');
+      const here = s.characters[c].location;
+      const othersHere = Object.entries(s.characters).some(([cid, st]) => cid !== c && st.location === here);
+      switch (action.id) {
+        case 'blessing_elves': {
+          if (here !== 'rivendell') throw new RuleError('This takes an action in Rivendell.');
+          if (!othersHere) throw new RuleError('Another character must be present.');
+          spendAction(s, c);
+          pay(s, p, ['friendship', 'friendship', 'friendship'], events);
+          completeObjective(s, 'blessing_elves', events);
+          break;
+        }
+        case 'challenge_sauron': {
+          if (here !== 'north_ithilien') throw new RuleError('This takes an action in North Ithilien.');
+          const at = s.friendly[here] ?? {};
+          if ((at.riders ?? 0) < 2 || (at.sylvan ?? 0) < 2 || (at.vale ?? 0) < 3) {
+            throw new RuleError('Needs 2 Rohirrim, 2 Elven, and 3 Gondor troops here.');
+          }
+          spendAction(s, c);
+          completeObjective(s, 'challenge_sauron', events);
+          break;
+        }
+        case 'arwen_banner': {
+          if (c !== 'arwen') throw new RuleError('Only Arwen may unfurl the banner.');
+          if (here !== 'minas_tirith') throw new RuleError('This happens in Minas Tirith.');
+          if (s.siteStatus['minas_tirith'] !== 'haven') throw new RuleError('Minas Tirith must be a haven.');
+          const at = s.friendly[here] ?? {};
+          if (!((at.vale ?? 0) >= 1 && (at.riders ?? 0) >= 1 && (at.sylvan ?? 0) >= 1 && (at.deepholm ?? 0) >= 1)) {
+            throw new RuleError('All four Free Peoples armies must have a troop here.');
+          }
+          spendAction(s, c);
+          pay(s, p, ['friendship'], events);
+          completeObjective(s, 'arwen_banner', events);
+          break;
+        }
+        case 'unseat_denethor': {
+          if (here !== 'minas_tirith') throw new RuleError('This takes an action in Minas Tirith.');
+          if (!othersHere) throw new RuleError('Another character must be present.');
+          spendAction(s, c);
+          pay(s, p, ['stealth', 'stealth', 'resistance', 'valor'], events);
+          completeObjective(s, 'unseat_denethor', events);
+          break;
+        }
+        case 'free_theoden': {
+          if (here !== 'edoras') throw new RuleError('This takes an action in Edoras.');
+          if (!othersHere) throw new RuleError('Another character must be present.');
+          spendAction(s, c);
+          pay(s, p, ['friendship', 'friendship', 'resistance'], events);
+          completeObjective(s, 'free_theoden', events);
+          break;
+        }
+        case 'oathbreakers': {
+          if (c !== 'aragorn') throw new RuleError('Only Aragorn may take the Paths of the Dead.');
+          if (here !== 'edoras') throw new RuleError('The ride begins in Edoras.');
+          if ((s.objProgress['oathbreakers_ride'] ?? 0) > 0) throw new RuleError('The ride has already been made.');
+          spendAction(s, c);
+          s.characters[c].location = 'erech';
+          s.objProgress['oathbreakers_ride'] = 1;
+          events.push({
+            kind: 'objective',
+            text: 'Aragorn takes the Paths of the Dead from Edoras to Erech!',
+            fx: { fx: 'move', piece: 'character', from: 'edoras', to: 'erech', character: c },
+          });
+          addShadow(s, 'pelargir', 2, events, false);
+          const umbarTroops = s.shadow['umbar'] ?? 0;
+          if (umbarTroops > 0) {
+            delete s.shadow['umbar'];
+            s.shadow['pelargir'] = (s.shadow['pelargir'] ?? 0) + umbarTroops;
+            events.push({
+              kind: 'objective',
+              text: `${umbarTroops} shadow troops sail from Umbar to Pelargir.`,
+              fx: { fx: 'move', piece: 'shadow', from: 'umbar', to: 'pelargir', count: umbarTroops },
+            });
+          }
+          musterReward(s, 'erech', 'vale', 3, events);
+          checkHavens(s, events);
+          checkStateObjectives(s, events);
+          break;
+        }
+        case 'hobbits_loyalty': {
+          if (c !== 'merry_pippin') throw new RuleError('Only Merry & Pippin may pledge.');
+          if (s.siteStatus[here] !== 'haven') throw new RuleError('They must stand in a haven.');
+          const haven = MAP[here];
+          const group = haven.muster;
+          if (!group) throw new RuleError('This haven has no muster people to pledge.');
+          if (s.objProgress[`hobbits_${group}`]) throw new RuleError('That people is already pledged.');
+          if (s.supply.tokens.friendship <= 0) throw new RuleError('No friendship tokens left in the supply.');
+          const cardIdx = p.hand.findIndex(
+            (cd) => cd.id === action.card && cd.kind === 'region' && cd.symbol === 'friendship' && cd.region === haven.region,
+          );
+          if (cardIdx < 0) throw new RuleError('Discard a Friendship region card matching their region.');
+          spendAction(s, c);
+          const [spent] = p.hand.splice(cardIdx, 1);
+          s.playerDiscard.push(spent);
+          s.supply.tokens.friendship -= 1;
+          s.objProgress[`hobbits_${group}`] = 1;
+          const pledges = ['vale', 'riders', 'sylvan', 'deepholm'].filter((g) => s.objProgress[`hobbits_${g}`]).length;
+          events.push({ kind: 'objective', text: `Merry & Pippin win the ${FACTION_NAMES[group]} to the cause (${pledges}/2 pledges).` });
+          if (pledges >= 2) {
+            p.tokens.friendship += 2; // the two tokens banked on the card
+            completeObjective(s, 'hobbits_loyalty', events);
+          }
+          break;
+        }
+        case 'shelobs_lair': {
+          if (c !== 'frodo_sam') throw new RuleError('Sam must brave the lair.');
+          if (here !== 'minas_morgul') throw new RuleError('This happens at Minas Morgul.');
+          if (s.characters['gollum']?.location !== here) throw new RuleError('Gollum must be present to lead the way.');
+          spendAction(s, c);
+          // Stand-in outcome table pending card confirmation: three search
+          // dice; hope losses per face.
+          let lost = 0;
+          const faces: string[] = [];
+          for (let i = 0; i < 3; i++) {
+            const f = SEARCH_DIE[nextInt(rng, 6)];
+            faces.push(f);
+            if (f === 'slip' || f === 'weary') lost += 1;
+            else if (f === 'exposed') lost += 2;
+          }
+          events.push({ kind: 'objective', text: `Sam faces the lair: [${faces.join(' ')}].` });
+          if (lost > 0) changeHope(s, -lost, events, "Shelob's lair");
+          completeObjective(s, 'shelobs_lair', events);
+          if (lost === 0 && s.phase === 'playing') {
+            s.turn.actionsUsed[c] = Math.max(0, (s.turn.actionsUsed[c] ?? 0) - 1);
+            events.push({ kind: 'objective', text: 'Frodo comes through unscathed — he may take 1 extra action this turn.' });
+          }
+          break;
+        }
+        case 'confront_balrog': {
+          if (c !== 'gandalf') throw new RuleError('Only Gandalf may face the Balrog.');
+          if (here !== 'moria') throw new RuleError('The terror waits in Moria.');
+          spendAction(s, c);
+          // Stand-in outcome table pending card confirmation.
+          let lost = 0;
+          const faces: string[] = [];
+          for (let i = 0; i < 3; i++) {
+            const f = SEARCH_DIE[nextInt(rng, 6)];
+            faces.push(f);
+            if (f === 'slip') lost += 1;
+            else if (f === 'weary') lost += 3;
+            else if (f === 'exposed') lost += 2;
+          }
+          events.push({ kind: 'objective', text: `Gandalf stands upon the bridge: [${faces.join(' ')}].` });
+          if (lost > 0) changeHope(s, -lost, events, 'the Balrog');
+          if (s.phase !== 'playing') break;
+          completeObjective(s, 'confront_balrog', events);
+          s.objProgress['gandalf_away'] = 1;
+          delete s.characters['gandalf'];
+          events.push({ kind: 'objective', text: 'Gandalf falls with the Balrog into the deep — until the skies next darken.' });
+          break;
+        }
+        default:
+          throw new RuleError('That objective has no card action.');
+      }
       break;
     }
 
@@ -1424,6 +1846,13 @@ function doAbility(
         pay(s, p, ['stealth'], events);
         removeShadow(s, action.to, 1);
         events.push({ kind: 'action', text: `Legolas fells a shadow troop at ${locName(action.to)}.` });
+        // "That Makes Six!": his trophies gather on the objective card.
+        if (objectiveActive(s, 'that_makes_six')) {
+          s.supply.shadow -= 1; // the trophy sits on the card, not the supply
+          s.objProgress['that_makes_six'] = (s.objProgress['that_makes_six'] ?? 0) + 1;
+          events.push({ kind: 'objective', text: `The tally grows: ${s.objProgress['that_makes_six']}/6 shadow troops on the card.` });
+          if (s.objProgress['that_makes_six'] >= 6) completeObjective(s, 'that_makes_six', events);
+        }
         break;
       }
       // Default: walk silently — an action for a Stealth token.

@@ -172,6 +172,8 @@ export interface PendingBattle {
   type: 'battle';
   location: LocationId;
   source: 'attack' | 'shadow';
+  /** The character whose Attack action triggered this battle, if any. */
+  attacker?: CharacterId;
   dice: BattleFace[];
   /** Shadow troops removed so far via Show Valor. */
   valorKills: number;
@@ -273,6 +275,13 @@ export interface GameState {
   shadowDeck: ShadowCard[];
   shadowDiscard: ShadowCard[];
   objectives: ObjectiveState[];
+  /**
+   * Per-objective counters and flags: troops pinned to cards, once-per-game
+   * rides taken, Nazgûl felled, fallen characters awaiting return, etc.
+   */
+  objProgress: Record<string, number>;
+  /** Friendly troops set aside on objective cards until they complete. */
+  objReserves: Record<string, { faction: Faction; count: number }>;
   turn: TurnState;
   pending: Pending | null;
   queue: QueueItem[];
@@ -305,6 +314,16 @@ export type Action =
       cover?: BearerCover;
     }
   | { type: 'fellowship'; character: CharacterId; give?: string; takeFrom?: PlayerId; take?: string }
+  | {
+      /** Objective-card action (spend an action + costs to work toward it). */
+      type: 'objective';
+      id: string;
+      character: CharacterId;
+      /** Card ids discarded to pay symbol costs, matching the card's needs. */
+      pay?: string[];
+      /** Hobbits' pledge: the Friendship region card discarded. */
+      card?: string;
+    }
   | { type: 'prepare'; character: CharacterId; card: string }
   | { type: 'muster'; character: CharacterId }
   | { type: 'attack'; character: CharacterId; dice: number }

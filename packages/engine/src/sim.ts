@@ -28,10 +28,11 @@ export function checkInvariants(s: GameState): void {
     throw new Error(`INVARIANT VIOLATED: ${msg}`);
   };
 
-  // Shadow troop conservation
+  // Shadow troop conservation (some may sit on objective cards)
   const shadowOnBoard = Object.values(s.shadow).reduce((a, b) => a + b, 0);
-  if (shadowOnBoard + s.supply.shadow !== SHADOW_TROOPS_TOTAL) {
-    fail(`shadow troops: ${shadowOnBoard} on board + ${s.supply.shadow} supply != ${SHADOW_TROOPS_TOTAL}`);
+  const shadowOnCards = (s.objProgress['that_makes_six'] ?? 0) + (s.objProgress['ride_eored'] ?? 0);
+  if (shadowOnBoard + shadowOnCards + s.supply.shadow !== SHADOW_TROOPS_TOTAL) {
+    fail(`shadow troops: ${shadowOnBoard} on board + ${shadowOnCards} on cards + ${s.supply.shadow} supply != ${SHADOW_TROOPS_TOTAL}`);
   }
   for (const [loc, n] of Object.entries(s.shadow)) {
     if (!MAP[loc]) fail(`shadow at unknown location ${loc}`);
@@ -47,6 +48,9 @@ export function checkInvariants(s: GameState): void {
       totals[f as Faction] += n ?? 0;
     }
   }
+  for (const r of Object.values(s.objReserves)) {
+    totals[r.faction] += r.count; // troops waiting on objective cards
+  }
   for (const f of Object.keys(totals) as Faction[]) {
     if (totals[f] + s.supply.factions[f] !== FACTION_TOTALS[f]) {
       fail(`${f}: ${totals[f]} + ${s.supply.factions[f]} != ${FACTION_TOTALS[f]}`);
@@ -61,11 +65,17 @@ export function checkInvariants(s: GameState): void {
   }, 0);
   if (nazgul !== NAZGUL_TOTAL) fail(`Nazgûl count ${nazgul} != ${NAZGUL_TOTAL}`);
 
-  // Symbol token conservation
+  // Symbol token conservation (friendship pledges can sit on the Hobbits'
+  // objective card until it completes)
+  const hobbitsOpen = s.objectives.some((o) => o.id === 'hobbits_loyalty' && !o.complete);
+  const pledged = hobbitsOpen
+    ? ['vale', 'riders', 'sylvan', 'deepholm'].filter((g) => s.objProgress[`hobbits_${g}`]).length
+    : 0;
   for (const sym of ['friendship', 'valor', 'stealth', 'resistance'] as SymbolKind[]) {
     const held = s.players.reduce((a, p) => a + p.tokens[sym], 0);
-    if (held + s.supply.tokens[sym] !== TOKENS_PER_SYMBOL) {
-      fail(`${sym} tokens: ${held} + ${s.supply.tokens[sym]} != ${TOKENS_PER_SYMBOL}`);
+    const onCards = sym === 'friendship' ? pledged : 0;
+    if (held + onCards + s.supply.tokens[sym] !== TOKENS_PER_SYMBOL) {
+      fail(`${sym} tokens: ${held} held + ${onCards} on cards + ${s.supply.tokens[sym]} supply != ${TOKENS_PER_SYMBOL}`);
     }
     if (s.supply.tokens[sym] < 0) fail(`negative ${sym} token supply`);
   }

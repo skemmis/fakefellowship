@@ -94,21 +94,49 @@ export function createGame(
     ...pool.slice(0, diffCfg.objectives - 1).map((id) => ({ id, complete: false })),
     { id: finale.id, complete: false },
   ];
+  const objectiveDefs = objectives.map((o) => OBJECTIVES.find((d) => d.id === o.id)!);
 
-  // --- Characters. Multiplayer: 2 random characters each (Frodo always in
-  // play). Solo: Frodo & Sam plus 4 random characters, all run by one player.
+  // --- Objective setup instructions: extra shadow troops + reserved troops.
+  const objReserves: GameState['objReserves'] = {};
+  for (const def of objectiveDefs) {
+    for (const [loc, n] of Object.entries(def.setupShadow ?? {})) {
+      shadow[loc] = (shadow[loc] ?? 0) + (n ?? 0);
+      shadowPlaced += n ?? 0;
+    }
+    if (def.reserve) {
+      objReserves[def.id] = { ...def.reserve };
+      factionSupply[def.reserve.faction] -= def.reserve.count;
+    }
+  }
+
+  // --- Characters. Objectives marked "use X" force those characters into
+  // the game; the rest of the slots fill randomly. Solo: Frodo & Sam plus 4.
   const solo = players.length === 1;
-  const charPool = shuffle(rng, CHARACTERS.map((c) => c.id).filter((c) => c !== 'frodo_sam'));
+  const required = objectiveDefs
+    .flatMap((d) => d.uses ?? [])
+    .filter((c, i, arr) => c !== 'frodo_sam' && arr.indexOf(c) === i);
+  const randomPool = shuffle(
+    rng,
+    CHARACTERS.map((c) => c.id).filter((c) => c !== 'frodo_sam' && !required.includes(c)),
+  );
   let playerChars: CharacterId[][];
   let soloState: GameState['solo'];
   if (solo) {
-    const four = charPool.slice(0, 4);
+    const four = [...required, ...randomPool].slice(0, 4);
     playerChars = [['frodo_sam', ...four]];
     soloState = { order: four, idx: 0 };
   } else {
-    const dealt = charPool.slice(0, players.length * 2);
-    dealt[nextInt(rng, dealt.length)] = 'frodo_sam';
-    playerChars = players.map((_, i) => [dealt[i * 2], dealt[i * 2 + 1]]);
+    const slots = players.length * 2;
+    const chosen = ['frodo_sam' as CharacterId, ...required, ...randomPool].slice(0, slots);
+    const dealt = shuffle(rng, chosen);
+    // Shelob's Lair: the player with Frodo & Sam may not also hold Gollum.
+    const fi = dealt.indexOf('frodo_sam');
+    const gi = dealt.indexOf('gollum');
+    if (gi >= 0 && Math.floor(fi / 2) === Math.floor(gi / 2) && dealt.length > 2) {
+      const swap = (Math.floor(fi / 2) * 2 + 2) % dealt.length;
+      [dealt[gi], dealt[swap]] = [dealt[swap], dealt[gi]];
+    }
+    playerChars = players.map((_, i) => [dealt[i * 2], dealt[i * 2 + 1]].filter(Boolean));
   }
   const characters: GameState['characters'] = {};
   for (const group of playerChars) {
@@ -198,6 +226,8 @@ export function createGame(
     shadowDeck,
     shadowDiscard,
     objectives,
+    objProgress: {},
+    objReserves,
     turn: { playerIdx: firstIdx, actionsUsed: {}, actedOrder: [], abilityUsed: {} },
     pending: null,
     queue: [],

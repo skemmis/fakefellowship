@@ -21,6 +21,14 @@ function canPayList(p: PlayerState, symbols: SymbolKind[]): boolean {
   return Object.entries(need).every(([s, n]) => symbolsAvailable(p, s as SymbolKind) >= (n ?? 0));
 }
 
+function objectiveOpen(s: GameState, id: string): boolean {
+  return s.objectives.some((o) => o.id === id && !o.complete);
+}
+
+function othersAt(s: GameState, loc: string, except: CharacterId): boolean {
+  return Object.entries(s.characters).some(([cid, st]) => cid !== except && st.location === loc);
+}
+
 function friendlyAt(s: GameState, loc: string): number {
   return Object.values(s.friendly[loc] ?? {}).reduce((a, b) => a + (b ?? 0), 0);
 }
@@ -277,15 +285,58 @@ export function legalActions(s: GameState, playerId?: string): Action[] {
       out.push({ type: 'attack', character, dice: Math.min(MAX_BATTLE_DICE, friendlyAt(s, here)) });
     }
 
-    // Capture
+    // Capture (objective cards open Osgiliath to Faramir and Dunland to all)
+    const objCapture =
+      s.siteStatus[here] !== 'haven' &&
+      ((here === 'osgiliath' && character === 'faramir' && objectiveOpen(s, 'secure_anduin')) ||
+        (here === 'dunland' && objectiveOpen(s, 'frecas_heirs')));
     if (
       character !== 'gollum' &&
-      s.siteStatus[here] === 'stronghold' &&
+      (s.siteStatus[here] === 'stronghold' || objCapture) &&
       friendlyAt(s, here) > 0 &&
       (s.shadow[here] ?? 0) === 0 &&
       canPayList(p, Array(character === 'boromir' ? 2 : 3).fill('valor') as SymbolKind[])
     ) {
       out.push({ type: 'capture', character });
+    }
+
+    // Objective-card actions
+    if (objectiveOpen(s, 'blessing_elves') && here === 'rivendell' && othersAt(s, here, character) && canPayList(p, ['friendship', 'friendship', 'friendship'])) {
+      out.push({ type: 'objective', id: 'blessing_elves', character });
+    }
+    if (objectiveOpen(s, 'challenge_sauron') && here === 'north_ithilien') {
+      const at = s.friendly[here] ?? {};
+      if ((at.riders ?? 0) >= 2 && (at.sylvan ?? 0) >= 2 && (at.vale ?? 0) >= 3) {
+        out.push({ type: 'objective', id: 'challenge_sauron', character });
+      }
+    }
+    if (objectiveOpen(s, 'arwen_banner') && character === 'arwen' && here === 'minas_tirith' && s.siteStatus[here] === 'haven' && canPayList(p, ['friendship'])) {
+      const at = s.friendly[here] ?? {};
+      if ((at.vale ?? 0) >= 1 && (at.riders ?? 0) >= 1 && (at.sylvan ?? 0) >= 1 && (at.deepholm ?? 0) >= 1) {
+        out.push({ type: 'objective', id: 'arwen_banner', character });
+      }
+    }
+    if (objectiveOpen(s, 'unseat_denethor') && here === 'minas_tirith' && othersAt(s, here, character) && canPayList(p, ['stealth', 'stealth', 'resistance', 'valor'])) {
+      out.push({ type: 'objective', id: 'unseat_denethor', character });
+    }
+    if (objectiveOpen(s, 'free_theoden') && here === 'edoras' && othersAt(s, here, character) && canPayList(p, ['friendship', 'friendship', 'resistance'])) {
+      out.push({ type: 'objective', id: 'free_theoden', character });
+    }
+    if (objectiveOpen(s, 'oathbreakers') && character === 'aragorn' && here === 'edoras' && !(s.objProgress['oathbreakers_ride'] ?? 0)) {
+      out.push({ type: 'objective', id: 'oathbreakers', character });
+    }
+    if (objectiveOpen(s, 'hobbits_loyalty') && character === 'merry_pippin' && s.siteStatus[here] === 'haven' && s.supply.tokens.friendship > 0) {
+      const group = MAP[here].muster;
+      if (group && !(s.objProgress[`hobbits_${group}`] ?? 0)) {
+        const match = p.hand.find((cd) => cd.kind === 'region' && cd.symbol === 'friendship' && cd.region === MAP[here].region);
+        if (match) out.push({ type: 'objective', id: 'hobbits_loyalty', character, card: match.id });
+      }
+    }
+    if (objectiveOpen(s, 'shelobs_lair') && character === 'frodo_sam' && here === 'minas_morgul' && s.characters['gollum']?.location === here) {
+      out.push({ type: 'objective', id: 'shelobs_lair', character });
+    }
+    if (objectiveOpen(s, 'confront_balrog') && character === 'gandalf' && here === 'moria') {
+      out.push({ type: 'objective', id: 'confront_balrog', character });
     }
 
     // Activated abilities (once per turn)
