@@ -4,15 +4,17 @@ import { net } from './net.js';
 import { Lobby } from './Lobby.js';
 import { Game } from './Game.js';
 import { Editor } from './Editor.js';
+import { IconTool } from './IconTool.js';
 
 export function App() {
-  const [isEditor, setIsEditor] = useState(location.hash === '#editor');
+  const [route, setRoute] = useState(location.hash);
   useEffect(() => {
-    const onHash = () => setIsEditor(location.hash === '#editor');
+    const onHash = () => setRoute(location.hash);
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
-  if (isEditor) return <Editor />;
+  if (route === '#editor') return <Editor />;
+  if (route === '#icons') return <IconTool />;
   return <GameApp />;
 }
 

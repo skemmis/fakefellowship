@@ -947,3 +947,57 @@ select {
 .token .gicon {
   margin-right: 2px;
 }
+
+/* ---- Icon cropping tool (#icons) ---- */
+.icon-tool {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}
+.icon-side {
+  width: 320px;
+  flex: none;
+  padding: 12px 14px;
+  overflow-y: auto;
+  border-right: 1px solid #3a342a;
+  background: #1d1a14;
+}
+.icon-side h2 { margin: 0 0 6px; }
+.icon-controls { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; }
+.icon-preview {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin: 10px 0;
+  padding: 8px;
+  background: #26221a;
+  border-radius: 8px;
+}
+.icon-preview canvas {
+  width: 80px;
+  height: 80px;
+  background:
+    repeating-conic-gradient(#333 0% 25%, #444 0% 50%) 0 0 / 16px 16px;
+  border-radius: 6px;
+  flex: none;
+}
+.icon-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.icon-list button { width: 100%; text-align: left; padding: 4px 8px; }
+.icon-list button.active { outline: 2px solid #d9a24a; }
+.icon-canvas {
+  flex: 1;
+  overflow: auto;
+  cursor: crosshair;
+  background: #111;
+}
+.crop-box {
+  position: absolute;
+  border: 2px solid rgba(80, 200, 120, 0.9);
+  background: rgba(80, 200, 120, 0.12);
+  pointer-events: none;
+  font-size: 11px;
+  color: #b7f7cd;
+}
+.crop-box span { position: absolute; top: -16px; left: 0; white-space: nowrap; text-shadow: 0 1px 2px #000; }
+.crop-box.selected { border-color: #ffd76a; background: rgba(255, 215, 106, 0.15); color: #ffe9ad; }
+.crop-box.dragging { border-style: dashed; }
