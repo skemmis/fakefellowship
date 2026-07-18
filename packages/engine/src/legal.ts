@@ -47,6 +47,33 @@ export function legalActions(s: GameState, playerId?: string): Action[] {
       }
       return out;
     }
+    if (pend.type === 'wheels') {
+      if (!pend.mode && pend.remaining === undefined) {
+        if (player.id === active.id) {
+          out.push({ type: 'wheels', pick: 'despair' });
+          const anyTroops = Object.values(s.friendly).some((fs) => Object.values(fs).some((n) => (n ?? 0) > 0));
+          if (anyTroops) out.push({ type: 'wheels', pick: 'oath' });
+          for (const pl of s.players) {
+            const wealth = pl.hand.length + Object.values(pl.tokens).reduce((a, b) => a + b, 0);
+            if (wealth > 0) out.push({ type: 'wheels', pick: 'doubt', toPlayer: pl.id });
+          }
+        }
+      } else if (pend.mode === 'oath') {
+        if (player.id === active.id) {
+          for (const [loc, fs] of Object.entries(s.friendly)) {
+            for (const [f, n] of Object.entries(fs)) {
+              if ((n ?? 0) > 0) out.push({ type: 'wheels', location: loc, faction: f as Faction });
+            }
+          }
+        }
+      } else if (player.id === pend.player) {
+        for (const c of player.hand) out.push({ type: 'wheels', card: c.id });
+        for (const [sym, n] of Object.entries(player.tokens)) {
+          if (n > 0) out.push({ type: 'wheels', symbol: sym as SymbolKind });
+        }
+      }
+      return out;
+    }
     const present = player.characters.some((c) => s.characters[c]?.location === pend.location);
     const gandalfHere = pend.type === 'battle' && s.characters['gandalf']?.location === pend.location;
     if (present && (canPayList(player, ['resistance']) || (gandalfHere && canPayList(player, ['valor'])))) {

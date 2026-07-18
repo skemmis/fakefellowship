@@ -6,6 +6,7 @@ import {
   CAPTURE_HOPE,
   CARDS_PER_TURN,
   EVENTS,
+  FACTION_NAMES,
   HAND_LIMIT,
   HAVEN_LOST_HOPE,
   HOPE_MAX,
@@ -21,6 +22,7 @@ import {
   BATTLE_LINES,
   CONNECTIONS,
   connection,
+  findBattleLine,
   MAP,
   MORDOR,
   MOUNT_DOOM,
@@ -528,20 +530,24 @@ function resolveShadowCard(s: GameState, rng: Rng, events: GameEvent[]): void {
       text: `Special shadow card: ${info.name}!`,
       fx: { fx: 'shadowCard', half: 'special', specialName: info.name },
     });
-    if (card.special === 'war_drums') {
+    if (card.special === 'drums_of_war') {
+      // Every shadow stronghold in Mordor gains a troop.
       for (const [loc, status] of Object.entries(s.siteStatus)) {
-        if (status === 'stronghold' && MAP[loc].stronghold && !s.spawnStopped[loc]) {
+        if (status === 'stronghold' && MAP[loc].region === MORDOR) {
           addShadow(s, loc, 1, events, true);
           if (friendlyAt(s, loc) > 0) s.queue.unshift({ step: 'battle', location: loc, source: 'shadow' });
         }
       }
+      checkHavens(s, events);
     } else {
-      addShadow(s, 'isengard', 2, events, true);
-      if (friendlyAt(s, 'isengard') > 0) s.queue.unshift({ step: 'battle', location: 'isengard', source: 'shadow' });
-      advanceLine(s, 'isengard_line', events);
+      // The current player must pick one of three woes.
+      s.pending = { type: 'wheels' };
+      events.push({
+        kind: 'shadow',
+        text: 'The Wheels of Saruman turn — choose: Break Oath (remove 2 friendly troops), Doubt (one player gives up 2 cards/tokens), or Despair (lose 1 hope).',
+      });
     }
     s.shadowDiscard.push(card);
-    checkHavens(s, events);
     return;
   }
 
@@ -550,19 +556,21 @@ function resolveShadowCard(s: GameState, rng: Rng, events: GameEvent[]): void {
     ? s.shadowDeck[s.shadowDeck.length - 1].back
     : next(rng) < 0.5 ? 'flag' : 'banner';
 
-  const lineDef = BATTLE_LINES.find((l) => l.id === card.line);
+  const lineDef = findBattleLine(card.lineFrom!, card.lineTo!);
+  const lineName = `${locName(card.lineFrom!)} → ${locName(card.lineTo!)}`;
   if (nextBack === 'flag') {
     events.push({
       kind: 'shadow',
-      text: `Shadow card: the ${lineDef?.name ?? card.line} line ADVANCES.`,
-      fx: { fx: 'shadowCard', half: 'advance', lineName: lineDef?.name, lineColor: lineDef?.color, reinforce: card.reinforce, order: card.order },
+      text: `Shadow card: the ${lineName} line ADVANCES.`,
+      fx: { fx: 'shadowCard', half: 'advance', lineName, lineColor: lineDef?.color, reinforce: card.reinforce, order: card.order },
     });
-    advanceLine(s, card.line!, events);
+    if (lineDef) advanceLine(s, lineDef.id, events);
+    else events.push({ kind: 'shadow', text: `(No matching battle line drawn on the board yet — nothing advances.)` });
   } else {
     events.push({
       kind: 'shadow',
       text: `Shadow card: REINFORCE ${locName(card.reinforce!)}.`,
-      fx: { fx: 'shadowCard', half: 'reinforce', lineName: lineDef?.name, lineColor: lineDef?.color, reinforce: card.reinforce, order: card.order },
+      fx: { fx: 'shadowCard', half: 'reinforce', lineName, lineColor: lineDef?.color, reinforce: card.reinforce, order: card.order },
     });
     const loc = card.reinforce!;
     addShadow(s, loc, 1, events, true);
@@ -815,7 +823,7 @@ function playEvent(s: GameState, rng: Rng, playerId: PlayerId, action: Extract<A
     case 'tom_bombadil': {
       if (action.dice && action.dice.length > 0) {
         const pend = s.pending;
-        if (!pend) throw new RuleError('No roll to reroll.');
+        if (!pend || (pend.type !== 'search' && pend.type !== 'battle')) throw new RuleError('No roll to reroll.');
         for (const die of action.dice.slice(0, 3)) {
           if (die < 0 || die >= pend.dice.length) continue;
           if (pend.type === 'search') pend.dice[die] = SEARCH_DIE[nextInt(rng, 6)] as SearchFace;
@@ -1395,7 +1403,7 @@ function doAbility(
           ? 'nothing — the deck is empty'
           : top.special
             ? SPECIAL_SHADOW_INFO[top.special].name
-            : `${BATTLE_LINES.find((l) => l.id === top.line)?.name} / ${locName(top.reinforce!)}`;
+            : `${locName(top.lineFrom!)} → ${locName(top.lineTo!)} / ${locName(top.reinforce!)}`;
         events.push({ kind: 'action', text: `Legolas's keen eyes read the next shadow card: ${desc}.` });
         break;
       }
@@ -1638,6 +1646,76 @@ function handlePendingAction(s: GameState, rng: Rng, playerId: PlayerId, action:
     s.playerDiscard.push(card);
     events.push({ kind: 'turn', text: `${player.name} discards a card.` });
     if (player.hand.length <= HAND_LIMIT) s.pending = null;
+    return;
+  }
+
+  if (pend.type === 'wheels') {
+    if (action.type !== 'wheels') throw new RuleError('The Wheels of Saruman must be resolved first.');
+    // Stage 1: the current player picks a woe.
+    if (!pend.mode && pend.remaining === undefined) {
+      if (playerId !== activePlayer(s).id) throw new RuleError('The current player chooses.');
+      if (action.pick === 'despair') {
+        changeHope(s, -1, events, 'despair spreads through the Fellowship');
+        s.pending = null;
+        return;
+      }
+      if (action.pick === 'oath') {
+        if (Object.values(s.friendly).every((fs) => Object.values(fs).every((n) => !n))) {
+          throw new RuleError('No friendly troops on the board — pick another option.');
+        }
+        pend.mode = 'oath';
+        pend.remaining = 2;
+        events.push({ kind: 'shadow', text: 'Oaths break — remove 2 friendly troops from the board.' });
+        return;
+      }
+      if (action.pick === 'doubt') {
+        const target = s.players.find((pl) => pl.id === action.toPlayer);
+        if (!target) throw new RuleError('Pick which player pays the price.');
+        const wealth = target.hand.length + Object.values(target.tokens).reduce((a, b) => a + b, 0);
+        if (wealth === 0) throw new RuleError('That player has nothing to give up.');
+        pend.mode = 'doubt';
+        pend.player = target.id;
+        pend.remaining = Math.min(2, wealth);
+        events.push({ kind: 'shadow', text: `Doubt gnaws at ${target.name} — they must give up ${pend.remaining} card${pend.remaining > 1 ? 's' : ''}/token${pend.remaining > 1 ? 's' : ''}.` });
+        return;
+      }
+      throw new RuleError('Pick Break Oath, Doubt, or Despair.');
+    }
+    // Stage 2: resolve targets.
+    if (pend.mode === 'oath') {
+      if (playerId !== activePlayer(s).id) throw new RuleError('The current player picks the troops.');
+      const loc = action.location;
+      const f = action.faction;
+      if (!loc || !f || !(s.friendly[loc]?.[f] ?? 0)) throw new RuleError('Pick a friendly troop on the board.');
+      s.friendly[loc]![f]! -= 1;
+      s.supply.factions[f] += 1;
+      events.push({ kind: 'shadow', text: `A ${FACTION_NAMES[f]} troop abandons ${locName(loc)}.` });
+      checkHavens(s, events);
+      pend.remaining! -= 1;
+      if (pend.remaining! <= 0 || Object.values(s.friendly).every((fs) => Object.values(fs).every((n) => !n))) {
+        s.pending = null;
+      }
+      return;
+    }
+    // Doubt: the chosen player gives up cards and/or tokens.
+    if (playerId !== pend.player) throw new RuleError('Not your price to pay.');
+    if (action.card) {
+      const idx = player.hand.findIndex((c) => c.id === action.card);
+      if (idx < 0) throw new RuleError('Card not in your hand.');
+      const [card] = player.hand.splice(idx, 1);
+      s.playerDiscard.push(card);
+      events.push({ kind: 'shadow', text: `${player.name} discards a card in doubt.` });
+    } else if (action.symbol) {
+      if ((player.tokens[action.symbol] ?? 0) <= 0) throw new RuleError('No such token.');
+      player.tokens[action.symbol] -= 1;
+      s.supply.tokens[action.symbol] += 1;
+      events.push({ kind: 'shadow', text: `${player.name} returns a ${action.symbol} token in doubt.` });
+    } else {
+      throw new RuleError('Pick a card or token to give up.');
+    }
+    pend.remaining! -= 1;
+    const wealth = player.hand.length + Object.values(player.tokens).reduce((a, b) => a + b, 0);
+    if (pend.remaining! <= 0 || wealth === 0) s.pending = null;
     return;
   }
 

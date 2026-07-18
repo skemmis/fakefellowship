@@ -442,7 +442,12 @@ describe('determinism', () => {
       s = applyAction(s, 'p1', { type: 'endTurn' }).state;
       let guard = 0;
       while (s.pending && guard++ < 20) {
-        const decider = s.pending.type === 'discard' ? s.pending.player : 'p1';
+        const decider =
+          s.pending.type === 'discard'
+            ? s.pending.player
+            : s.pending.type === 'wheels' && s.pending.mode === 'doubt'
+              ? s.pending.player!
+              : s.players[s.turn.playerIdx].id;
         const acts = legalActions(s, decider);
         s = applyAction(s, decider, acts[0]).state;
       }

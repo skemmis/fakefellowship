@@ -120,12 +120,17 @@ export type ShadowOrder = 'eye' | 'hunt2' | 'deploy3';
 
 export interface ShadowCard {
   id: string;
-  /** Which half resolves is decided by the back of the next card on the deck. */
+  /**
+   * This card's printed back. Which half of a flipped card resolves is
+   * decided by the back of the NEXT card on the deck: a red flag back means
+   * ADVANCE (top half), the dark Eye-banner back means REINFORCE (bottom).
+   */
   back: 'flag' | 'banner';
-  special?: 'war_drums' | 'traitors_engine';
-  /** Advance half: battle line to advance. */
-  line?: string;
-  /** Reinforce half: location + special order. */
+  special?: 'drums_of_war' | 'wheels_of_saruman';
+  /** Advance half: the battle line, named by its endpoints on the card. */
+  lineFrom?: LocationId;
+  lineTo?: LocationId;
+  /** Reinforce half: location (always the line's origin) + special order. */
   reinforce?: LocationId;
   order?: ShadowOrder;
 }
@@ -179,7 +184,18 @@ export interface PendingDiscard {
   player: PlayerId;
 }
 
-export type Pending = PendingSearch | PendingBattle | PendingDiscard;
+/** The Wheels of Saruman: the current player picks one of three woes. */
+export interface PendingWheels {
+  type: 'wheels';
+  /** Set once an option is chosen and targets remain to pick. */
+  mode?: 'oath' | 'doubt';
+  /** Doubt: the player who must give up cards/tokens. */
+  player?: PlayerId;
+  /** Targets still to remove/discard. */
+  remaining?: number;
+}
+
+export type Pending = PendingSearch | PendingBattle | PendingDiscard | PendingWheels;
 
 // ---------------------------------------------------------------------------
 // Automatic step queue (shadow phase, darken steps, queued battles)
@@ -333,7 +349,19 @@ export type Action =
   | { type: 'ignoreDie'; die: number } // Sam's aid: 1 friendship neutralizes a harmful search die
   | { type: 'showValor' } // battle only: spend 1 valor, remove 1 shadow troop
   | { type: 'confirm' } // apply the pending roll and continue
-  | { type: 'discard'; card: string }; // resolve a pending hand-limit discard
+  | { type: 'discard'; card: string } // resolve a pending hand-limit discard
+  | {
+      /** Resolve The Wheels of Saruman, one step at a time. */
+      type: 'wheels';
+      pick?: 'oath' | 'doubt' | 'despair';
+      /** Oath: a location holding a friendly troop to remove (with faction). */
+      location?: LocationId;
+      faction?: Faction;
+      /** Doubt: which player pays, then their card/token picks. */
+      toPlayer?: PlayerId;
+      card?: string;
+      symbol?: SymbolKind;
+    };
 
 /** Structured visual payload so the client can animate what happened. */
 export type EventFx =

@@ -301,6 +301,18 @@ export const BATTLE_LINES: BattleLineDef[] = deriveBattleLines(EDGES).map((l) =>
   name: `${LOC_NAME[l.path[0]]} \u2192 ${LOC_NAME[l.path[l.path.length - 1]]}`,
 }));
 
+/**
+ * Resolve the battle line a shadow card names by its endpoints. Falls back to
+ * any line leaving the same origin while the drawn board data is still being
+ * trued up against the physical map; returns undefined if none exists.
+ */
+export function findBattleLine(from: LocationId, to: LocationId): BattleLineDef | undefined {
+  return (
+    BATTLE_LINES.find((l) => l.path[0] === from && l.path[l.path.length - 1] === to) ??
+    BATTLE_LINES.find((l) => l.path[0] === from)
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Derived lookups
 // ---------------------------------------------------------------------------

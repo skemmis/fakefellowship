@@ -113,7 +113,7 @@ function scoreAction(s: GameState, a: Action): number {
     case 'reroll': {
       // Reroll harmful dice when we can afford it.
       const pend = s.pending;
-      if (!pend || pend.type === 'discard') return 0;
+      if (!pend || pend.type === 'discard' || pend.type === 'wheels') return 0;
       const face = pend.dice[a.die];
       const harmful =
         pend.type === 'search' ? face === 'weary' || face === 'exposed' : face === 'wraith' || face === 'overrun';
@@ -242,12 +242,14 @@ export function simulateGame(
   let actionsTaken = 0;
 
   while (state.phase === 'playing' && actionsTaken < maxActions) {
-    // Whose decision is it? Pending discard belongs to that player; everything
-    // else is driven by the active player for bot purposes.
+    // Whose decision is it? Discards and Doubt payments belong to their
+    // target player; everything else is driven by the active player.
     const decider =
       state.pending?.type === 'discard'
         ? state.pending.player
-        : state.players[state.turn.playerIdx].id;
+        : state.pending?.type === 'wheels' && state.pending.mode === 'doubt'
+          ? state.pending.player!
+          : state.players[state.turn.playerIdx].id;
     const actions = legalActions(state, decider);
     if (actions.length === 0) {
       throw new Error(`No legal actions for ${decider} (pending=${JSON.stringify(state.pending)})`);

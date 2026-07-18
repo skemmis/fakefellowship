@@ -9,7 +9,6 @@ import type {
   ShadowOrder,
   SymbolKind,
 } from '../types.js';
-import { BATTLE_LINES, REGIONS, SHADOW_LOCATIONS } from './board.js';
 
 // ---------------------------------------------------------------------------
 // Core numbers. Values marked (reconstructed) are not printed in the rulebook
@@ -30,6 +29,13 @@ export const ACTIONS_SECONDARY = 1;
 
 export const SHADOW_TROOPS_TOTAL = 48;
 export const FACTION_TOTALS = { deepholm: 8, sylvan: 9, riders: 8, vale: 10 } as const;
+/** Display names for the four Free Peoples armies (internal ids are legacy). */
+export const FACTION_NAMES = {
+  vale: 'Gondor',
+  riders: 'Rohirrim',
+  sylvan: 'Elven',
+  deepholm: 'Dwarven',
+} as const;
 export const NAZGUL_TOTAL = 9;
 export const TOKENS_PER_SYMBOL = 9; // 36 symbol tokens (reconstructed split)
 
@@ -154,40 +160,96 @@ export function buildDarkenCards(): DarkenCard[] {
 }
 
 // ---------------------------------------------------------------------------
-// Shadow cards: 48 regular (advance half + reinforce half) + 2 specials.
-// Which half resolves is decided by the back of the next card on the deck.
-// Special-order distribution (16/16/16) is from the rulebook.
+// Shadow cards: 48 regular (advance half + reinforce half) + 2 specials,
+// all transcribed from the physical deck. The advance half names a battle
+// line by its endpoints; the reinforce half always adds 1 troop at the
+// line's origin, plus one of three special orders (16 of each):
+//   eye     — the Eye shifts to Frodo's region (a search if already there)
+//   hunt2   — 2 Nazgûl close in on Frodo (closest outside his region)
+//   deploy3 — 3 Nazgûl fly from Mordor to the Eye (recall 3 if Eye in Mordor)
+// Each card's printed back (red flag vs. dark Eye banner) is real: the back
+// of the NEXT card on the deck picks which half of the flipped card resolves
+// (flag = advance, banner = reinforce). 25 of each across the 50 cards.
 // ---------------------------------------------------------------------------
 
+type ShadowRow = [LocationId, LocationId, ShadowOrder, 'F' | 'B'];
+
+const SHADOW_CARD_DATA: ShadowRow[] = [
+  ['rhun', 'woodland_realm', 'eye', 'B'],
+  ['isengard', 'grey_havens', 'eye', 'B'],
+  ['umbar', 'helms_deep', 'deploy3', 'B'],
+  ['nurn', 'minas_tirith', 'eye', 'F'],
+  ['isengard', 'rivendell', 'deploy3', 'B'],
+  ['dunland', 'rivendell', 'deploy3', 'F'],
+  ['dunland', 'grey_havens', 'hunt2', 'F'],
+  ['dunland', 'rivendell', 'eye', 'B'],
+  ['moria', 'minas_tirith', 'deploy3', 'B'],
+  ['dunland', 'helms_deep', 'deploy3', 'B'],
+  ['nurn', 'minas_tirith', 'hunt2', 'B'],
+  ['isengard', 'helms_deep', 'eye', 'F'],
+  ['umbar', 'helms_deep', 'eye', 'B'],
+  ['rhun', 'minas_tirith', 'hunt2', 'F'],
+  ['umbar', 'grey_havens', 'deploy3', 'F'],
+  ['isengard', 'grey_havens', 'deploy3', 'B'],
+  ['dol_guldur', 'erebor', 'hunt2', 'B'],
+  ['dol_guldur', 'erebor', 'eye', 'F'],
+  ['umbar', 'helms_deep', 'hunt2', 'F'],
+  ['umbar', 'helms_deep', 'hunt2', 'F'],
+  ['dunland', 'grey_havens', 'eye', 'B'],
+  ['nurn', 'helms_deep', 'deploy3', 'F'],
+  ['nurn', 'erebor', 'hunt2', 'F'],
+  ['moria', 'erebor', 'hunt2', 'B'],
+  ['dunland', 'helms_deep', 'hunt2', 'F'],
+  ['nurn', 'helms_deep', 'eye', 'B'],
+  ['rhun', 'woodland_realm', 'hunt2', 'F'],
+  ['moria', 'erebor', 'eye', 'F'],
+  ['isengard', 'rivendell', 'hunt2', 'F'],
+  ['dol_guldur', 'helms_deep', 'deploy3', 'F'],
+  ['near_harad', 'erebor', 'eye', 'F'],
+  ['near_harad', 'erebor', 'hunt2', 'B'],
+  ['rhun', 'woodland_realm', 'deploy3', 'B'],
+  ['near_harad', 'helms_deep', 'deploy3', 'B'],
+  ['umbar', 'grey_havens', 'eye', 'B'],
+  ['moria', 'minas_tirith', 'hunt2', 'B'],
+  ['moria', 'rivendell', 'deploy3', 'F'],
+  ['rhun', 'minas_tirith', 'deploy3', 'B'],
+  ['near_harad', 'helms_deep', 'eye', 'B'],
+  ['dol_guldur', 'helms_deep', 'eye', 'F'],
+  ['near_harad', 'helms_deep', 'deploy3', 'B'],
+  ['nurn', 'erebor', 'deploy3', 'F'],
+  ['dol_guldur', 'minas_tirith', 'deploy3', 'F'],
+  ['near_harad', 'helms_deep', 'hunt2', 'B'],
+  ['dol_guldur', 'minas_tirith', 'hunt2', 'B'],
+  ['rhun', 'woodland_realm', 'eye', 'F'],
+  ['isengard', 'helms_deep', 'hunt2', 'F'],
+  ['moria', 'rivendell', 'eye', 'F'],
+];
+
 export function buildShadowCards(): { deck: ShadowCard[]; specials: ShadowCard[] } {
-  const deck: ShadowCard[] = [];
-  const orders: ShadowOrder[] = ['eye', 'hunt2', 'deploy3'];
-  for (let i = 0; i < 48; i++) {
-    deck.push({
-      id: `sh${i}`,
-      back: i % 2 === 0 ? 'flag' : 'banner',
-      line: BATTLE_LINES[i % BATTLE_LINES.length].id,
-      reinforce: SHADOW_LOCATIONS[i % SHADOW_LOCATIONS.length],
-      order: orders[Math.floor(i / 16)],
-    });
-  }
+  const deck: ShadowCard[] = SHADOW_CARD_DATA.map(([from, to, order, back], i) => ({
+    id: `sh${i}`,
+    back: back === 'F' ? 'flag' : 'banner',
+    lineFrom: from,
+    lineTo: to,
+    reinforce: from,
+    order,
+  }));
   const specials: ShadowCard[] = [
-    { id: 'sp_drums', back: 'flag', special: 'war_drums' },
-    { id: 'sp_wheels', back: 'banner', special: 'traitors_engine' },
+    { id: 'sp_drums', back: 'flag', special: 'drums_of_war' },
+    { id: 'sp_wheels', back: 'banner', special: 'wheels_of_saruman' },
   ];
   return { deck, specials };
 }
 
 export const SPECIAL_SHADOW_INFO: Record<string, { name: string; text: string }> = {
-  // Both effects reconstructed — the rulebook names these cards but their
-  // text isn't legible in the scan.
-  war_drums: {
+  // Effects transcribed from the physical cards (paraphrased).
+  drums_of_war: {
     name: 'The Drums of War',
-    text: 'Add 1 shadow troop to every shadow stronghold that has not been captured, then battle wherever friendly troops share those locations.',
+    text: 'Every shadow stronghold in Mordor gains 1 shadow troop.',
   },
-  traitors_engine: {
+  wheels_of_saruman: {
     name: 'The Wheels of Saruman',
-    text: 'Add 2 shadow troops to Isengard (unless captured), then advance the Isengard battle line.',
+    text: 'The current player picks one: remove 2 friendly troops from the board; or one player gives up 2 cards and/or symbol tokens; or lose 1 hope.',
   },
 };
 

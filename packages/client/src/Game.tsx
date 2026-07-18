@@ -4,6 +4,7 @@ import {
   CHARACTER_MAP,
   connection,
   EVENTS,
+  FACTION_NAMES,
   legalActions,
   MAP,
   OBJECTIVE_MAP,
@@ -321,7 +322,9 @@ export function Game({
               {pend
                 ? pend.type === 'discard'
                   ? `${state.players.find((p) => p.id === pend.player)?.name} must discard to 7 cards`
-                  : `${pend.type === 'search' ? 'Search' : 'Battle'} at ${MAP[pend.location].name} — resolve the dice`
+                  : pend.type === 'wheels'
+                    ? 'The Wheels of Saruman turn — a price must be paid'
+                    : `${pend.type === 'search' ? 'Search' : 'Battle'} at ${MAP[pend.location].name} — resolve the dice`
                 : myTurn
                   ? 'Your turn'
                   : `${active.name}'s turn`}
@@ -756,6 +759,73 @@ function PendingPanel({
               </button>
             ))}
           </div>
+        )}
+      </section>
+    );
+  }
+
+  if (pend.type === 'wheels') {
+    const active = state.players[state.turn.playerIdx];
+    const wheelsActs = legal.filter((a) => a.type === 'wheels');
+    const iChoose = wheelsActs.length > 0;
+    return (
+      <section className="panel pending">
+        <h3>⚙ The Wheels of Saruman</h3>
+        {!pend.mode && pend.remaining === undefined ? (
+          <>
+            <p className="hint">
+              {iChoose ? 'Choose the least of three evils:' : `${active.name} chooses the price to pay.`}
+            </p>
+            {iChoose && (
+              <div className="hand">
+                {wheelsActs.filter((a) => a.pick === 'oath').slice(0, 1).map((a) => (
+                  <button key="oath" onClick={() => onAct(a)}>Break Oath — remove 2 friendly troops</button>
+                ))}
+                {wheelsActs.filter((a) => a.pick === 'doubt').map((a) => (
+                  <button key={`d${a.toPlayer}`} onClick={() => onAct(a)}>
+                    Doubt — {state.players.find((p) => p.id === a.toPlayer)?.name} gives up 2 cards/tokens
+                  </button>
+                ))}
+                {wheelsActs.filter((a) => a.pick === 'despair').map((a) => (
+                  <button key="despair" onClick={() => onAct(a)}>Despair — lose 1 hope</button>
+                ))}
+              </div>
+            )}
+          </>
+        ) : pend.mode === 'oath' ? (
+          <>
+            <p className="hint">
+              {iChoose ? `Pick ${pend.remaining} troop${(pend.remaining ?? 0) > 1 ? 's' : ''} to remove:` : `${active.name} picks ${pend.remaining} troop(s) to remove.`}
+            </p>
+            {iChoose && (
+              <div className="hand">
+                {wheelsActs.map((a, i) => (
+                  <button key={i} onClick={() => onAct(a)}>
+                    {FACTION_NAMES[a.faction!]} troop at {MAP[a.location!].name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            <p className="hint">
+              {iChoose
+                ? `Give up ${pend.remaining} more card${(pend.remaining ?? 0) > 1 ? 's' : ''}/token${(pend.remaining ?? 0) > 1 ? 's' : ''}:`
+                : `${state.players.find((p) => p.id === pend.player)?.name} must give up ${pend.remaining} card(s)/token(s).`}
+            </p>
+            {iChoose && (
+              <div className="hand">
+                {wheelsActs.map((a, i) => (
+                  <button key={i} onClick={() => onAct(a)}>
+                    {a.card
+                      ? `Discard ${(() => { const c = state.players.find((p) => p.id === playerId)!.hand.find((h) => h.id === a.card)!; return c.kind === 'region' ? REGIONS.find((r) => r.id === c.region)?.name : EVENTS.find((e) => e.key === (c as { event: string }).event)?.name; })()}`
+                      : `Return a ${a.symbol} token`}
+                  </button>
+                ))}
+              </div>
+            )}
+          </>
         )}
       </section>
     );
