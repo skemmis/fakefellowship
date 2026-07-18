@@ -73,6 +73,8 @@ repository is paraphrased, and no artwork or card text is copied.
   2 cards or tokens / lose 1 hope).
 - All 14 event cards, all 48 region cards (symbols + corner numbers), and
   all 12 Skies Darken troop-drop locations.
+- Both dice: search 2 slip / 2 weary / 1 exposed / 1 recall; battle 2 rout /
+  2 exchange / 1 overrun / 1 Nazgûl (counts confirmed by the owner).
 - All 24 objective cards: character-binding setup ("use X" cards pull that
   character into the game), extra setup shadow troops, troops reserved on
   cards, objective-card actions, plain-location Captures (Osgiliath,
@@ -85,8 +87,6 @@ repository is paraphrased, and no artwork or card text is copied.
 
 - The exact routes of some paths and battle lines (`engine/src/data/board.ts`)
   — being trued up with the in-browser board editor.
-- Search/battle die face distributions (`SEARCH_DIE` / `BATTLE_DIE`) —
-  face effects are confirmed; per-die counts still needed.
 - A few unreadable objective-card details: some alternative Capture costs,
   three symbol costs (Unseat Denethor, Free Théoden, Attain the Blessing),
   the reward token types, and the exact die-outcome tables for Confront the

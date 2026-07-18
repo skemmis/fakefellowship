@@ -48,9 +48,17 @@ export const MAX_BATTLE_DICE = 3;
 export const HAVEN_LOST_HOPE = 3;
 export const CAPTURE_HOPE = 2;
 
-/** Search die faces (distribution reconstructed; face effects are from the rulebook). */
-export const SEARCH_DIE = ['slip', 'slip', 'slip', 'weary', 'exposed', 'recall'] as const;
-/** Battle die faces (distribution reconstructed; face effects are from the rulebook). */
+/**
+ * Die faces, transcribed from the physical dice.
+ * Search: 2 blank (slip), 2 lone-tree (weary: −1 hope), 1 framed-tree
+ * (exposed: −1 hope, ignored in a haven), 1 Nazgûl (recall to Mordor).
+ */
+export const SEARCH_DIE = ['slip', 'slip', 'weary', 'weary', 'exposed', 'recall'] as const;
+/**
+ * Battle: 2 shadow-troop (rout), 2 shadow+friendly (exchange), 1 framed
+ * friendly (overrun: ignored in a haven), 1 winged Nazgûl (−2 friendly if
+ * Nazgûl are in the region).
+ */
 export const BATTLE_DIE = ['rout', 'rout', 'exchange', 'exchange', 'overrun', 'wraith'] as const;
 
 export const SYMBOL_INFO: Record<SymbolKind, { name: string; note: string }> = {
