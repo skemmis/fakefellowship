@@ -115,6 +115,18 @@ export function legalActions(s: GameState, playerId?: string): Action[] {
     if (pend.type === 'battle' && present && canPayList(player, ['valor']) && pend.valorKills < (s.shadow[pend.location] ?? 0)) {
       out.push({ type: 'showValor' });
     }
+    // Shieldmaiden No Longer: Éowyn may turn a battle die to the Nazgûl face.
+    if (
+      pend.type === 'battle' &&
+      objectiveOpen(s, 'shieldmaiden') &&
+      player.characters.includes('eowyn') &&
+      s.characters['eowyn']?.location === pend.location &&
+      canPayList(player, ['valor', 'valor'])
+    ) {
+      for (let i = 0; i < pend.dice.length; i++) {
+        if (pend.dice[i] !== 'wraith') out.push({ type: 'eowynStrike', die: i });
+      }
+    }
     // Tom Bombadil may reroll up to 3 dice of the pending roll.
     const tom = player.hand.find((c) => c.kind === 'event' && c.event === 'tom_bombadil');
     if (tom && pend.dice.length > 0) {

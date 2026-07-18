@@ -372,6 +372,7 @@ export type Action =
   | { type: 'reroll'; die: number; free?: boolean } // 1 resistance (or valor with Gandalf present); free uses a character's once-per-roll reroll
   | { type: 'ignoreDie'; die: number } // Sam's aid: 1 friendship neutralizes a harmful search die
   | { type: 'showValor' } // battle only: spend 1 valor, remove 1 shadow troop
+  | { type: 'eowynStrike'; die: number } // Shieldmaiden card: 2 valor turns a battle die to the Nazgûl face
   | { type: 'confirm' } // apply the pending roll and continue
   | { type: 'discard'; card: string } // resolve a pending hand-limit discard
   | {

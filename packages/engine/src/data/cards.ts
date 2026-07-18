@@ -305,10 +305,9 @@ export const OBJECTIVES: ObjectiveDef[] = [
   {
     id: 'staff_broken',
     name: '“Saruman, Your Staff Is Broken”',
-    text: 'Setup: 2 extra shadow troops in Isengard. Done when Isengard is a haven AND Rohan holds no shadow troops or shadow strongholds. The current player may take 1 token.',
+    text: 'Setup: 2 extra shadow troops in Isengard. Done when Isengard is a haven AND Rohan holds no shadow troops or shadow strongholds. The current player may take 1 Resistance token.',
     star: 'black',
     setupShadow: { isengard: 2 },
-    uncertain: 'which token the reward grants (using Stealth)',
   },
   {
     id: 'challenge_sauron',
@@ -325,7 +324,6 @@ export const OBJECTIVES: ObjectiveDef[] = [
     id: 'avenge_balin',
     name: 'Avenge Balin!',
     text: 'Done when Moria is a haven with at least 2 Dwarven troops inside. If at least 4 Dwarven troops stand in Moria, the current player may take 2 Valor tokens.',
-    uncertain: 'first completion clause partially unreadable — using “Moria is a haven”',
   },
   {
     id: 'oathbreakers',
@@ -344,7 +342,6 @@ export const OBJECTIVES: ObjectiveDef[] = [
     name: 'Arwen Unfurls the Banner',
     text: 'Arwen spends an action and 1 Friendship in Minas Tirith while it is a haven holding at least 1 Gondor, 1 Rohirrim, 1 Elven, and 1 Dwarven troop. Done: hope rises 1.',
     uses: ['arwen'],
-    uncertain: 'symbol spent (read as 1 Friendship)',
   },
   {
     id: 'boromir_honor',
@@ -362,9 +359,9 @@ export const OBJECTIVES: ObjectiveDef[] = [
   {
     id: 'shelobs_lair',
     name: 'Shelob’s Lair',
-    text: 'Sam spends an action in Minas Morgul to brave the lair, rolling 3 search dice with Gollum present (hope losses per the card). Done: if Frodo lost no hope doing it, he may take 1 extra action this turn.',
+    text: 'Sam spends an action in Minas Morgul to brave the lair, rolling 3 battle dice with Gollum present: an overrun costs 1 hope, an exchange 2, a Nazgûl 3; a lone foe is harmless. Done: if Frodo lost no hope doing it, he may take 1 extra action this turn.',
     uses: ['gollum'],
-    uncertain: 'die-face outcome table and Gollum-player penalty pending confirmation — using search-die harm as stand-in',
+    uncertain: 'the Gollum-player hand penalty and Sam’s spend-to-mitigate lines are not yet implemented',
   },
   {
     id: 'hobbits_loyalty',
@@ -388,9 +385,9 @@ export const OBJECTIVES: ObjectiveDef[] = [
   {
     id: 'infiltrate_morgul',
     name: 'Infiltrate Minas Morgul',
-    text: 'Setup: 1 extra shadow troop in Minas Morgul. Done when Minas Morgul is a haven: the current player may take 2 tokens, and the top 2 shadow cards are removed from the game.',
+    text: 'Setup: 1 extra shadow troop in Minas Morgul. Done when Minas Morgul is a haven: the current player may take 2 Stealth tokens, and the top 2 shadow cards are removed from the game.',
     setupShadow: { minas_morgul: 1 },
-    uncertain: 'alternative Capture cost and reward token type; deck-surgery choice is automated (both cards removed)',
+    uncertain: 'alternative Capture cost still unreadable; deck-surgery choice is automated (both cards removed)',
   },
   {
     id: 'ride_eored',
@@ -401,9 +398,9 @@ export const OBJECTIVES: ObjectiveDef[] = [
   {
     id: 'confront_balrog',
     name: 'Confront the Balrog',
-    text: 'Gandalf spends an action in Moria to face the terror, rolling 3 search dice (hope losses per the card). Done: Gandalf falls from the board — when the next Skies Darken card is drawn he returns to Lórien as Gandalf the White, and hope rises 2.',
+    text: 'Gandalf spends an action in Moria to face the terror, rolling 3 battle dice: an overrun costs 1 hope, an exchange 2, a Nazgûl 3; a lone foe is harmless. Done: Gandalf falls from the board — when the next Skies Darken card is drawn he returns to Lórien as Gandalf the White, and hope rises 2.',
     uses: ['gandalf'],
-    uncertain: 'die-face outcome table pending confirmation — using search-die harm as stand-in; Gandalf the White’s upgraded reroll not yet implemented',
+    uncertain: 'Gandalf’s spend-to-mitigate lines and Gandalf the White’s upgraded reroll are not yet implemented',
   },
   {
     id: 'rangers_eriador',
@@ -420,9 +417,8 @@ export const OBJECTIVES: ObjectiveDef[] = [
   {
     id: 'shieldmaiden',
     name: '“Shieldmaiden No Longer”',
-    text: 'Done when Éowyn has destroyed at least 2 Nazgûl and Rohan holds no shadow troops or strongholds: hope rises 1.',
+    text: 'While this is in play, Éowyn at a rolled battle may spend 2 Valor to turn one die to the Nazgûl face (her blade then fells a Nazgûl in the region). Done when she has destroyed at least 2 Nazgûl and Rohan holds no shadow troops or strongholds: hope rises 1.',
     uses: ['eowyn'],
-    uncertain: 'her battle die-changing grant pending confirmation — not yet implemented',
   },
   {
     id: 'frecas_heirs',

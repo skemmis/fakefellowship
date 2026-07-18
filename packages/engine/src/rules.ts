@@ -270,7 +270,7 @@ function completeObjective(s: GameState, id: string, events: GameEvent[]): void 
       break;
     }
     case 'staff_broken':
-      gainToken(s, activePlayer(s), 'stealth', events, def.name);
+      gainToken(s, activePlayer(s), 'resistance', events, def.name);
       break;
     case 'challenge_sauron': {
       setEye(s, 'ithilien', events, 'Sauron answers the challenge');
@@ -551,6 +551,22 @@ function winGame(s: GameState, events: GameEvent[]): void {
     kind: 'win',
     text: 'The One Ring falls into the fire. Barad-dûr crumbles — Middle-earth is saved!',
   });
+}
+
+/**
+ * Objective-card ordeal (Balrog / Shelob): 3 battle dice, hope losses by
+ * face — overrun 1, exchange 2, Nazgûl 3, rout none (owner-confirmed).
+ */
+function rollChallenge(rng: Rng): { lost: number; faces: BattleFace[] } {
+  const HOPE_LOSS: Record<BattleFace, number> = { rout: 0, overrun: 1, exchange: 2, wraith: 3 };
+  let lost = 0;
+  const faces: BattleFace[] = [];
+  for (let i = 0; i < 3; i++) {
+    const f = BATTLE_DIE[nextInt(rng, 6)];
+    faces.push(f);
+    lost += HOPE_LOSS[f];
+  }
+  return { lost, faces };
 }
 
 function rollBattle(s: GameState, rng: Rng, loc: LocationId, source: 'attack' | 'shadow', requested: number | undefined, events: GameEvent[], attacker?: CharacterId): void {
@@ -1677,16 +1693,9 @@ export function applyAction(state: GameState, playerId: PlayerId, action: Action
           if (here !== 'minas_morgul') throw new RuleError('This happens at Minas Morgul.');
           if (s.characters['gollum']?.location !== here) throw new RuleError('Gollum must be present to lead the way.');
           spendAction(s, c);
-          // Stand-in outcome table pending card confirmation: three search
-          // dice; hope losses per face.
-          let lost = 0;
-          const faces: string[] = [];
-          for (let i = 0; i < 3; i++) {
-            const f = SEARCH_DIE[nextInt(rng, 6)];
-            faces.push(f);
-            if (f === 'slip' || f === 'weary') lost += 1;
-            else if (f === 'exposed') lost += 2;
-          }
+          // Owner-confirmed table: 3 battle dice; overrun −1 hope,
+          // exchange −2, Nazgûl −3, lone rout harmless.
+          const { lost, faces } = rollChallenge(rng);
           events.push({ kind: 'objective', text: `Sam faces the lair: [${faces.join(' ')}].` });
           if (lost > 0) changeHope(s, -lost, events, "Shelob's lair");
           completeObjective(s, 'shelobs_lair', events);
@@ -1700,16 +1709,8 @@ export function applyAction(state: GameState, playerId: PlayerId, action: Action
           if (c !== 'gandalf') throw new RuleError('Only Gandalf may face the Balrog.');
           if (here !== 'moria') throw new RuleError('The terror waits in Moria.');
           spendAction(s, c);
-          // Stand-in outcome table pending card confirmation.
-          let lost = 0;
-          const faces: string[] = [];
-          for (let i = 0; i < 3; i++) {
-            const f = SEARCH_DIE[nextInt(rng, 6)];
-            faces.push(f);
-            if (f === 'slip') lost += 1;
-            else if (f === 'weary') lost += 3;
-            else if (f === 'exposed') lost += 2;
-          }
+          // Owner-confirmed table (same as Shelob's Lair).
+          const { lost, faces } = rollChallenge(rng);
           events.push({ kind: 'objective', text: `Gandalf stands upon the bridge: [${faces.join(' ')}].` });
           if (lost > 0) changeHope(s, -lost, events, 'the Balrog');
           if (s.phase !== 'playing') break;
@@ -2222,6 +2223,21 @@ function handlePendingAction(s: GameState, rng: Rng, playerId: PlayerId, action:
       pay(s, player, ['valor'], events);
       pend.valorKills += 1;
       events.push({ kind: 'battle', text: `${player.name} shows valor — another shadow troop will fall.` });
+      return;
+    }
+    case 'eowynStrike': {
+      // Shieldmaiden No Longer: while in play, Éowyn at a rolled battle may
+      // spend 2 Valor to turn one die to the Nazgûl face.
+      if (pend.type !== 'battle') throw new RuleError('Her blade turns battle dice only.');
+      if (!objectiveActive(s, 'shieldmaiden')) throw new RuleError('That card is not in play.');
+      if (!player.characters.includes('eowyn') || s.characters['eowyn']?.location !== pend.location) {
+        throw new RuleError('Éowyn must stand at the battle.');
+      }
+      if (action.die < 0 || action.die >= pend.dice.length) throw new RuleError('Bad die.');
+      if (pend.dice[action.die] === 'wraith') throw new RuleError('That die already shows the Nazgûl.');
+      pay(s, player, ['valor', 'valor'], events);
+      pend.dice[action.die] = 'wraith';
+      events.push({ kind: 'battle', text: `Éowyn turns her blade — a die is set to the Nazgûl face: [${pend.dice.join(' ')}].` });
       return;
     }
     case 'confirm': {

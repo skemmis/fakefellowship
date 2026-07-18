@@ -888,6 +888,11 @@ function PendingPanel({
                   ✗ ❤
                 </button>
               )}
+              {legal.some((a) => a.type === 'eowynStrike' && a.die === i) && (
+                <button className="mini" onClick={() => onAct({ type: 'eowynStrike', die: i })} title="Shieldmaiden No Longer: spend 2 Valor to turn this die to the Nazgûl face (Éowyn then destroys a Nazgûl in this region)">
+                  ⚔⚔ → 🐉
+                </button>
+              )}
             </div>
           );
         })}
