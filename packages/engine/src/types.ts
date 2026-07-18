@@ -215,6 +215,8 @@ export interface TurnState {
   abilityUsed: Record<string, boolean>;
   /** Faramir led troops here this turn: one free Attack awaits. */
   freeAttack?: { character: CharacterId; location: LocationId };
+  /** Lembas: extra actions granted to one of the current player's characters. */
+  lembas?: { character: CharacterId; remaining: number };
 }
 
 export interface GameState {
@@ -302,7 +304,29 @@ export type Action =
       /** Card id target (Faramir/Gollum discard retrieval). */
       card?: string;
     }
-  | { type: 'playEvent'; card: string; location?: LocationId; character?: CharacterId; region?: RegionId; symbol?: SymbolKind }
+  | {
+      type: 'playEvent';
+      card: string;
+      location?: LocationId;
+      /** Second location (destination of a move, target of a battle, ...). */
+      location2?: LocationId;
+      character?: CharacterId;
+      characters?: CharacterId[];
+      region?: RegionId;
+      symbol?: SymbolKind;
+      /** Troop count for events that move or add troops. */
+      count?: number;
+      /** Die indices for Tom Bombadil's rerolls. */
+      dice?: number[];
+      /** Roll the optional battle offered by the event. */
+      battle?: boolean;
+      /** Multi-leg travel destinations, in order. */
+      path?: LocationId[];
+      /** Receiving player for token handoffs. */
+      toPlayer?: PlayerId;
+      /** Card id target (Elrond's Foresight pick, Council solo Prepare). */
+      pick?: string;
+    }
   | { type: 'endTurn' }
   // Pending-resolution actions:
   | { type: 'reroll'; die: number; free?: boolean } // 1 resistance (or valor with Gandalf present); free uses a character's once-per-roll reroll

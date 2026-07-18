@@ -75,26 +75,33 @@ export const DIFFICULTY_TABLE: Record<Difficulty, { darken: number; objectives: 
 };
 
 /**
- * 48 region cards: 4 per region, one of each symbol. (Real symbol distribution
- * unverified.) Each card carries a flavor number; the lowest number in an
- * opening hand picks the first player.
+ * The 48 region cards, transcribed from the physical deck: 4 per region, one
+ * of each symbol, each with its printed corner number (lowest number in an
+ * opening hand picks the first player).
  */
+const REGION_CARD_DATA: [RegionId, SymbolKind, number][] = [
+  ['eriador', 'valor', 19], ['eriador', 'stealth', 4], ['eriador', 'resistance', 17], ['eriador', 'friendship', 144],
+  ['rhudaur', 'friendship', 49], ['rhudaur', 'stealth', 458], ['rhudaur', 'valor', 464], ['rhudaur', 'resistance', 2],
+  ['misty_mountains', 'valor', 200], ['misty_mountains', 'resistance', 21], ['misty_mountains', 'stealth', 30], ['misty_mountains', 'friendship', 27],
+  ['enedwaith', 'resistance', 3], ['enedwaith', 'stealth', 11], ['enedwaith', 'valor', 12], ['enedwaith', 'friendship', 400],
+  ['rohan', 'friendship', 45], ['rohan', 'resistance', 42], ['rohan', 'stealth', 105], ['rohan', 'valor', 10000],
+  ['gondor', 'valor', 93], ['gondor', 'friendship', 26], ['gondor', 'resistance', 6], ['gondor', 'stealth', 28],
+  ['ithilien', 'valor', 150], ['ithilien', 'stealth', 10], ['ithilien', 'resistance', 7000], ['ithilien', 'friendship', 3000],
+  ['mordor', 'valor', 3019], ['mordor', 'stealth', 9], ['mordor', 'resistance', 1], ['mordor', 'friendship', 589],
+  ['rhovanion', 'stealth', 18], ['rhovanion', 'valor', 20], ['rhovanion', 'resistance', 5], ['rhovanion', 'friendship', 8],
+  ['mirkwood', 'valor', 33], ['mirkwood', 'friendship', 14], ['mirkwood', 'stealth', 131], ['mirkwood', 'resistance', 95],
+  ['dale', 'valor', 111], ['dale', 'friendship', 13], ['dale', 'resistance', 7], ['dale', 'stealth', 50],
+  ['haradwaith', 'valor', 15], ['haradwaith', 'friendship', 130], ['haradwaith', 'resistance', 99], ['haradwaith', 'stealth', 87],
+];
+
 export function buildRegionCards(): RegionCard[] {
-  const symbols: SymbolKind[] = ['friendship', 'valor', 'stealth', 'resistance'];
-  const cards: RegionCard[] = [];
-  REGIONS.forEach((region, r) => {
-    symbols.forEach((symbol, s) => {
-      const idx = r * 4 + s;
-      cards.push({
-        id: `rc${idx}`,
-        kind: 'region',
-        region: region.id,
-        symbol,
-        number: ((idx * 37) % 144) + 1, // spread of distinct flavor numbers
-      });
-    });
-  });
-  return cards;
+  return REGION_CARD_DATA.map(([region, symbol, number], i) => ({
+    id: `rc${i}`,
+    kind: 'region',
+    region,
+    symbol,
+    number,
+  }));
 }
 
 /**
@@ -108,21 +115,26 @@ export interface EventDef {
   reconstructed: boolean;
 }
 
+/**
+ * The 14 event cards, mechanics transcribed from the physical cards
+ * (descriptions paraphrased). All are playable at any time and are never
+ * an action; Lembas is restricted to the Do Actions step.
+ */
 export const EVENTS: EventDef[] = [
-  { key: 'haven_cloaks', name: 'Haven Cloaks and Rope', text: 'Choose a character. Move them up to 3 connections along normal paths (no search for Frodo).', reconstructed: true },
-  { key: 'eagles', name: 'The Eagles Are Coming!', text: 'Move a character to any haven.', reconstructed: true },
-  { key: 'athelas', name: 'Athelas', text: 'Gain 2 hope.', reconstructed: true },
-  { key: 'phial', name: 'The Light of Eärendil', text: 'Play during a search: all dice become Slip By.', reconstructed: true },
-  { key: 'rohirrim_charge', name: 'Charge of the Rohirrim', text: 'Roll a battle (up to 3 dice, one per friendly troop) in any location with friendly and shadow troops. Do not shift the Eye.', reconstructed: true },
-  { key: 'beacons', name: 'The Beacons Are Lit', text: 'Add 1 matching troop to each haven with a muster icon (if the supply allows).', reconstructed: true },
-  { key: 'council', name: 'The Council Convenes', text: 'Take any 1 symbol token from the supply.', reconstructed: true },
-  { key: 'ranger_paths', name: 'Ranger Paths', text: 'Move up to 3 friendly troops from one location to a connected location.', reconstructed: true },
-  { key: 'palantir', name: 'The Palantír', text: 'Reveal the next 3 shadow cards to all players.', reconstructed: true },
-  { key: 'mithril', name: 'Mithril Coat', text: 'Gain 1 hope and take 1 Resistance token if available.', reconstructed: true },
-  { key: 'ents', name: 'March of the Ents', text: 'Remove up to 2 shadow troops at Isengard or a location connected to Fangorn Forest.', reconstructed: true },
-  { key: 'oath_dead', name: 'The Dead Answer', text: 'Remove up to 2 shadow troops at any one Gondor location.', reconstructed: true },
-  { key: 'shadowfax', name: 'Shadowfax', text: 'Shift the Eye to any region.', reconstructed: true },
-  { key: 'gift', name: 'A Long-Expected Gift', text: 'Draw 1 player card.', reconstructed: true },
+  { key: 'red_arrow', name: 'The Red Arrow', text: 'Move up to 3 troops from one haven to another haven, then optionally battle there (the Eye shifts there if you do).', reconstructed: false },
+  { key: 'tom_bombadil', name: 'Tom Bombadil', text: 'Either gain 1 hope, or reroll up to 3 dice of one roll.', reconstructed: false },
+  { key: 'council_of_elrond', name: 'The Council of Elrond', text: 'Move any characters to Rivendell (no troops, no search); one player with a character there may then hand a symbol token to another. Solo: instead Prepare 1 card free, any region.', reconstructed: false },
+  { key: 'gwaihir', name: 'Gwaihir Brings News', text: 'Move friendly troops into an adjacent location (no special paths), then optionally battle there (the Eye shifts there if you do).', reconstructed: false },
+  { key: 'rohan_horses', name: 'Rohan Lends Horses', text: 'All characters in one location Travel together up to 3 times (no troops, no special paths). Frodo searches after every leg — Stealth cannot prevent it.', reconstructed: false },
+  { key: 'orc_infighting', name: 'Orc Infighting', text: 'Remove up to 2 shadow troops from a single location.', reconstructed: false },
+  { key: 'lembas', name: 'Lembas', text: 'During the Do Actions step: the current player gets 2 extra actions with one of their characters.', reconstructed: false },
+  { key: 'eagles', name: 'Eagles', text: 'Move a character to any location. Moving Frodo this way pulls the 7 closest Nazgûl and the Eye to his region, then a search.', reconstructed: false },
+  { key: 'elronds_foresight', name: "Elrond's Foresight", text: 'The current player reveals up to 4 player cards, may keep one (never a Skies Darken), and returns the rest to the top.', reconstructed: false },
+  { key: 'entmoot', name: 'Entmoot', text: 'Add up to 3 Ent troops (Elven pieces) to Fangorn Forest, then optionally march them with willing characters to an adjacent location — even Isengard, with no Stealth cost, no search, no battle.', reconstructed: false },
+  { key: 'elven_cloaks', name: 'Elven Cloaks and Rope', text: 'One character Travels alone up to 2 times with no searches (special path costs still apply; no companions or troops).', reconstructed: false },
+  { key: 'palantir_gaze', name: 'Gaze into a Palantír', text: "Pick a character: the Eye shifts to their region and any 3 Nazgûl fly there.", reconstructed: false },
+  { key: 'conflicting_orders', name: 'Conflicting Orders', text: 'Move all shadow troops from one location to adjacent location(s) of your choice. No battles roll.', reconstructed: false },
+  { key: 'gifts_elves', name: 'Gifts from the Elves', text: 'Take any 1 symbol token from the supply and give it to any player.', reconstructed: false },
 ];
 
 export function buildEventCards(): EventCard[] {
@@ -130,9 +142,13 @@ export function buildEventCards(): EventCard[] {
 }
 
 /** 12 Skies Darken cards; each targets a location for its troop drop. (targets reconstructed) */
+/**
+ * Skies Darken step-3 troop-drop targets. 'dorwinion' is transcribed from a
+ * physical card; the other 11 are placeholders awaiting transcription.
+ */
 const DARKEN_TARGETS: LocationId[] = [
-  'south_ithilien', 'dunland', 'rhun', 'near_harad', 'hollin', 'brown_lands',
-  'old_forest_road', 'fords_of_isen', 'lake_town', 'osgiliath', 'harondor', 'gladden_fields',
+  'dorwinion', 'south_ithilien', 'dunland', 'rhun', 'near_harad', 'hollin',
+  'brown_lands', 'old_forest_road', 'fords_of_isen', 'lake_town', 'osgiliath', 'harondor',
 ];
 
 export function buildDarkenCards(): DarkenCard[] {

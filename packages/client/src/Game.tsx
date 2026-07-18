@@ -568,7 +568,7 @@ function CardView({
   if (card.kind === 'event') {
     const def = EVENTS.find((e) => e.key === card.event)!;
     const direct = legal.find((a) => a.type === 'playEvent' && a.card === card.id && !a.location);
-    const needsTarget = ['eagles', 'rohirrim_charge', 'ents', 'oath_dead', 'haven_cloaks', 'ranger_paths', 'shadowfax'].includes(card.event);
+    const needsTarget = ['eagles', 'orc_infighting', 'conflicting_orders', 'red_arrow', 'gwaihir'].includes(card.event);
     return (
       <div className="card event-card">
         <div>
@@ -622,7 +622,7 @@ function PendingPanel({
   const canReroll = legal.some((a) => a.type === 'reroll');
   const canValor = legal.some((a) => a.type === 'showValor');
   const canConfirm = legal.some((a) => a.type === 'confirm');
-  const phial = legal.find((a) => a.type === 'playEvent');
+  const bombadil = legal.find((a) => a.type === 'playEvent');
 
   return (
     <section className="panel pending">
@@ -674,9 +674,9 @@ function PendingPanel({
             Show Valor ⚔ (+1 slain{pend.valorKills > 0 ? `, ${pend.valorKills} so far` : ''})
           </button>
         )}
-        {phial && (
-          <button onClick={() => onAct(phial)} title="The Light of Eärendil: every search die becomes Slip By">
-            ✨ Play The Light of Eärendil
+        {bombadil && (
+          <button onClick={() => onAct(bombadil)} title="Tom Bombadil: reroll up to 3 dice of this roll">
+            🎵 Play Tom Bombadil (reroll up to 3 dice)
           </button>
         )}
         {canConfirm ? (

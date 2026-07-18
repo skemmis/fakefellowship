@@ -659,6 +659,10 @@ function pump(s: GameState, rng: Rng, events: GameEvent[]): void {
 export function canAct(s: GameState, character: CharacterId): boolean {
   const p = activePlayer(s);
   if (!p.characters.includes(character)) return false;
+  // Lembas grants extra actions beyond every other budget.
+  if (s.turn.lembas && s.turn.lembas.character === character && s.turn.lembas.remaining > 0) {
+    return true;
+  }
   const used = s.turn.actionsUsed[character] ?? 0;
   // Solo variant: the token character takes up to 4 actions; Frodo & Sam
   // take 1 bonus action; nobody else acts this turn.
@@ -692,6 +696,15 @@ function spendAction(s: GameState, character: CharacterId): void {
       `${charName(character)} cannot act: do up to ${ACTIONS_PRIMARY} actions with one character and up to ${ACTIONS_SECONDARY} with the other, finishing one before the other.`,
     );
   }
+  // Consume the normal budget first; Lembas actions cover the overflow.
+  const budgetLeft = (() => {
+    const probe: GameState = { ...s, turn: { ...s.turn, lembas: undefined } };
+    return canAct(probe, character);
+  })();
+  if (!budgetLeft && s.turn.lembas?.character === character && s.turn.lembas.remaining > 0) {
+    s.turn.lembas.remaining -= 1;
+    return;
+  }
   if (!s.turn.actedOrder.includes(character)) s.turn.actedOrder.push(character);
   s.turn.actionsUsed[character] = (s.turn.actionsUsed[character] ?? 0) + 1;
 }
@@ -708,129 +721,267 @@ function playEvent(s: GameState, rng: Rng, playerId: PlayerId, action: Extract<A
   if (card.kind !== 'event') throw new RuleError('Only event cards can be played this way.');
   const def = EVENTS.find((e) => e.key === card.event)!;
 
-  // The Light of Eärendil is the one event playable during a pending search.
-  if (s.pending && !(s.pending.type === 'search' && card.event === 'phial')) {
+  // Tom Bombadil is the one event playable while a roll is pending.
+  if (s.pending && !(card.event === 'tom_bombadil' && s.pending.type !== 'discard')) {
     throw new RuleError('Wait until the current roll is resolved.');
   }
 
   events.push({ kind: 'card', text: `${p.name} plays ${def.name}.` });
+
+  const freeConn = (from: LocationId, to: LocationId): boolean => {
+    const c = connection(from, to);
+    return Boolean(c && !c.cost);
+  };
+  const moveTroops = (from: LocationId, to: LocationId, want: number): number => {
+    const src = s.friendly[from] ?? {};
+    let moved = 0;
+    for (const f of Object.keys(src) as Faction[]) {
+      while ((src[f] ?? 0) > 0 && moved < want) {
+        src[f]! -= 1;
+        const dst = (s.friendly[to] ??= {});
+        dst[f] = (dst[f] ?? 0) + 1;
+        moved++;
+      }
+    }
+    return moved;
+  };
+  const optionalBattle = (loc: LocationId) => {
+    // The event's optional battle works like an attack roll: the Eye shifts.
+    if ((s.shadow[loc] ?? 0) === 0 || friendlyAt(s, loc) === 0) return;
+    s.eye = regionOf(loc);
+    events.push({ kind: 'card', text: `Battle is joined at ${locName(loc)} — the Eye turns to ${REGION_MAP[s.eye].name}.` });
+    rollBattle(s, rng, loc, 'attack', Math.min(MAX_BATTLE_DICE, friendlyAt(s, loc)), events);
+  };
+
   switch (card.event) {
-    case 'haven_cloaks': {
-      if (!action.character || !action.location) throw new RuleError('Choose a character and destination.');
-      const path = shortestFreePath(s.characters[action.character].location, action.location, 3);
-      if (!path) throw new RuleError('Destination must be within 3 connections along normal paths.');
-      s.characters[action.character].location = action.location;
-      events.push({ kind: 'card', text: `${charName(action.character)} slips away to ${locName(action.location)}.` });
+    case 'red_arrow': {
+      const from = action.location;
+      const to = action.location2;
+      if (!from || !to || s.siteStatus[from] !== 'haven' || s.siteStatus[to] !== 'haven' || from === to) {
+        throw new RuleError('Choose two different havens.');
+      }
+      const moved = moveTroops(from, to, Math.min(3, action.count ?? 3));
+      events.push({ kind: 'card', text: `${moved} troops answer the call, marching from ${locName(from)} to ${locName(to)}.` });
+      checkHavens(s, events);
+      if (action.battle) optionalBattle(to);
+      break;
+    }
+    case 'tom_bombadil': {
+      if (action.dice && action.dice.length > 0) {
+        const pend = s.pending;
+        if (!pend) throw new RuleError('No roll to reroll.');
+        for (const die of action.dice.slice(0, 3)) {
+          if (die < 0 || die >= pend.dice.length) continue;
+          if (pend.type === 'search') pend.dice[die] = SEARCH_DIE[nextInt(rng, 6)] as SearchFace;
+          else pend.dice[die] = BATTLE_DIE[nextInt(rng, 6)] as BattleFace;
+        }
+        events.push({ kind: 'card', text: `Old Tom sings the dice anew: [${pend.dice.join(' ')}].` });
+      } else {
+        changeHope(s, 1, events, def.name);
+      }
+      break;
+    }
+    case 'council_of_elrond': {
+      if (s.solo) {
+        // Solo: a free Prepare, any region card, no region match required.
+        const pick = p.hand.find((cd) => cd.id === action.pick);
+        if (!pick || pick.kind !== 'region') throw new RuleError('Choose a region card to Prepare.');
+        if (s.supply.tokens[pick.symbol] <= 0) throw new RuleError('No matching tokens left.');
+        p.hand.splice(p.hand.indexOf(pick), 1);
+        s.playerDiscard.push(pick);
+        s.supply.tokens[pick.symbol] -= 1;
+        p.tokens[pick.symbol] += 1;
+        events.push({ kind: 'card', text: `${p.name} prepares in council: a ${pick.symbol} token is banked.` });
+        break;
+      }
+      for (const c of action.characters ?? []) {
+        if (!s.characters[c]) throw new RuleError(`${c} is not in play.`);
+        s.characters[c].location = 'rivendell';
+      }
+      if ((action.characters ?? []).length > 0) {
+        events.push({
+          kind: 'card',
+          text: `${(action.characters ?? []).map((c) => charName(c)).join(', ')} are summoned to Rivendell (no search).`,
+        });
+      }
+      if (action.symbol && action.toPlayer) {
+        const giver = p;
+        const taker = s.players.find((pl) => pl.id === action.toPlayer);
+        if (!taker) throw new RuleError('Unknown player.');
+        const bothThere =
+          giver.characters.some((c) => s.characters[c]?.location === 'rivendell') &&
+          taker.characters.some((c) => s.characters[c]?.location === 'rivendell');
+        if (!bothThere) throw new RuleError('Both players need a character at Rivendell to pass a token.');
+        if (giver.tokens[action.symbol] <= 0) throw new RuleError('You have no such token.');
+        giver.tokens[action.symbol] -= 1;
+        taker.tokens[action.symbol] += 1;
+        events.push({ kind: 'card', text: `${giver.name} passes a ${action.symbol} token to ${taker.name} in council.` });
+      }
+      break;
+    }
+    case 'gwaihir': {
+      const from = action.location;
+      const to = action.location2;
+      if (!from || !to || !freeConn(from, to)) throw new RuleError('Troops must move along a normal connection (no special paths).');
+      if (friendlyAt(s, from) === 0) throw new RuleError('No friendly troops there to move.');
+      const moved = moveTroops(from, to, Math.max(1, action.count ?? friendlyAt(s, from)));
+      events.push({ kind: 'card', text: `The Eagle's tidings send ${moved} troops from ${locName(from)} to ${locName(to)}.` });
+      checkHavens(s, events);
+      if (action.battle) optionalBattle(to);
+      break;
+    }
+    case 'rohan_horses': {
+      const start = action.location;
+      const legs = (action.path ?? []).slice(0, 3);
+      if (!start || legs.length === 0) throw new RuleError('Choose a starting location and up to 3 destinations.');
+      const riders = Object.keys(s.characters).filter((c) => s.characters[c].location === start);
+      if (riders.length === 0) throw new RuleError('No characters there.');
+      let here = start;
+      for (const leg of legs) {
+        if (!freeConn(here, leg)) throw new RuleError(`No normal connection ${locName(here)} → ${locName(leg)}.`);
+        for (const c of riders) s.characters[c].location = leg;
+        events.push({ kind: 'card', text: `${riders.map((c) => charName(c)).join(', ')} ride hard to ${locName(leg)}.` });
+        if (riders.includes(BEARER)) {
+          // Every leg exposes Frodo — a search that Stealth cannot buy off.
+          s.queue.push({ step: 'search', context: 'travel', location: leg });
+        }
+        here = leg;
+      }
+      break;
+    }
+    case 'orc_infighting': {
+      if (!action.location) throw new RuleError('Choose a location.');
+      const n = removeShadow(s, action.location, Math.min(2, action.count ?? 2));
+      events.push({ kind: 'card', text: `The orcs of ${locName(action.location)} turn on each other — ${n} slain.` });
+      break;
+    }
+    case 'lembas': {
+      const active = activePlayer(s);
+      const c = action.character;
+      if (!c || !active.characters.includes(c)) {
+        throw new RuleError("Choose one of the current player's characters.");
+      }
+      s.turn.lembas = { character: c, remaining: (s.turn.lembas?.character === c ? s.turn.lembas.remaining : 0) + 2 };
+      events.push({ kind: 'card', text: `Waybread sustains ${charName(c)}: 2 extra actions this turn.` });
       break;
     }
     case 'eagles': {
-      if (!action.character || !action.location) throw new RuleError('Choose a character and a haven.');
-      if (!isHaven(s, action.location)) throw new RuleError('The eagles only fly to havens.');
+      if (!action.character || !action.location) throw new RuleError('Choose a character and destination.');
+      if (!s.characters[action.character]) throw new RuleError('Not in play.');
       s.characters[action.character].location = action.location;
-      events.push({ kind: 'card', text: `${charName(action.character)} is carried to ${locName(action.location)}.` });
-      break;
-    }
-    case 'athelas':
-      changeHope(s, 2, events, def.name);
-      break;
-    case 'phial': {
-      if (!s.pending || s.pending.type !== 'search') throw new RuleError('Play this during a search.');
-      s.pending.dice = s.pending.dice.map(() => 'slip');
-      events.push({ kind: 'card', text: 'A clear light drives back the darkness — every search die shows Slip By.' });
-      break;
-    }
-    case 'rohirrim_charge': {
-      if (!action.location) throw new RuleError('Choose a battle location.');
-      if ((s.shadow[action.location] ?? 0) === 0 || friendlyAt(s, action.location) === 0) {
-        throw new RuleError('Needs both friendly and shadow troops.');
-      }
-      rollBattle(s, rng, action.location, 'attack', MAX_BATTLE_DICE, events);
-      break;
-    }
-    case 'beacons': {
-      for (const l of Object.values(MAP)) {
-        if (l.muster && isHaven(s, l.id) && s.supply.factions[l.muster] > 0) {
-          s.supply.factions[l.muster] -= 1;
-          const at = (s.friendly[l.id] ??= {});
-          at[l.muster] = (at[l.muster] ?? 0) + 1;
-        }
-      }
-      events.push({ kind: 'card', text: 'Troops muster at every standing haven.' });
-      break;
-    }
-    case 'council': {
-      if (!action.symbol) throw new RuleError('Choose a symbol.');
-      if (s.supply.tokens[action.symbol] <= 0) throw new RuleError('None left in the supply.');
-      s.supply.tokens[action.symbol] -= 1;
-      p.tokens[action.symbol] += 1;
-      break;
-    }
-    case 'ranger_paths': {
-      if (!action.location || !action.character) throw new RuleError('Choose from- and to-locations.');
-      // action.character carries the from-location's id in this event? Keep it
-      // simple: move up to 3 troops from `character`'s location to `location`.
-      const from = s.characters[action.character]?.location;
-      if (!from || !connection(from, action.location)) throw new RuleError('Locations must be connected.');
-      const at = s.friendly[from] ?? {};
-      let moved = 0;
-      for (const f of Object.keys(at) as Faction[]) {
-        while ((at[f] ?? 0) > 0 && moved < 3) {
-          at[f]! -= 1;
-          const dst = (s.friendly[action.location] ??= {});
-          dst[f] = (dst[f] ?? 0) + 1;
+      events.push({ kind: 'card', text: `The Eagles bear ${charName(action.character)} to ${locName(action.location)}.` });
+      if (action.character === BEARER) {
+        const region = regionOf(action.location);
+        s.eye = region;
+        // The seven nearest Nazgûl wheel toward him at once.
+        let moved = 0;
+        while (moved < 7) {
+          const from = Object.entries(s.wraiths)
+            .filter(([r, n]) => n > 0 && r !== region)
+            .sort((a, b) => regionDistance(a[0], region) - regionDistance(b[0], region) || a[0].localeCompare(b[0]))[0];
+          if (!from) break;
+          s.wraiths[from[0]] -= 1;
+          s.wraiths[region] = (s.wraiths[region] ?? 0) + 1;
           moved++;
         }
+        events.push({ kind: 'card', text: `The sky darkens: ${moved} Nazgûl converge on ${REGION_MAP[region].name} and the Eye follows!` });
+        s.queue.push({ step: 'search', context: 'travel', location: action.location });
       }
-      events.push({ kind: 'card', text: `${moved} troops march from ${locName(from)} to ${locName(action.location)}.` });
       checkHavens(s, events);
       break;
     }
-    case 'palantir': {
-      const top = s.shadowDeck.slice(-3).reverse();
-      const names = top.map((c) =>
-        c.special ? SPECIAL_SHADOW_INFO[c.special].name : `${BATTLE_LINES.find((l) => l.id === c.line)?.name} / ${locName(c.reinforce!)}`,
+    case 'elronds_foresight': {
+      const active = activePlayer(s);
+      const top = s.playerDeck.slice(-4).reverse();
+      const names = top.map((cd) =>
+        cd.kind === 'region' ? REGION_MAP[cd.region].name : cd.kind === 'event' ? EVENTS.find((e) => e.key === cd.event)?.name ?? 'event' : 'SKIES DARKEN',
       );
-      events.push({ kind: 'card', text: `The Palantír reveals what comes: ${names.join(' | ')}.` });
-      break;
-    }
-    case 'mithril':
-      changeHope(s, 1, events, def.name);
-      if (s.supply.tokens.resistance > 0) {
-        s.supply.tokens.resistance -= 1;
-        p.tokens.resistance += 1;
+      events.push({ kind: 'card', text: `Foresight reveals the coming cards: ${names.join(', ')}.` });
+      if (action.pick) {
+        const pi = s.playerDeck.findIndex((cd, j) => cd.id === action.pick && j >= s.playerDeck.length - 4);
+        if (pi < 0) throw new RuleError('Pick one of the revealed cards.');
+        const [taken] = s.playerDeck.splice(pi, 1);
+        if (taken.kind === 'darken') throw new RuleError('A Skies Darken card may not be taken.');
+        active.hand.push(taken);
+        events.push({ kind: 'card', text: `${active.name} keeps a revealed card.` });
+        if (active.hand.length > HAND_LIMIT) s.pending = { type: 'discard', player: active.id };
       }
       break;
-    case 'ents': {
-      const loc = action.location;
-      const legal = loc === 'isengard' || (loc && connection('fangorn_forest', loc)) || loc === 'fangorn_forest';
-      if (!loc || !legal) throw new RuleError('Target Isengard or a location connected to Fangorn Forest.');
-      const n = removeShadow(s, loc, 2);
-      events.push({ kind: 'card', text: `The forest marches — ${n} shadow troops destroyed at ${locName(loc)}.` });
-      break;
     }
-    case 'oath_dead': {
-      if (!action.location || MAP[action.location].region !== 'gondor') {
-        throw new RuleError('Target a Gondor location.');
+    case 'entmoot': {
+      const n = Math.min(3, Math.max(0, action.count ?? 3), s.supply.factions.sylvan);
+      s.supply.factions.sylvan -= n;
+      const fg = (s.friendly['fangorn_forest'] ??= {});
+      fg.sylvan = (fg.sylvan ?? 0) + n;
+      events.push({ kind: 'card', text: `${n} Ents rouse at Fangorn Forest.` });
+      if (action.location2) {
+        if (!connection('fangorn_forest', action.location2)) throw new RuleError('March to a location adjacent to Fangorn Forest.');
+        const marched = moveTroops('fangorn_forest', action.location2, friendlyAt(s, 'fangorn_forest'));
+        for (const c of action.characters ?? []) {
+          if (s.characters[c]?.location === 'fangorn_forest') s.characters[c].location = action.location2;
+        }
+        events.push({ kind: 'card', text: `The Entmoot marches: ${marched} troops to ${locName(action.location2)} (no toll, no search, no battle).` });
+        checkHavens(s, events);
       }
-      const n = removeShadow(s, action.location, 2);
-      events.push({ kind: 'card', text: `The Dead sweep through ${locName(action.location)} — ${n} shadow troops destroyed.` });
       break;
     }
-    case 'shadowfax': {
-      if (!action.region || !REGION_MAP[action.region]) throw new RuleError('Choose a region.');
-      s.eye = action.region;
-      events.push({ kind: 'card', text: `The Eye is drawn to ${REGION_MAP[action.region].name}.` });
+    case 'elven_cloaks': {
+      if (!action.character || !action.path || action.path.length === 0) {
+        throw new RuleError('Choose a character and up to 2 destinations.');
+      }
+      const c = action.character;
+      if (!s.characters[c]) throw new RuleError('Not in play.');
+      let here = s.characters[c].location;
+      for (const leg of action.path.slice(0, 2)) {
+        const conn = connection(here, leg);
+        if (!conn) throw new RuleError(`No connection ${locName(here)} → ${locName(leg)}.`);
+        if (conn.cost) pay(s, p, conn.cost, events);
+        s.characters[c].location = leg;
+        here = leg;
+      }
+      events.push({ kind: 'card', text: `Cloaked in grey, ${charName(c)} slips to ${locName(here)} — no search follows.` });
       break;
     }
-    case 'gift':
-      drawPlayerCards(s, rng, 1, events);
+    case 'palantir_gaze': {
+      if (!action.character || !s.characters[action.character]) throw new RuleError('Choose a character.');
+      const region = regionOf(s.characters[action.character].location);
+      s.eye = region;
+      moveNazgulToward(s, region, 3, events);
+      events.push({ kind: 'card', text: `The stone betrays them: the Eye fixes on ${REGION_MAP[region].name}.` });
       break;
+    }
+    case 'conflicting_orders': {
+      const from = action.location;
+      const to = action.location2;
+      if (!from || !to || !connection(from, to)) throw new RuleError('Choose a location and an adjacent destination.');
+      const n = s.shadow[from] ?? 0;
+      if (n === 0) throw new RuleError('No shadow troops there.');
+      s.shadow[to] = (s.shadow[to] ?? 0) + n;
+      delete s.shadow[from];
+      events.push({ kind: 'card', text: `Confused orders send ${n} shadow troops from ${locName(from)} to ${locName(to)} — no battle rolls.` });
+      checkHavens(s, events);
+      break;
+    }
+    case 'gifts_elves': {
+      if (!action.symbol || !action.toPlayer) throw new RuleError('Choose a symbol and a player.');
+      if (s.supply.tokens[action.symbol] <= 0) throw new RuleError('None left in the supply.');
+      const taker = s.players.find((pl) => pl.id === action.toPlayer);
+      if (!taker) throw new RuleError('Unknown player.');
+      s.supply.tokens[action.symbol] -= 1;
+      taker.tokens[action.symbol] += 1;
+      events.push({ kind: 'card', text: `An elven gift: ${taker.name} receives a ${action.symbol} token.` });
+      break;
+    }
+    default:
+      throw new RuleError('Unknown event.');
   }
+
   const stillThere = p.hand.indexOf(card);
   if (stillThere >= 0) p.hand.splice(stillThere, 1);
   s.playerDiscard.push(card);
   checkStateObjectives(s, events);
 }
+
 
 /** BFS over free (uncosted) paths, up to maxLen steps. */
 function shortestFreePath(from: LocationId, to: LocationId, maxLen: number): boolean {

@@ -80,9 +80,17 @@ export function legalActions(s: GameState, playerId?: string): Action[] {
     if (pend.type === 'battle' && present && canPayList(player, ['valor']) && pend.valorKills < (s.shadow[pend.location] ?? 0)) {
       out.push({ type: 'showValor' });
     }
-    if (pend.type === 'search') {
-      const phial = player.hand.find((c) => c.kind === 'event' && c.event === 'phial');
-      if (phial) out.push({ type: 'playEvent', card: phial.id });
+    // Tom Bombadil may reroll up to 3 dice of the pending roll.
+    const tom = player.hand.find((c) => c.kind === 'event' && c.event === 'tom_bombadil');
+    if (tom && pend.dice.length > 0) {
+      const harmful = pend.dice
+        .map((f, i) => ({ f, i }))
+        .filter(({ f }) =>
+          pend.type === 'search' ? f === 'weary' || f === 'exposed' : f === 'wraith' || f === 'overrun' || f === 'exchange',
+        )
+        .slice(0, 3)
+        .map(({ i }) => i);
+      if (harmful.length > 0) out.push({ type: 'playEvent', card: tom.id, dice: harmful });
     }
     if (player.id === active.id) out.push({ type: 'confirm' });
     return out;
@@ -105,57 +113,59 @@ export function legalActions(s: GameState, playerId?: string): Action[] {
     }
   }
 
-  // --- Events (playable by anyone outside of rolls) ---------------------
+  // --- Events (playable by anyone outside of rolls). Bots get a bounded
+  // sample of simple targetings; the UI composes richer ones. -------------
   for (const card of player.hand) {
     if (card.kind !== 'event') continue;
     switch (card.event) {
-      case 'athelas':
-      case 'mithril':
-      case 'gift':
-        out.push({ type: 'playEvent', card: card.id });
+      case 'tom_bombadil':
+        if (s.hope < 8) out.push({ type: 'playEvent', card: card.id }); // gain-hope mode
         break;
-      case 'council':
-        if (s.supply.tokens.resistance > 0) out.push({ type: 'playEvent', card: card.id, symbol: 'resistance' });
-        if (s.supply.tokens.stealth > 0) out.push({ type: 'playEvent', card: card.id, symbol: 'stealth' });
-        break;
-      case 'shadowfax':
-        out.push({ type: 'playEvent', card: card.id, region: REGIONS[0].id });
-        break;
-      case 'beacons':
-        out.push({ type: 'playEvent', card: card.id });
-        break;
-      case 'palantir':
-        out.push({ type: 'playEvent', card: card.id });
-        break;
-      case 'eagles': {
-        for (const c of player.characters) {
-          const haven = Object.entries(s.siteStatus).find(([, st]) => st === 'haven');
-          if (haven && s.characters[c]) {
-            out.push({ type: 'playEvent', card: card.id, character: c, location: haven[0] });
-          }
-        }
-        break;
-      }
-      case 'rohirrim_charge': {
-        for (const loc of Object.keys(s.shadow)) {
-          if ((s.shadow[loc] ?? 0) > 0 && friendlyAt(s, loc) > 0) {
-            out.push({ type: 'playEvent', card: card.id, location: loc });
-            break;
-          }
-        }
-        break;
-      }
-      case 'ents': {
-        if ((s.shadow['isengard'] ?? 0) > 0) out.push({ type: 'playEvent', card: card.id, location: 'isengard' });
-        break;
-      }
-      case 'oath_dead': {
-        const target = Object.keys(s.shadow).find((l) => MAP[l]?.region === 'gondor' && (s.shadow[l] ?? 0) > 0);
+      case 'orc_infighting': {
+        const target = Object.keys(s.shadow).find((l) => (s.shadow[l] ?? 0) > 0);
         if (target) out.push({ type: 'playEvent', card: card.id, location: target });
         break;
       }
+      case 'gifts_elves':
+        for (const sym of ['stealth', 'resistance'] as const) {
+          if (s.supply.tokens[sym] > 0) {
+            out.push({ type: 'playEvent', card: card.id, symbol: sym, toPlayer: player.id });
+          }
+        }
+        break;
+      case 'lembas':
+        if (player.id === active.id) {
+          out.push({ type: 'playEvent', card: card.id, character: active.characters[0] });
+        }
+        break;
+      case 'elronds_foresight':
+        if (player.id === active.id && s.playerDeck.length > 0) {
+          out.push({ type: 'playEvent', card: card.id });
+        }
+        break;
+      case 'palantir_gaze': {
+        // Aim the Eye at the character farthest from Frodo (bot heuristic).
+        const c = player.characters.find((cc) => cc !== BEARER && s.characters[cc]);
+        if (c) out.push({ type: 'playEvent', card: card.id, character: c });
+        break;
+      }
+      case 'entmoot':
+        if (s.supply.factions.sylvan > 0) out.push({ type: 'playEvent', card: card.id, count: 3 });
+        break;
+      case 'eagles': {
+        const c = player.characters.find((cc) => cc !== BEARER && s.characters[cc]);
+        const haven = Object.entries(s.siteStatus).find(([, st]) => st === 'haven');
+        if (c && haven) out.push({ type: 'playEvent', card: card.id, character: c, location: haven[0] });
+        break;
+      }
+      case 'conflicting_orders': {
+        const from = Object.keys(s.shadow).find((l) => (s.shadow[l] ?? 0) > 0);
+        const to = from ? CONNECTIONS[from].find((cn) => !MAP[cn.to].haven)?.to : undefined;
+        if (from && to) out.push({ type: 'playEvent', card: card.id, location: from, location2: to });
+        break;
+      }
       default:
-        break; // haven_cloaks / ranger_paths need rich targets; UI composes them
+        break; // red_arrow, council, gwaihir, rohan_horses, elven_cloaks: UI-composed targets
     }
   }
 
