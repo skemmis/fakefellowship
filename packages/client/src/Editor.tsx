@@ -29,11 +29,18 @@ const REGION_COLORS = [
   '#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231', '#911eb4',
   '#46f0f0', '#f032e6', '#bcf60c', '#fabebe', '#008080', '#e6beff',
 ];
-/** Battle line colors — cycle a segment's color to match its printed route. */
+/**
+ * The board's six printed battle-line colors. Routes outnumber colors, so
+ * a color repeats on routes that never touch (the derivation splits
+ * disconnected same-color chains into separate lines).
+ */
 const LINE_PALETTE = [
-  '#7fbf5f', '#8f6fc0', '#5fb3a1', '#e8836a', '#e0c050', '#6fb8e8',
-  '#c98ad1', '#55c8dc', '#e8d060', '#a98ae0', '#e8946a', '#8a9ae0',
-  '#f06292', '#aed581', '#ff8a65', '#4dd0e1', '#ba68c8', '#fff176',
+  '#e8834a', // orange
+  '#3fa8a0', // teal
+  '#e8cf4f', // yellow
+  '#9acd5a', // light green
+  '#8f6fc0', // purple
+  '#e87fb0', // pink
 ];
 
 type Mode = 'move' | 'region' | 'flags' | 'edges';
@@ -391,21 +398,15 @@ export function Editor() {
                             arrow: {locMap[e.dir === 'ba' ? e.b : e.a]?.name} → {locMap[e.dir === 'ba' ? e.a : e.b]?.name}
                           </span>
                           <div className="ed-chiprow">
-                            {LINE_PALETTE.map((c) => (
+                            {LINE_PALETTE.map((c, ci) => (
                               <button
                                 key={c}
                                 className={`ed-swatch-btn ${e.color === c ? 'selected' : ''}`}
                                 style={{ background: c }}
-                                title={c}
+                                title={['orange', 'teal', 'yellow', 'light green', 'purple', 'pink'][ci]}
                                 onClick={() => update((d) => { d.edges[i].color = c; })}
                               />
                             ))}
-                            <input
-                              type="color"
-                              value={e.color ?? '#999999'}
-                              title="Exact color"
-                              onChange={(ev) => update((d) => { d.edges[i].color = ev.target.value; })}
-                            />
                             <button className="mini" onClick={() => update((d) => {
                               d.edges[i].dir = d.edges[i].dir === 'ba' ? 'ab' : 'ba';
                             })}>
