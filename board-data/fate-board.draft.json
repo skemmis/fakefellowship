@@ -1366,6 +1366,13 @@
       "kind": "line",
       "color": "#e8834a",
       "dir": "ab"
+    },
+    {
+      "a": "minas_tirith",
+      "b": "druadan_forest",
+      "kind": "line",
+      "color": "#8f6fc0",
+      "dir": "ab"
     }
   ]
 }
