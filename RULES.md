@@ -60,11 +60,12 @@ repository is paraphrased, and no artwork or card text is copied.
   Gollum's treachery costs 1 hope whenever he, Frodo, and a friendly troop
   gather in one location, and his Prepare may nudge a friendly troop to an
   adjacent location; Arwen's off-region Prepare (solo) and Send Aid are in.
-  Remaining simplifications: Galadriel's Mirror reveals the next 4 player
-  cards but does not yet let you reorder them; Legolas's Keen Sight peek is a
-  free once-per-turn action rather than tied to his Prepare; Arwen's Send Aid
-  picks its beneficiary automatically; the solo "Frodo before or after the
-  token character" ordering may interleave.
+  Galadriel's Mirror reveals the top 4 player cards and lets her player
+  reorder them; Legolas's Keen Sight peek fires when he Prepares; Faramir's
+  Ambush lets 1 Stealth turn a battle die to a kill on his free Attack, and
+  his Wisdom takes a matching Resistance card from the discard. Remaining
+  simplifications: Arwen's Send Aid picks its beneficiary automatically; the
+  solo "Frodo before or after the token character" ordering may interleave.
 - Captured strongholds never receive card-driven shadow troops.
 
 **Transcribed from the physical cards (photos supplied by the owner):**

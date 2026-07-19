@@ -123,7 +123,7 @@ function scoreAction(s: GameState, a: Action): number {
     case 'reroll': {
       // Reroll harmful dice when we can afford it.
       const pend = s.pending;
-      if (!pend || pend.type === 'discard' || pend.type === 'wheels') return 0;
+      if (!pend || pend.type !== 'search' && pend.type !== 'battle') return 0;
       const face = pend.dice[a.die];
       const harmful =
         pend.type === 'search' ? face === 'weary' || face === 'exposed' : face === 'wraith' || face === 'overrun';
@@ -255,7 +255,7 @@ export function simulateGame(
     // Whose decision is it? Discards and Doubt payments belong to their
     // target player; everything else is driven by the active player.
     const decider =
-      state.pending?.type === 'discard' || state.pending?.type === 'ordeal'
+      state.pending?.type === 'discard' || state.pending?.type === 'ordeal' || state.pending?.type === 'mirror'
         ? state.pending.player
         : state.pending?.type === 'wheels' && state.pending.mode === 'doubt'
           ? state.pending.player!

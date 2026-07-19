@@ -85,7 +85,7 @@ export const CHARACTERS: CharacterDef[] = [
     title: 'Ranger of Ithilien',
     start: 'minas_tirith',
     abilityText:
-      'Special paths cost him 1 fewer symbol. When he Travels with friendly troops, he may Attack at his destination as a free action. Once per turn (action), at a haven: retrieve a region card matching his region from the discard pile.',
+      'Special paths cost him 1 fewer symbol. When he Travels with friendly troops, he may Attack at his destination as a free action — and on that ambush, 1 Stealth turns a battle die to a shadow-troop kill (Rout). Once per turn (action), from a haven: take a Resistance region card matching his region from the discard pile.',
     abilityReconstructed: false,
     color: '#5d7052',
   },
@@ -135,7 +135,7 @@ export const CHARACTERS: CharacterDef[] = [
     title: 'Prince of the Woodland Realm',
     start: 'woodland_realm',
     abilityText:
-      'Once per turn (action): gain a Stealth token. Any player\'s turn: 1 Stealth lets him shoot — remove a shadow troop at or beside him, or send a Nazgûl in his region back to Mordor. Once per turn (free): peek at the top shadow card.',
+      'Once per turn (action): gain a Stealth token. Any player\'s turn: 1 Stealth lets him shoot — remove a shadow troop at or beside him, or send a Nazgûl in his region back to Mordor. When he Prepares, look at the top card of the shadow deck.',
     abilityReconstructed: false,
     color: '#2a7f62',
   },

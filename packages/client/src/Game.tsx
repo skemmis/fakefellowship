@@ -327,7 +327,11 @@ export function Game({
                   ? `${state.players.find((p) => p.id === pend.player)?.name} must discard to 7 cards`
                   : pend.type === 'wheels'
                     ? 'The Wheels of Saruman turn — a price must be paid'
-                    : `${pend.type === 'search' ? 'Search' : 'Battle'} at ${MAP[pend.location].name} — resolve the dice`
+                    : pend.type === 'mirror'
+                      ? `${state.players.find((p) => p.id === pend.player)?.name} gazes into Galadriel's Mirror`
+                      : pend.type === 'ordeal'
+                        ? 'An ordeal must be faced'
+                        : `${pend.type === 'search' ? 'Search' : 'Battle'} at ${MAP[pend.location].name} — resolve the dice`
                 : myTurn
                   ? 'Your turn'
                   : `${active.name}'s turn`}
@@ -578,7 +582,6 @@ function abilityLabel(a: Extract<Action, { type: 'ability' }>): string {
     case 'gimli':
       return 'Craft (gain ⚔ token)';
     case 'legolas':
-      if (a.mode === 'peek') return 'Keen sight (peek shadow deck)';
       if (a.mode === 'nazgul') return 'Sure shot → Nazgûl (🌿1)';
       if (a.to) return `Sure shot → ${MAP[a.to].name} (🌿1)`;
       return 'Walk silently (gain 🌿 token)';
@@ -587,7 +590,7 @@ function abilityLabel(a: Extract<Action, { type: 'ability' }>): string {
       if (a.mode === 'distract') return 'Distract Nazgûl here (❤1)';
       return 'Loyal friends (gain ❤ token)';
     case 'galadriel':
-      return a.mode === 'summon' ? 'Summon lost event (❤1)' : 'Mirror (peek 4 cards)';
+      return a.mode === 'summon' ? 'Summon lost event (❤1)' : 'Mirror (reorder next 4)';
     case 'faramir':
       return 'Recover discard card';
     case 'gollum':
@@ -756,6 +759,75 @@ function CardView({
   return null;
 }
 
+function cardLabel(state: GameState, id: string): string {
+  const card = state.playerDeck.find((c) => c.id === id);
+  if (!card) return 'a card';
+  if (card.kind === 'region') return `${REGIONS.find((r) => r.id === card.region)?.name} (${card.symbol})`;
+  if (card.kind === 'event') return EVENTS.find((e) => e.key === (card as { event: string }).event)?.name ?? 'event';
+  return 'SKIES DARKEN';
+}
+
+function MirrorPanel({
+  state,
+  playerId,
+  pend,
+  onAct,
+}: {
+  state: GameState;
+  playerId: string;
+  pend: Extract<GameState['pending'], { type: 'mirror' }>;
+  onAct: (a: Action) => void;
+}) {
+  // pend.cards are bottom→top; the top of the deck (next draw) is last.
+  const nextFirst = [...pend.cards].reverse();
+  const [order, setOrder] = useState<string[]>([]);
+  const mine = pend.player === playerId;
+  const remaining = nextFirst.filter((id) => !order.includes(id));
+
+  if (!mine) {
+    return (
+      <section className="panel pending">
+        <h3>🪞 The Mirror of Galadriel</h3>
+        <p className="hint">{state.players.find((p) => p.id === pend.player)?.name} is reading the days to come…</p>
+      </section>
+    );
+  }
+  return (
+    <section className="panel pending">
+      <h3>🪞 The Mirror of Galadriel</h3>
+      <p className="hint">
+        Click the next {nextFirst.length} cards in the order they should be drawn (first click = your very next
+        card). Skies Darken cards count too.
+      </p>
+      <div className="hand">
+        {remaining.map((id) => (
+          <button key={id} onClick={() => setOrder((o) => [...o, id])}>
+            {cardLabel(state, id)}
+          </button>
+        ))}
+      </div>
+      {order.length > 0 && (
+        <p className="hint">
+          Draw order: {order.map((id, i) => `${i + 1}. ${cardLabel(state, id)}`).join('  ·  ')}
+        </p>
+      )}
+      <div className="pending-actions">
+        <button onClick={() => setOrder([])} disabled={order.length === 0}>
+          Reset
+        </button>
+        <button
+          className="primary"
+          disabled={order.length !== nextFirst.length}
+          onClick={() => onAct({ type: 'mirrorOrder', order })}
+        >
+          Set the order
+        </button>
+        <button onClick={() => onAct({ type: 'mirrorOrder', order: pend.cards })}>Leave unchanged</button>
+      </div>
+    </section>
+  );
+}
+
 function PendingPanel({
   state,
   playerId,
@@ -768,6 +840,9 @@ function PendingPanel({
   onAct: (a: Action) => void;
 }) {
   const pend = state.pending!;
+  if (pend.type === 'mirror') {
+    return <MirrorPanel state={state} playerId={playerId} pend={pend} onAct={onAct} />;
+  }
   if (pend.type === 'discard') {
     const mine = pend.player === playerId;
     const p = state.players.find((pl) => pl.id === pend.player)!;
@@ -952,6 +1027,11 @@ function PendingPanel({
                 <button className="mini" onClick={() => onAct({ type: 'eowynStrike', die: i })} title="Shieldmaiden No Longer: spend 2 Valor to turn this die to the Nazgûl face (Éowyn then destroys a Nazgûl in this region)">
                   <Sym s="valor" />
                   <Sym s="valor" /> → <GIcon name="wraith" size={18} />
+                </button>
+              )}
+              {legal.some((a) => a.type === 'faramirAmbush' && a.die === i) && (
+                <button className="mini" onClick={() => onAct({ type: 'faramirAmbush', die: i })} title="Ambush: spend 1 Stealth to turn this die to a Rout (a shadow-troop kill)">
+                  <Sym s="stealth" /> → <GIcon name="rout" size={18} />
                 </button>
               )}
             </div>

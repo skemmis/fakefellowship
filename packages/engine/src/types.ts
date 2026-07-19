@@ -174,6 +174,8 @@ export interface PendingBattle {
   source: 'attack' | 'shadow';
   /** The character whose Attack action triggered this battle, if any. */
   attacker?: CharacterId;
+  /** Faramir's ambush attack: he may spend Stealth to turn dice to Rout. */
+  ambush?: boolean;
   dice: BattleFace[];
   /** Shadow troops removed so far via Show Valor. */
   valorKills: number;
@@ -203,6 +205,14 @@ export interface PendingOrdeal {
   prevented: number;
 }
 
+/** Galadriel's Mirror: her player reorders the revealed top cards. */
+export interface PendingMirror {
+  type: 'mirror';
+  player: PlayerId;
+  /** The revealed cards, current top-of-deck last. */
+  cards: string[];
+}
+
 /** The Wheels of Saruman: the current player picks one of three woes. */
 export interface PendingWheels {
   type: 'wheels';
@@ -214,7 +224,7 @@ export interface PendingWheels {
   remaining?: number;
 }
 
-export type Pending = PendingSearch | PendingBattle | PendingDiscard | PendingWheels | PendingOrdeal;
+export type Pending = PendingSearch | PendingBattle | PendingDiscard | PendingWheels | PendingOrdeal | PendingMirror;
 
 // ---------------------------------------------------------------------------
 // Automatic step queue (shadow phase, darken steps, queued battles)
@@ -390,6 +400,8 @@ export type Action =
   | { type: 'ignoreDie'; die: number } // Sam's aid: 1 friendship neutralizes a harmful search die
   | { type: 'showValor' } // battle only: spend 1 valor, remove 1 shadow troop
   | { type: 'eowynStrike'; die: number } // Shieldmaiden card: 2 valor turns a battle die to the Nazgûl face
+  | { type: 'faramirAmbush'; die: number } // Ambush: 1 stealth turns a battle die to Rout
+  | { type: 'mirrorOrder'; order: string[] } // Galadriel: reorder the revealed top cards
   | { type: 'preventHope' } // ordeal only: buy off 1 hope of the pending loss
   | { type: 'gandalfWhite'; faces: string[] } // Gandalf the White: 1 valor sets the roll's dice
   | { type: 'confirm' } // apply the pending roll and continue

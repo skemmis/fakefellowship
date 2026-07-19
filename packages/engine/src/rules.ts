@@ -596,7 +596,7 @@ function ordealLoss(s: GameState, pend: PendingOrdeal): number {
   return Math.max(0, loss - pend.prevented);
 }
 
-function rollBattle(s: GameState, rng: Rng, loc: LocationId, source: 'attack' | 'shadow', requested: number | undefined, events: GameEvent[], attacker?: CharacterId): void {
+function rollBattle(s: GameState, rng: Rng, loc: LocationId, source: 'attack' | 'shadow', requested: number | undefined, events: GameEvent[], attacker?: CharacterId, ambush?: boolean): void {
   let diceCount: number;
   if (source === 'attack') {
     const cap = Math.min(requested ?? MAX_BATTLE_DICE, friendlyAt(s, loc));
@@ -607,7 +607,7 @@ function rollBattle(s: GameState, rng: Rng, loc: LocationId, source: 'attack' | 
   if (diceCount <= 0) return;
   const dice: BattleFace[] = [];
   for (let i = 0; i < diceCount; i++) dice.push(BATTLE_DIE[nextInt(rng, 6)]);
-  s.pending = { type: 'battle', location: loc, source, dice, valorKills: 0, ...(attacker ? { attacker } : {}) };
+  s.pending = { type: 'battle', location: loc, source, dice, valorKills: 0, ...(attacker ? { attacker } : {}), ...(ambush ? { ambush: true } : {}) };
   events.push({
     kind: 'battle',
     text: `Battle at ${locName(loc)}: [${dice.join(' ')}] — spend resistance to reroll or valor to slay, then confirm.`,
@@ -1508,6 +1508,16 @@ export function applyAction(state: GameState, playerId: PlayerId, action: Action
           checkHavens(s, events);
         }
       }
+      // Legolas's keen sight: when he Prepares, glimpse the next shadow card.
+      if (c === 'legolas') {
+        const top = s.shadowDeck[s.shadowDeck.length - 1];
+        const desc = !top
+          ? 'nothing — the deck is empty'
+          : top.special
+            ? SPECIAL_SHADOW_INFO[top.special].name
+            : `${locName(top.lineFrom!)} → ${locName(top.lineTo!)} / reinforce ${locName(top.reinforce!)}`;
+        events.push({ kind: 'action', text: `Legolas reads the next shadow card as he prepares: ${desc}.` });
+      }
       // Gollum's cunning: he may slip 1 friendly troop to an adjacent location.
       if (c === 'gollum' && action.location2) {
         const dst = action.location2;
@@ -1565,8 +1575,10 @@ export function applyAction(state: GameState, playerId: PlayerId, action: Action
       const maxDice = Math.min(MAX_BATTLE_DICE, friendlyAt(s, loc));
       const dice = Math.max(1, Math.min(action.dice, maxDice));
       // Faramir's ambush: traveling here with troops earned a free Attack.
+      let ambush = false;
       if (s.turn.freeAttack && s.turn.freeAttack.character === c && s.turn.freeAttack.location === loc) {
         delete s.turn.freeAttack;
+        ambush = true;
         events.push({ kind: 'action', text: `${charName(c)} springs the ambush (free attack).` });
       } else {
         spendAction(s, c);
@@ -1578,7 +1590,7 @@ export function applyAction(state: GameState, playerId: PlayerId, action: Action
         text: `${charName(c)} attacks at ${locName(loc)} — the Eye turns to ${REGION_MAP[s.eye].name}.`,
         fx: { fx: 'eye', to: s.eye },
       });
-      rollBattle(s, rng, loc, 'attack', dice, events, c);
+      rollBattle(s, rng, loc, 'attack', dice, events, c, ambush);
       break;
     }
 
@@ -1857,18 +1869,6 @@ function doAbility(
       gainToken(s, p, 'valor', events, "Gimli's craft");
       break;
     case 'legolas': {
-      if (action.mode === 'peek') {
-        // Free once per turn: glimpse the top shadow card.
-        oncePerTurn(s, 'legolas_sight');
-        const top = s.shadowDeck[s.shadowDeck.length - 1];
-        const desc = !top
-          ? 'nothing — the deck is empty'
-          : top.special
-            ? SPECIAL_SHADOW_INFO[top.special].name
-            : `${locName(top.lineFrom!)} → ${locName(top.lineTo!)} / ${locName(top.reinforce!)}`;
-        events.push({ kind: 'action', text: `Legolas's keen eyes read the next shadow card: ${desc}.` });
-        break;
-      }
       if (action.mode === 'nazgul') {
         // A shot on any turn: 1 Stealth sends a Nazgûl in his region to Mordor.
         const region = regionOf(here);
@@ -1938,33 +1938,32 @@ function doAbility(
         if (p.hand.length > HAND_LIMIT) s.pending = { type: 'discard', player: p.id };
         break;
       }
-      // Her Mirror, once per turn (action): reveal the next 4 player cards.
+      // Her Mirror, once per turn (action): reveal the top 4 player cards and
+      // return them to the top in any order.
       oncePerTurn(s, 'galadriel_mirror');
       spendAction(s, c);
-      const top = s.playerDeck.slice(-4).reverse();
-      const names = top.map((cd) =>
-        cd.kind === 'region'
-          ? REGION_MAP[cd.region].name
-          : cd.kind === 'event'
-            ? EVENTS.find((e) => e.key === cd.event)?.name ?? 'event'
-            : 'SKIES DARKEN',
-      );
-      events.push({ kind: 'action', text: `The Mirror shows what comes: ${names.join(', ')}.` });
+      const revealed = s.playerDeck.slice(-4); // deck top is last
+      if (revealed.length === 0) {
+        events.push({ kind: 'action', text: 'The Mirror clouds — the player deck is empty.' });
+        break;
+      }
+      s.pending = { type: 'mirror', player: p.id, cards: revealed.map((cd) => cd.id) };
+      events.push({ kind: 'action', text: `Galadriel gazes into the Mirror at the next ${revealed.length} cards — ${p.name} may reorder them.` });
       break;
     }
     case 'faramir': {
-      // Once per turn (action), at a haven: recover a matching region card
-      // from the discard pile.
+      // Once per turn (action): from a haven, recover a Resistance region card
+      // from the discard whose region matches the haven he stands in.
       if (!isHaven(s, here)) throw new RuleError('Faramir must be at a haven.');
       const idx = s.playerDiscard.findIndex(
-        (cd) => cd.id === action.card && cd.kind === 'region' && cd.region === regionOf(here),
+        (cd) => cd.id === action.card && cd.kind === 'region' && cd.symbol === 'resistance' && cd.region === regionOf(here),
       );
-      if (idx < 0) throw new RuleError('Choose a discarded region card matching his region.');
+      if (idx < 0) throw new RuleError('Choose a discarded Resistance card matching his region.');
       oncePerTurn(s, 'faramir_wisdom');
       spendAction(s, c);
       const [card] = s.playerDiscard.splice(idx, 1);
       p.hand.push(card);
-      events.push({ kind: 'action', text: `Faramir recovers a ${REGION_MAP[(card as { region: string }).region].name} card from the discard.` });
+      events.push({ kind: 'action', text: `Faramir recovers a ${REGION_MAP[(card as { region: string }).region].name} Resistance card from the discard.` });
       if (p.hand.length > HAND_LIMIT) s.pending = { type: 'discard', player: p.id };
       break;
     }
@@ -2189,6 +2188,25 @@ function handlePendingAction(s: GameState, rng: Rng, playerId: PlayerId, action:
     return;
   }
 
+  if (pend.type === 'mirror') {
+    if (action.type !== 'mirrorOrder') throw new RuleError('Galadriel must reorder the Mirror first.');
+    if (playerId !== pend.player) throw new RuleError('Only Galadriel\'s player reorders the Mirror.');
+    const want = action.order;
+    const have = pend.cards;
+    if (want.length !== have.length || !want.every((id) => have.includes(id)) || new Set(want).size !== want.length) {
+      throw new RuleError('The new order must be a permutation of the revealed cards.');
+    }
+    // Rebuild the top of the deck: front of `order` becomes the very next draw.
+    const n = have.length;
+    const rest = s.playerDeck.slice(0, s.playerDeck.length - n);
+    const byId = new Map(s.playerDeck.slice(-n).map((cd) => [cd.id, cd]));
+    // Deck draws from the end, so the intended-first card goes last.
+    const reordered = [...want].reverse().map((id) => byId.get(id)!);
+    s.playerDeck = [...rest, ...reordered];
+    s.pending = null;
+    events.push({ kind: 'action', text: `${player.name} sets the days to come in the Mirror's order.` });
+    return;
+  }
   if (pend.type === 'ordeal') {
     if (playerId !== pend.player) throw new RuleError('The hero facing the ordeal decides.');
     const ignoreCost: SymbolKind = pend.objective === 'confront_balrog' ? 'resistance' : 'valor';
@@ -2311,6 +2329,20 @@ function handlePendingAction(s: GameState, rng: Rng, playerId: PlayerId, action:
         kind: pend.type,
         text: `${white ? 'Gandalf the White' : 'Gandalf'} commands the ${pend.type}: [${pend.dice.join(' ')}] (${changed} Valor).`,
       });
+      return;
+    }
+    case 'faramirAmbush': {
+      // Ambush: on his bonus Attack, Faramir may spend 1 Stealth to turn a
+      // battle die to Rout (a shadow-troop kill).
+      if (pend.type !== 'battle' || !pend.ambush) throw new RuleError('Only during Faramir\'s ambush attack.');
+      if (!player.characters.includes('faramir') || s.characters['faramir']?.location !== pend.location) {
+        throw new RuleError('Faramir must lead the ambush.');
+      }
+      if (action.die < 0 || action.die >= pend.dice.length) throw new RuleError('Bad die.');
+      if (pend.dice[action.die] === 'rout') throw new RuleError('That die already shows a kill.');
+      pay(s, player, ['stealth'], events);
+      pend.dice[action.die] = 'rout';
+      events.push({ kind: 'battle', text: `Faramir's rangers strike from cover — a die turns to a kill: [${pend.dice.join(' ')}].` });
       return;
     }
     case 'eowynStrike': {

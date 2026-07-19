@@ -55,6 +55,10 @@ export function legalActions(s: GameState, playerId?: string): Action[] {
       }
       return out;
     }
+    if (pend.type === 'mirror') {
+      if (player.id === pend.player) out.push({ type: 'mirrorOrder', order: [...pend.cards] });
+      return out;
+    }
     if (pend.type === 'ordeal') {
       if (player.id === pend.player) {
         const ignoreCost = pend.objective === 'confront_balrog' ? 'resistance' : 'valor';
@@ -142,6 +146,18 @@ export function legalActions(s: GameState, playerId?: string): Action[] {
         pend.dice.some((f) => (pend.type === 'search' ? f !== 'slip' : f !== 'rout'))
       ) {
         out.push({ type: 'gandalfWhite', faces: pend.dice.map(() => (pend.type === 'search' ? 'slip' : 'rout')) });
+      }
+    }
+    // Faramir's ambush: 1 Stealth turns a battle die to Rout.
+    if (
+      pend.type === 'battle' &&
+      pend.ambush &&
+      player.characters.includes('faramir') &&
+      s.characters['faramir']?.location === pend.location &&
+      canPayList(player, ['stealth'])
+    ) {
+      for (let i = 0; i < pend.dice.length; i++) {
+        if (pend.dice[i] !== 'rout') out.push({ type: 'faramirAmbush', die: i });
       }
     }
     // Shieldmaiden No Longer: Éowyn may turn a battle die to the Nazgûl face.
@@ -401,7 +417,6 @@ export function legalActions(s: GameState, playerId?: string): Action[] {
     }
     if (character === 'legolas') {
       if (!s.turn.abilityUsed['legolas_walk'] && s.supply.tokens.stealth > 0) out.push({ type: 'ability', character });
-      if (!s.turn.abilityUsed['legolas_sight'] && s.shadowDeck.length > 0) out.push({ type: 'ability', character, mode: 'peek' });
     }
     if (character === 'merry_pippin') {
       if (!s.turn.abilityUsed['mp_friend'] && s.supply.tokens.friendship > 0) out.push({ type: 'ability', character });
@@ -413,7 +428,9 @@ export function legalActions(s: GameState, playerId?: string): Action[] {
       out.push({ type: 'ability', character });
     }
     if (character === 'faramir' && !s.turn.abilityUsed['faramir_wisdom'] && s.siteStatus[here] === 'haven') {
-      const match = s.playerDiscard.find((cd) => cd.kind === 'region' && cd.region === MAP[here].region);
+      const match = s.playerDiscard.find(
+        (cd) => cd.kind === 'region' && cd.symbol === 'resistance' && cd.region === MAP[here].region,
+      );
       if (match) out.push({ type: 'ability', character, card: match.id });
     }
     if (character === 'gollum' && !s.turn.abilityUsed['gollum_slink'] && s.playerDiscard.length > 0) {
