@@ -246,6 +246,11 @@ export function Game({
     | { kind: 'travelPlan'; plan: TravelPlan }
     | { kind: 'eventTarget'; card: string; event: string }
     | { kind: 'eventPath'; card: string; event: string; character: CharacterId | null; maxLegs: number; path: LocationId[] }
+    | { kind: 'entmoot'; card: string }
+    | { kind: 'eventMove'; card: string; event: 'red_arrow' | 'gwaihir' | 'conflicting_orders'; from: LocationId | null; to: LocationId | null }
+    | { kind: 'rohanRide'; card: string; start: LocationId | null; path: LocationId[] }
+    | { kind: 'eventChar'; card: string; event: 'eagles' | 'lembas'; character: CharacterId | null }
+    | { kind: 'council'; card: string; chars: CharacterId[] }
   >({ kind: 'idle' });
   const [chatText, setChatText] = useState('');
   const [boardOnly, setBoardOnly] = useState(false);
@@ -296,9 +301,36 @@ export function Game({
           if (friendly > 0) m.set(loc, 'card');
         }
       }
+      if (mode.event === 'orc_infighting') {
+        for (const loc of Object.keys(state.shadow)) if ((state.shadow[loc] ?? 0) > 0) m.set(loc, 'card');
+      }
     } else if (mode.kind === 'eventPath' && mode.character && mode.path.length < mode.maxLegs) {
       const from = mode.path.length ? mode.path[mode.path.length - 1] : state.characters[mode.character]?.location;
       if (from) for (const cn of CONNECTIONS[from] ?? []) m.set(cn.to, 'move');
+    } else if (mode.kind === 'entmoot') {
+      for (const cn of CONNECTIONS['fangorn_forest'] ?? []) m.set(cn.to, 'move');
+    } else if (mode.kind === 'eventMove') {
+      const ftot = (loc: LocationId) => Object.values(state.friendly[loc] ?? {}).reduce((a, b) => a + (b ?? 0), 0);
+      if (!mode.from) {
+        if (mode.event === 'red_arrow')
+          for (const [loc, st] of Object.entries(state.siteStatus)) { if (st === 'haven' && ftot(loc) > 0) m.set(loc, 'move'); }
+        else if (mode.event === 'gwaihir') for (const loc of Object.keys(MAP)) { if (ftot(loc) > 0) m.set(loc, 'move'); }
+        else for (const loc of Object.keys(state.shadow)) { if ((state.shadow[loc] ?? 0) > 0) m.set(loc, 'card'); }
+      } else {
+        if (mode.event === 'red_arrow')
+          for (const [loc, st] of Object.entries(state.siteStatus)) { if (st === 'haven' && loc !== mode.from) m.set(loc, 'move'); }
+        else if (mode.event === 'gwaihir') for (const cn of CONNECTIONS[mode.from] ?? []) { if (!cn.cost) m.set(cn.to, 'move'); }
+        else for (const cn of CONNECTIONS[mode.from] ?? []) m.set(cn.to, 'card');
+      }
+    } else if (mode.kind === 'rohanRide') {
+      if (!mode.start) {
+        for (const loc of new Set(Object.values(state.characters).map((c) => c.location))) m.set(loc, 'move');
+      } else if (mode.path.length < 3) {
+        const from = mode.path.length ? mode.path[mode.path.length - 1] : mode.start;
+        for (const cn of CONNECTIONS[from] ?? []) if (!cn.cost) m.set(cn.to, 'move');
+      }
+    } else if (mode.kind === 'eventChar' && mode.event === 'eagles' && mode.character) {
+      for (const loc of Object.keys(MAP)) m.set(loc, 'card');
     }
     return m;
   }, [mode, legal, state]);
@@ -335,6 +367,18 @@ export function Game({
       send({ type: 'playEvent', card: mode.card, location: loc, character });
     } else if (mode.kind === 'eventPath') {
       setMode({ ...mode, path: [...mode.path, loc] });
+    } else if (mode.kind === 'entmoot') {
+      const chars = Object.keys(state.characters).filter((c) => state.characters[c].location === 'fangorn_forest') as CharacterId[];
+      send({ type: 'playEvent', card: mode.card, count: 3, location2: loc, characters: chars });
+    } else if (mode.kind === 'eventMove') {
+      if (!mode.from) setMode({ ...mode, from: loc });
+      else if (mode.event === 'conflicting_orders') send({ type: 'playEvent', card: mode.card, location: mode.from, location2: loc });
+      else setMode({ ...mode, to: loc });
+    } else if (mode.kind === 'rohanRide') {
+      if (!mode.start) setMode({ ...mode, start: loc });
+      else setMode({ ...mode, path: [...mode.path, loc] });
+    } else if (mode.kind === 'eventChar' && mode.event === 'eagles' && mode.character) {
+      send({ type: 'playEvent', card: mode.card, character: mode.character, location: loc });
     }
   };
 
@@ -487,6 +531,141 @@ export function Game({
               )}
             </div>
           )}
+          {mode.kind === 'entmoot' && (
+            <div className="overlay-hint">
+              <strong>Entmoot</strong> — 3 Ents rouse at Fangorn Forest.{' '}
+              <button className="primary" onClick={() => send({ type: 'playEvent', card: mode.card, count: 3 })}>Add only</button>{' '}
+              <span>or click an adjacent location to march them (with any characters there).</span>{' '}
+              <button onClick={() => setMode({ kind: 'idle' })}>cancel</button>
+            </div>
+          )}
+          {mode.kind === 'eventMove' && (
+            <div className="overlay-hint">
+              <strong>{EVENTS.find((e) => e.key === mode.event)?.name}</strong>{' — '}
+              {!mode.from
+                ? mode.event === 'conflicting_orders'
+                  ? 'click a location with shadow troops to move from.'
+                  : mode.event === 'red_arrow'
+                    ? 'click a haven with troops to send from.'
+                    : 'click a location with troops to move from.'
+                : !mode.to
+                  ? `From ${MAP[mode.from].name}: click the destination.`
+                  : `${MAP[mode.from].name} → ${MAP[mode.to].name}.`}
+              {mode.from && mode.to && mode.event !== 'conflicting_orders' && (
+                <>
+                  {'  '}
+                  <button
+                    className="primary"
+                    onClick={() =>
+                      send({ type: 'playEvent', card: mode.card, location: mode.from!, location2: mode.to!, ...(mode.event === 'red_arrow' ? { count: 3 } : {}) })
+                    }
+                  >
+                    Move
+                  </button>{' '}
+                  <button
+                    onClick={() =>
+                      send({ type: 'playEvent', card: mode.card, location: mode.from!, location2: mode.to!, battle: true, ...(mode.event === 'red_arrow' ? { count: 3 } : {}) })
+                    }
+                  >
+                    Move &amp; battle
+                  </button>{' '}
+                  <button onClick={() => setMode({ ...mode, to: null })}>back</button>
+                </>
+              )}{' '}
+              <button onClick={() => setMode({ kind: 'idle' })}>cancel</button>
+            </div>
+          )}
+          {mode.kind === 'rohanRide' && (
+            <div className="overlay-hint">
+              <strong>Rohan Lends Horses</strong>{' — '}
+              {!mode.start ? (
+                'click a location holding your characters to ride from.'
+              ) : (
+                <>
+                  Riding from {MAP[mode.start].name}: click up to 3 destinations (Frodo searches each leg).
+                  {mode.path.length > 0 && ` Route: ${[mode.start, ...mode.path].map((l) => MAP[l].name).join(' → ')}`}
+                  {'  '}
+                  <button
+                    className="primary"
+                    disabled={mode.path.length === 0}
+                    onClick={() => send({ type: 'playEvent', card: mode.card, location: mode.start!, path: mode.path })}
+                  >
+                    Go
+                  </button>{' '}
+                  {mode.path.length > 0 && <button onClick={() => setMode({ ...mode, path: mode.path.slice(0, -1) })}>undo</button>}
+                </>
+              )}{' '}
+              <button onClick={() => setMode({ kind: 'idle' })}>cancel</button>
+            </div>
+          )}
+          {mode.kind === 'eventChar' && (
+            <div className="overlay-hint">
+              <strong>{EVENTS.find((e) => e.key === mode.event)?.name}</strong>{' — '}
+              {!mode.character ? (
+                <>
+                  choose a character:{' '}
+                  {(mode.event === 'lembas' ? active.characters : me!.characters)
+                    .filter((c) => state.characters[c])
+                    .map((c) => (
+                      <button
+                        key={c}
+                        onClick={() => {
+                          if (mode.event === 'lembas') send({ type: 'playEvent', card: mode.card, character: c });
+                          else setMode({ ...mode, character: c });
+                        }}
+                      >
+                        {CHARACTER_MAP[c].name}
+                      </button>
+                    ))}
+                </>
+              ) : (
+                <>{CHARACTER_MAP[mode.character].name}: click any destination on the map.</>
+              )}{' '}
+              <button onClick={() => setMode({ kind: 'idle' })}>cancel</button>
+            </div>
+          )}
+          {mode.kind === 'council' && (
+            <div className="overlay-hint">
+              <strong>The Council of Elrond</strong>{' — '}
+              {state.solo ? (
+                <>
+                  Prepare one card free (any region):{' '}
+                  {me!.hand
+                    .filter((c): c is Extract<PlayerCard, { kind: 'region' }> => c.kind === 'region')
+                    .map((c) => (
+                      <button key={c.id} onClick={() => send({ type: 'playEvent', card: mode.card, pick: c.id })}>
+                        <Sym s={c.symbol} /> {REGIONS.find((r) => r.id === c.region)?.name}
+                      </button>
+                    ))}
+                </>
+              ) : (
+                <>
+                  send characters to Rivendell (toggle, then summon):{' '}
+                  {me!.characters
+                    .filter((c) => state.characters[c])
+                    .map((c) => (
+                      <button
+                        key={c}
+                        className={mode.chars.includes(c) ? 'primary' : ''}
+                        onClick={() =>
+                          setMode({ ...mode, chars: mode.chars.includes(c) ? mode.chars.filter((x) => x !== c) : [...mode.chars, c] })
+                        }
+                      >
+                        {CHARACTER_MAP[c].name}
+                      </button>
+                    ))}{' '}
+                  <button
+                    className="primary"
+                    disabled={mode.chars.length === 0}
+                    onClick={() => send({ type: 'playEvent', card: mode.card, characters: mode.chars })}
+                  >
+                    Summon
+                  </button>
+                </>
+              )}{' '}
+              <button onClick={() => setMode({ kind: 'idle' })}>cancel</button>
+            </div>
+          )}
           {mode.kind === 'travelPlan' && (
             <TravelDialog
               state={state}
@@ -587,10 +766,18 @@ export function Game({
                     card={card}
                     legal={legal}
                     onPlay={(a) => {
-                      if (a) send(a);
-                      else if (card.kind === 'event' && card.event === 'elven_cloaks')
-                        setMode({ kind: 'eventPath', card: card.id, event: card.event, character: null, maxLegs: 2, path: [] });
-                      else if (card.kind === 'event') setMode({ kind: 'eventTarget', card: card.id, event: card.event });
+                      if (a) return send(a);
+                      if (card.kind !== 'event') return;
+                      const ev = card.event;
+                      if (ev === 'elven_cloaks') setMode({ kind: 'eventPath', card: card.id, event: ev, character: null, maxLegs: 2, path: [] });
+                      else if (ev === 'entmoot') setMode({ kind: 'entmoot', card: card.id });
+                      else if (ev === 'red_arrow' || ev === 'gwaihir' || ev === 'conflicting_orders')
+                        setMode({ kind: 'eventMove', card: card.id, event: ev, from: null, to: null });
+                      else if (ev === 'rohan_horses') setMode({ kind: 'rohanRide', card: card.id, start: null, path: [] });
+                      else if (ev === 'eagles') setMode({ kind: 'eventChar', card: card.id, event: 'eagles', character: null });
+                      else if (ev === 'lembas') setMode({ kind: 'eventChar', card: card.id, event: 'lembas', character: null });
+                      else if (ev === 'council_of_elrond') setMode({ kind: 'council', card: card.id, chars: [] });
+                      else setMode({ kind: 'eventTarget', card: card.id, event: ev });
                     }}
                   />
                 ))}
@@ -914,9 +1101,13 @@ function CardView({
   if (card.kind === 'event') {
     const def = EVENTS.find((e) => e.key === card.event)!;
     const direct = legal.find((a) => a.type === 'playEvent' && a.card === card.id && !a.location);
-    const needsTarget = ['eagles', 'orc_infighting', 'conflicting_orders', 'red_arrow', 'gwaihir'].includes(card.event);
-    // Events that open a multi-leg character path picker.
-    const needsPath = card.event === 'elven_cloaks';
+    const anyLegal = legal.some((a) => a.type === 'playEvent' && a.card === card.id);
+    // These have no legalActions entry (targets composed in the UI); always offer.
+    const alwaysComposed = ['red_arrow', 'council_of_elrond', 'gwaihir', 'rohan_horses', 'elven_cloaks'].includes(card.event);
+    // These have a legal entry but still need a composed picker.
+    const composedWhenLegal = ['entmoot', 'eagles', 'conflicting_orders', 'orc_infighting', 'lembas'].includes(card.event);
+    const composed = alwaysComposed || composedWhenLegal;
+    const show = alwaysComposed || anyLegal;
     return (
       <div className="card event-card">
         <div>
@@ -924,8 +1115,8 @@ function CardView({
           <div className="card-text"><RichText>{def.text}</RichText>{def.reconstructed ? ' ≈' : ''}</div>
         </div>
         <div className="card-actions">
-          {direct && !needsTarget && !needsPath && <button onClick={() => onPlay(direct)}>Play</button>}
-          {(needsTarget || needsPath) && <button onClick={() => onPlay(null)}>Play…</button>}
+          {show && !composed && direct && <button onClick={() => onPlay(direct)}>Play</button>}
+          {show && composed && <button onClick={() => onPlay(null)}>Play…</button>}
         </div>
       </div>
     );
