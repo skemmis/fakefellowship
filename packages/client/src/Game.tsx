@@ -98,7 +98,7 @@ function fxPos(id: string): { x: number; y: number } | null {
   return null;
 }
 
-function useFx(batch: { events: GameEvent[]; id: number }) {
+function useFx(batch: { events: GameEvent[]; id: number }, turnKey: string) {
   const [marker, setMarker] = useState<FxMarkerState | null>(null);
   const [trails, setTrails] = useState<FxTrailState[]>([]);
   const [pulse, setPulse] = useState<FxPulseState | null>(null);
@@ -106,6 +106,10 @@ function useFx(batch: { events: GameEvent[]; id: number }) {
   const queue = useRef<NonNullable<GameEvent['fx']>[]>([]);
   const busy = useRef(false);
   const seq = useRef(0);
+  // Tracers fade turn-by-turn, not on a timer: when the active player changes,
+  // the previous turn's trails are cleared so the freshest ones start fresh.
+  const lastTurn = useRef(turnKey);
+  const clearedThisBatch = useRef(false);
 
   const pump = () => {
     if (busy.current) return;
@@ -128,8 +132,8 @@ function useFx(batch: { events: GameEvent[]; id: number }) {
       setMarker({ id, piece: fx.piece, x1: a.x, y1: a.y, x2: b.x, y2: b.y, count: fx.count, color });
       setTimeout(() => {
         setMarker(null);
-        setTrails((t) => [...t.slice(-7), { id, x1: a.x, y1: a.y, x2: b.x, y2: b.y, color }]);
-        setTimeout(() => setTrails((t) => t.filter((x) => x.id !== id)), 6000);
+        // Trails persist until the next turn (see the batch effect below).
+        setTrails((t) => [...t.slice(-40), { id, x1: a.x, y1: a.y, x2: b.x, y2: b.y, color }]);
       }, 850);
       done(900);
     } else if (fx.fx === 'eye') {
@@ -178,10 +182,16 @@ function useFx(batch: { events: GameEvent[]; id: number }) {
   };
 
   useEffect(() => {
+    // A new turn began: wipe the previous turn's tracers before this batch's
+    // fx accumulate, so you always see just the latest turn's movements.
+    if (turnKey !== lastTurn.current) {
+      lastTurn.current = turnKey;
+      setTrails([]);
+    }
     for (const e of batch.events) if (e.fx) queue.current.push(e.fx);
     pump();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [batch.id]);
+  }, [batch.id, turnKey]);
 
   return { marker, trails, pulse, reveal };
 }
@@ -199,7 +209,7 @@ export function Game({
   chat: { from: string; text: string }[];
   batch: { events: GameEvent[]; id: number };
 }) {
-  const fx = useFx(batch);
+  const fx = useFx(batch, `${state.turnNumber}:${state.turn.playerIdx}`);
   const me = state.players.find((p) => p.id === playerId);
   const active = state.players[state.turn.playerIdx];
   const myTurn = active.id === playerId && state.phase === 'playing';
@@ -375,6 +385,7 @@ export function Game({
             fxMarker={fx.marker}
             fxTrails={fx.trails}
             fxPulse={fx.pulse}
+            turnKey={`${state.turnNumber}:${state.turn.playerIdx}`}
           />
           {fx.reveal && (
             <div className={`fx-reveal ${fx.reveal.dark ? 'dark' : ''}`} style={fx.reveal.color ? { borderColor: fx.reveal.color } : undefined}>

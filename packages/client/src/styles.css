@@ -328,14 +328,29 @@ select {
   font-size: 27px;
   font-weight: bold;
 }
-.char-pawn {
-  stroke: #14120e;
+.char-pin-body {
+  stroke: #faf4e6;
   stroke-width: 3;
+  filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.6));
 }
-.char-pawn.frodo {
-  stroke: #ffd76a;
+.char-pin-bearer {
+  fill: none;
+  stroke: #ffd23f;
   stroke-width: 4;
+  filter: drop-shadow(0 0 5px rgba(255, 210, 63, 0.8));
 }
+.char-pin-stem {
+  stroke: #faf4e6;
+  stroke-width: 3;
+  opacity: 0.75;
+}
+.char-pin-label {
+  font-size: 22px;
+  font-weight: 800;
+  paint-order: stroke;
+  pointer-events: none;
+}
+.char-pin { cursor: default; }
 .frodo-mark {
   font-size: 38px;
 }
@@ -866,12 +881,13 @@ select {
   stroke-width: 8;
   stroke-dasharray: 4 14;
   stroke-linecap: round;
-  animation: trailfade 6s forwards;
+  opacity: 0.7;
+  animation: trailin 0.5s ease-out;
   pointer-events: none;
 }
-@keyframes trailfade {
-  0% { opacity: 0.9; }
-  100% { opacity: 0; }
+@keyframes trailin {
+  0% { opacity: 0; }
+  100% { opacity: 0.7; }
 }
 .fx-pulse {
   fill: none;
@@ -1010,3 +1026,34 @@ select {
   background: #2a251d;
 }
 .ed-import:hover { background: #363023; }
+
+/* ---- Hope-track marker + tracer ---- */
+.hope-marker {
+  transition: transform 900ms cubic-bezier(0.3, 0, 0.2, 1);
+}
+.hope-marker-ring {
+  fill: rgba(255, 214, 106, 0.28);
+  stroke: #ffd23f;
+  stroke-width: 3;
+  filter: drop-shadow(0 0 8px rgba(255, 210, 63, 0.9));
+}
+.hope-tracer {
+  stroke-width: 12;
+  stroke-linecap: round;
+  opacity: 0.75;
+}
+.hope-tracer.up { stroke: #57c06a; }
+.hope-tracer.down { stroke: #d0402f; }
+
+/* ---- Big Eye of Sauron ---- */
+.eye-glow {
+  fill: rgba(200, 40, 30, 0.30);
+  animation: eyepulse 1.8s ease-in-out infinite;
+}
+@keyframes eyepulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.85; }
+}
+.eye-marker image {
+  filter: drop-shadow(0 0 10px rgba(220, 40, 20, 0.9));
+}

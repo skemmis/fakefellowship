@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import {
   CHARACTER_MAP,
   LOCATIONS,
@@ -8,6 +8,103 @@ import {
   type LocationId,
 } from '@emberfall/engine';
 import type { FxMarkerState, FxPulseState, FxTrailState } from './Game.js';
+
+/** Two-letter map monograms — distinct enough to tell the Gs and Es apart. */
+const MONOGRAM: Record<string, string> = {
+  frodo_sam: 'FS',
+  merry_pippin: 'MP',
+  aragorn: 'Ar',
+  arwen: 'Aw',
+  boromir: 'Bo',
+  eomer: 'Ém',
+  eowyn: 'Éo',
+  faramir: 'Fa',
+  galadriel: 'Ga',
+  gandalf: 'Gn',
+  gimli: 'Gi',
+  gollum: 'Go',
+  legolas: 'Le',
+};
+
+/** Pick black or white text for contrast against a hex fill. */
+function inkFor(hex: string): string {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return lum > 0.6 ? '#14120e' : '#ffffff';
+}
+
+/** A character's map marker: a colored shield with a monogram; the Ring-bearer
+ * wears a gold ring. */
+function CharPin({ id, x, y }: { id: string; x: number; y: number }) {
+  const def = CHARACTER_MAP[id];
+  const bearer = id === 'frodo_sam';
+  const R = 19;
+  return (
+    <g className="char-pin" transform={`translate(${x}, ${y})`}>
+      <title>{def.name}</title>
+      {/* leader stem up toward the node */}
+      <line x1={0} y1={-R} x2={0} y2={-R - 12} className="char-pin-stem" />
+      {bearer && <circle r={R + 5} className="char-pin-bearer" />}
+      <circle r={R} fill={def.color} className="char-pin-body" />
+      <text y={6} textAnchor="middle" className="char-pin-label" fill={inkFor(def.color)}>
+        {MONOGRAM[id] ?? def.name.slice(0, 2)}
+      </text>
+    </g>
+  );
+}
+
+/** Board-pixel centers of the hope-track spaces (value 0 despair → 8). */
+const HOPE_X = 108;
+const HOPE_Y = [1575, 1462, 1350, 1237, 1125, 1012, 900, 787, 675];
+
+/** The hope marker: a sun token that sits on the current space and glides
+ * (leaving a green/red tracer) when hope changes. The tracer is cleared
+ * turn-by-turn via the `turnKey` prop. */
+function HopeMarker({ hope, turnKey }: { hope: number; turnKey: string }) {
+  const v = Math.max(0, Math.min(8, hope));
+  const [y, setY] = useState(HOPE_Y[v]);
+  const [tracer, setTracer] = useState<{ y1: number; y2: number; up: boolean } | null>(null);
+  const prev = useRef(v);
+  const prevTurn = useRef(turnKey);
+
+  useEffect(() => {
+    if (turnKey !== prevTurn.current) {
+      prevTurn.current = turnKey;
+      setTracer(null);
+    }
+  }, [turnKey]);
+
+  useEffect(() => {
+    if (v === prev.current) return;
+    const from = HOPE_Y[prev.current];
+    const to = HOPE_Y[v];
+    setTracer({ y1: from, y2: to, up: v > prev.current });
+    prev.current = v;
+    // double-rAF so the transition animates to the new position
+    requestAnimationFrame(() => requestAnimationFrame(() => setY(to)));
+  }, [v]);
+
+  return (
+    <g className="hope-layer">
+      {tracer && (
+        <line
+          x1={HOPE_X}
+          y1={tracer.y1}
+          x2={HOPE_X}
+          y2={tracer.y2}
+          className={`hope-tracer ${tracer.up ? 'up' : 'down'}`}
+        />
+      )}
+      <g className="hope-marker" style={{ transform: `translate(${HOPE_X}px, ${y}px)` }}>
+        <circle r={30} className="hope-marker-ring" />
+        <image href="/icons/hope.png" x={-26} y={-26} width={52} height={52} />
+      </g>
+    </g>
+  );
+}
 
 /** A piece gliding from its origin to its destination. */
 function FxMarker({ m }: { m: FxMarkerState }) {
@@ -22,7 +119,7 @@ function FxMarker({ m }: { m: FxMarkerState }) {
   return (
     <g className="fx-marker" style={{ transform: `translate(${x}px, ${y}px)` }}>
       {m.piece === 'eye' ? (
-        <image href="/icons/eye.png" x={-26} y={-26} width={52} height={52} />
+        <image href="/icons/eye.png" x={-48} y={-48} width={96} height={96} />
       ) : m.piece === 'nazgul' ? (
         <image href="/icons/nazgul.png" x={-24} y={-24} width={48} height={48} />
       ) : (
@@ -54,6 +151,7 @@ export function MapView({
   fxMarker,
   fxTrails,
   fxPulse,
+  turnKey,
 }: {
   state: GameState;
   highlights: Map<LocationId, string>;
@@ -62,6 +160,7 @@ export function MapView({
   fxMarker?: FxMarkerState | null;
   fxTrails?: FxTrailState[];
   fxPulse?: FxPulseState | null;
+  turnKey: string;
 }) {
   const frodoLoc = state.characters['frodo_sam']?.location;
 
@@ -69,29 +168,36 @@ export function MapView({
     <svg className="map" viewBox="0 0 2500 2143" preserveAspectRatio="xMidYMid meet">
       <image href="/board.jpg" x="0" y="0" width="2500" height="2143" />
 
-      {/* Region chips: Nazgûl count + the Eye of Sauron */}
+      <HopeMarker hope={state.hope} turnKey={turnKey} />
+
+      {/* Region overlays: the big Eye of Sauron + a Nazgûl count chip */}
       {REGIONS.map((r) => {
         const wraiths = state.wraiths[r.id] ?? 0;
         const hasEye = state.eye === r.id;
         if (wraiths === 0 && !hasEye) return null;
-        const w = 24 + (hasEye ? 54 : 0) + (wraiths > 0 ? 100 : 0);
-        const left = r.x - w / 2 + 12;
-        const nazX = hasEye ? left + 54 : left;
+        // The Nazgûl chip sits just below the region point (or the Eye).
+        const chipY = r.y + (hasEye ? 66 : 0);
+        const cw = 100;
         return (
           <g key={r.id} className="region-chip">
-            <rect x={r.x - w / 2} y={r.y - 28} width={w} height={56} rx={14} className="chip-bg" />
-            {hasEye && <image href="/icons/eye.png" x={left - 2} y={r.y - 24} width={48} height={48} />}
-            {wraiths > 0 && (
-              <>
-                <image href="/icons/nazgul.png" x={nazX} y={r.y - 22} width={44} height={44} />
-                <text x={nazX + 52} y={r.y + 13} className="chip-text">
-                  ×{wraiths}
-                </text>
-              </>
-            )}
             <title>
               {r.name}: {wraiths} Nazgûl{hasEye ? ' — the Eye of Sauron watches this region' : ''}
             </title>
+            {hasEye && (
+              <g className="eye-marker">
+                <circle cx={r.x} cy={r.y} r={62} className="eye-glow" />
+                <image href="/icons/eye.png" x={r.x - 58} y={r.y - 58} width={116} height={116} />
+              </g>
+            )}
+            {wraiths > 0 && (
+              <g>
+                <rect x={r.x - cw / 2} y={chipY - 26} width={cw} height={52} rx={14} className="chip-bg" />
+                <image href="/icons/nazgul.png" x={r.x - cw / 2 + 6} y={chipY - 22} width={44} height={44} />
+                <text x={r.x - cw / 2 + 58} y={chipY + 11} className="chip-text">
+                  ×{wraiths}
+                </text>
+              </g>
+            )}
           </g>
         );
       })}
@@ -164,19 +270,21 @@ export function MapView({
                 </g>
               )}
 
-              {/* Characters */}
-              {charsHere.map((c, i) => (
-                <circle
-                  key={c}
-                  cx={loc.x - 27 + (i % 4) * 18}
-                  cy={loc.y + 40 + Math.floor(i / 4) * 19}
-                  r={10}
-                  fill={CHARACTER_MAP[c].color}
-                  className={`char-pawn ${c === 'frodo_sam' ? 'frodo' : ''}`}
-                >
-                  <title>{CHARACTER_MAP[c].name}</title>
-                </circle>
-              ))}
+              {/* Characters — bold monogram pins, clustered below the node */}
+              {charsHere.map((c, i) => {
+                const perRow = Math.min(charsHere.length, 3);
+                const row = Math.floor(i / 3);
+                const col = i % 3;
+                const rowCount = Math.min(charsHere.length - row * 3, 3);
+                return (
+                  <CharPin
+                    key={c}
+                    id={c}
+                    x={loc.x + (col - (rowCount - 1) / 2) * 44}
+                    y={loc.y + 62 + row * 46}
+                  />
+                );
+              })}
               {frodoLoc === loc.id && (
                 <image href="/icons/resistance.png" x={loc.x - 16} y={loc.y - 76} width={32} height={32} className="frodo-mark" />
               )}
