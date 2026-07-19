@@ -316,6 +316,7 @@ function completeObjective(s: GameState, id: string, events: GameEvent[]): void 
     case 'arwen_banner':
     case 'rangers_eriador':
     case 'shieldmaiden':
+    case 'hobbits_loyalty':
       changeHope(s, 1, events, def.name);
       break;
     case 'unseat_denethor':
@@ -1717,14 +1718,26 @@ export function applyAction(state: GameState, playerId: PlayerId, action: Action
         case 'hobbits_loyalty': {
           if (c !== 'merry_pippin') throw new RuleError('Only Merry & Pippin may pledge.');
           if (s.siteStatus[here] !== 'haven') throw new RuleError('They must stand in a haven.');
-          const group = MAP[here].muster;
+          const haven = MAP[here];
+          const group = haven.muster;
           if (!group) throw new RuleError('This haven has no people to pledge.');
           if (s.objProgress[`hobbits_${group}`]) throw new RuleError('That people is already pledged.');
+          if (s.supply.tokens.friendship <= 0) throw new RuleError('No friendship tokens left in the supply.');
+          const cardIdx = p.hand.findIndex(
+            (cd) => cd.id === action.card && cd.kind === 'region' && cd.symbol === 'friendship' && cd.region === haven.region,
+          );
+          if (cardIdx < 0) throw new RuleError('Discard a Friendship region card matching their region.');
           spendAction(s, c);
+          const [spent] = p.hand.splice(cardIdx, 1);
+          s.playerDiscard.push(spent);
+          s.supply.tokens.friendship -= 1; // the token is banked on the objective card
           s.objProgress[`hobbits_${group}`] = 1;
           const pledges = ['vale', 'riders', 'sylvan', 'deepholm'].filter((g) => s.objProgress[`hobbits_${g}`]).length;
           events.push({ kind: 'objective', text: `Merry & Pippin win the ${FACTION_NAMES[group]} to the cause (${pledges}/2 peoples pledged).` });
-          if (pledges >= 2) completeObjective(s, 'hobbits_loyalty', events);
+          if (pledges >= 2) {
+            p.tokens.friendship += 2; // the two banked tokens go to their player
+            completeObjective(s, 'hobbits_loyalty', events);
+          }
           break;
         }
         case 'shelobs_lair': {

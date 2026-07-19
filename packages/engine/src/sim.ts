@@ -65,11 +65,17 @@ export function checkInvariants(s: GameState): void {
   }, 0);
   if (nazgul !== NAZGUL_TOTAL) fail(`Nazgûl count ${nazgul} != ${NAZGUL_TOTAL}`);
 
-  // Symbol token conservation
+  // Symbol token conservation (friendship pledges sit on the Hobbits'
+  // objective card until it completes)
+  const hobbitsOpen = s.objectives.some((o) => o.id === 'hobbits_loyalty' && !o.complete);
+  const pledged = hobbitsOpen
+    ? ['vale', 'riders', 'sylvan', 'deepholm'].filter((g) => s.objProgress[`hobbits_${g}`]).length
+    : 0;
   for (const sym of ['friendship', 'valor', 'stealth', 'resistance'] as SymbolKind[]) {
     const held = s.players.reduce((a, p) => a + p.tokens[sym], 0);
-    if (held + s.supply.tokens[sym] !== TOKENS_PER_SYMBOL) {
-      fail(`${sym} tokens: ${held} held + ${s.supply.tokens[sym]} supply != ${TOKENS_PER_SYMBOL}`);
+    const onCards = sym === 'friendship' ? pledged : 0;
+    if (held + onCards + s.supply.tokens[sym] !== TOKENS_PER_SYMBOL) {
+      fail(`${sym} tokens: ${held} held + ${onCards} on cards + ${s.supply.tokens[sym]} supply != ${TOKENS_PER_SYMBOL}`);
     }
     if (s.supply.tokens[sym] < 0) fail(`negative ${sym} token supply`);
   }

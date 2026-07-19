@@ -390,10 +390,11 @@ export function legalActions(s: GameState, playerId?: string): Action[] {
     if (objectiveOpen(s, 'oathbreakers') && character === 'aragorn' && here === 'edoras' && !(s.objProgress['oathbreakers_ride'] ?? 0)) {
       out.push({ type: 'objective', id: 'oathbreakers', character });
     }
-    if (objectiveOpen(s, 'hobbits_loyalty') && character === 'merry_pippin' && s.siteStatus[here] === 'haven') {
+    if (objectiveOpen(s, 'hobbits_loyalty') && character === 'merry_pippin' && s.siteStatus[here] === 'haven' && s.supply.tokens.friendship > 0) {
       const group = MAP[here].muster;
       if (group && !(s.objProgress[`hobbits_${group}`] ?? 0)) {
-        out.push({ type: 'objective', id: 'hobbits_loyalty', character });
+        const match = p.hand.find((cd) => cd.kind === 'region' && cd.symbol === 'friendship' && cd.region === MAP[here].region);
+        if (match) out.push({ type: 'objective', id: 'hobbits_loyalty', character, card: match.id });
       }
     }
     if (objectiveOpen(s, 'shelobs_lair') && character === 'frodo_sam' && here === 'minas_morgul' && s.characters['gollum']?.location === here) {
