@@ -13,8 +13,8 @@ import type {
 } from '../types.js';
 
 // ---------------------------------------------------------------------------
-// Core numbers. Values marked (reconstructed) are not printed in the rulebook
-// and should be trued up against the physical components.
+// Core numbers, confirmed against the official rulebook (see docs/SOURCE-TEXT.md).
+// The only value not pinned by the rulebook is the per-symbol token split.
 // ---------------------------------------------------------------------------
 
 export const HOPE_MAX = 8;
@@ -29,7 +29,8 @@ export const CARDS_PER_TURN = 2;
 export const ACTIONS_PRIMARY = 4;
 export const ACTIONS_SECONDARY = 1;
 
-export const SHADOW_TROOPS_TOTAL = 48;
+export const SHADOW_TROOPS_TOTAL = 48; // rulebook p2
+// Rulebook p2: 35 friendly troops — 8 Dwarven, 9 Elven, 8 Rohirrim, 10 Gondor.
 export const FACTION_TOTALS = { deepholm: 8, sylvan: 9, riders: 8, vale: 10 } as const;
 /** Display names for the four Free Peoples armies (internal ids are legacy). */
 export const FACTION_NAMES = {
@@ -39,7 +40,9 @@ export const FACTION_NAMES = {
   deepholm: 'Dwarven',
 } as const;
 export const NAZGUL_TOTAL = 9;
-export const TOKENS_PER_SYMBOL = 9; // 36 symbol tokens (reconstructed split)
+// Rulebook p2 lists 36 symbol tokens total but does not split them by symbol;
+// 9 each (= 36) is a stand-in. Never blocks the 5 Resistance needed to win.
+export const TOKENS_PER_SYMBOL = 9;
 
 export const CAPTURE_COST = 3; // Valor
 export const RING_DESTROY_COST = 5; // Resistance
@@ -121,8 +124,8 @@ export function buildRegionCards(): RegionCard[] {
 }
 
 /**
- * The 14 event cards. Effects are reconstructions (the rulebook shows only
- * one card partially); "Haven Cloaks and Rope" is closest to its source.
+ * The 14 event cards, transcribed from the owner's card photos (mechanics
+ * paraphrased). The `reconstructed` flag is kept for any card still unverified.
  */
 export interface EventDef {
   key: string;
@@ -157,8 +160,10 @@ export function buildEventCards(): EventCard[] {
   return EVENTS.map((e, i) => ({ id: `ev${i}`, kind: 'event', event: e.key }));
 }
 
-/** 12 Skies Darken cards; each targets a location for its troop drop. (targets reconstructed) */
-/** Skies Darken step-3 troop-drop targets — all 12 transcribed from the cards. */
+// 12 Skies Darken cards; step 3 ("Under Cover of Darkness") drops 3 shadow troops
+// on the location the card shows. Those 12 target locations live only on the
+// physical cards (the rulebook shows just one example, South Ithilien), so this
+// list is a stand-in until the cards are photographed. See docs/SOURCE-TEXT.md.
 const DARKEN_TARGETS: LocationId[] = [
   'druadan_forest', 'dorwinion', 'gladden_fields', 'hollin', 'mount_doom',
   'north_ithilien', 'south_ithilien', 'southern_mirkwood', 'tharbad',
