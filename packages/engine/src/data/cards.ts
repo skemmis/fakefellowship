@@ -363,7 +363,7 @@ export const OBJECTIVES: ObjectiveDef[] = [
   {
     id: 'hobbits_loyalty',
     name: 'Hobbits Pledge Their Loyalty',
-    text: 'In a haven, Merry & Pippin may spend an action to discard a Friendship region card matching their region, pledging that people (a Friendship token goes on the card). Done at 2 pledges from different peoples: their player keeps the 2 tokens and hope rises 1.',
+    text: 'Merry & Pippin spend an action in a haven to win over that haven’s people. Pledge any 2 of the 4 peoples — Gondor, Rohirrim, Elven, Dwarven — to complete it.',
     uses: ['merry_pippin'],
   },
   {

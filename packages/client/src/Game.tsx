@@ -564,7 +564,7 @@ export function Game({
             <ul className="objectives">
               {state.objectives.map((o) => (
                 <li key={o.id} className={o.complete ? 'done' : ''}>
-                  {o.complete ? '✅' : '⬜'} <ObjectiveText id={o.id} />
+                  {o.complete ? '✅' : '⬜'} <ObjectiveText id={o.id} progress={state.objProgress} />
                 </li>
               ))}
             </ul>
@@ -634,11 +634,37 @@ export function Game({
 
 // ---------------------------------------------------------------------------
 
-function ObjectiveText({ id }: { id: string }) {
+/** The four peoples Merry & Pippin can pledge, in objProgress-key order. */
+const PLEDGE_PEOPLES: { key: string; label: string; color: string }[] = [
+  { key: 'hobbits_vale', label: 'Gondor', color: '#4a6fa5' },
+  { key: 'hobbits_riders', label: 'Rohirrim', color: '#3f8f4a' },
+  { key: 'hobbits_sylvan', label: 'Elven', color: '#5fa89a' },
+  { key: 'hobbits_deepholm', label: 'Dwarven', color: '#b0602f' },
+];
+
+function ObjectiveText({ id, progress }: { id: string; progress?: Record<string, number> }) {
   const def = OBJECTIVE_MAP[id];
   return (
     <span title={def.text}>
       <strong>{def.name}</strong> <span className="hint">— <RichText>{def.text}</RichText></span>
+      {id === 'hobbits_loyalty' && progress && (
+        <span className="pledge-row">
+          {PLEDGE_PEOPLES.map((f) => {
+            const done = (progress[f.key] ?? 0) > 0;
+            return (
+              <span
+                key={f.key}
+                className={`pledge-chip ${done ? 'pledged' : ''}`}
+                style={{ borderColor: f.color, background: done ? f.color : 'transparent' }}
+                title={done ? `${f.label} pledged` : `${f.label} — not yet pledged`}
+              >
+                {done ? '✓ ' : ''}
+                {f.label}
+              </span>
+            );
+          })}
+        </span>
+      )}
     </span>
   );
 }
@@ -798,16 +824,18 @@ function CharacterPanel({
             ))}
           {legal
             .filter((a): a is Extract<Action, { type: 'objective' }> => a.type === 'objective' && a.character === character)
-            .map((a) => (
-              <button
-                key={a.id}
-                className="primary"
-                onClick={() => onAct(a)}
-                title={OBJECTIVE_MAP[a.id]?.text}
-              >
-                ★ {OBJECTIVE_MAP[a.id]?.name}
-              </button>
-            ))}
+            .map((a) => {
+              let label = OBJECTIVE_MAP[a.id]?.name;
+              if (a.id === 'hobbits_loyalty') {
+                const people = PLEDGE_PEOPLES.find((f) => f.key === `hobbits_${MAP[loc].muster}`);
+                if (people) label = `Pledge the ${people.label} to the cause`;
+              }
+              return (
+                <button key={a.id} className="primary" onClick={() => onAct(a)} title={OBJECTIVE_MAP[a.id]?.text}>
+                  ★ {label}
+                </button>
+              );
+            })}
           {destroy && character === BEARER && (
             <button className="primary" onClick={() => onAct(destroy)} title="Spend 5 Resistance and survive one final search. If any hope remains, you win.">
               Destroy the Ring 🌋

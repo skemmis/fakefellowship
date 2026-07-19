@@ -595,6 +595,26 @@ select {
 .objectives .done {
   color: var(--good);
 }
+.pledge-row {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+.pledge-chip {
+  font-size: 11px;
+  line-height: 1.4;
+  border: 1px solid;
+  border-radius: 10px;
+  padding: 0 8px;
+  color: #cbb89f;
+  white-space: nowrap;
+}
+.pledge-chip.pledged {
+  color: #fff;
+  font-weight: 600;
+}
 .active-player {
   color: var(--accent);
 }
