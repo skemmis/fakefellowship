@@ -10,30 +10,26 @@ import type {
 } from '../types.js';
 
 /**
- * The board, transcribed from the rulebook and a high-resolution photograph
- * of the game map: 12 regions, 52 locations, 9 printed havens, 7 shadow
- * strongholds, 10 shadow (spawn) locations, 12 battle lines.
- *
- * Anything that couldn't be read with certainty (a few path routes and
- * battle-line orderings) is a best-effort reconstruction — each is a
- * one-line fix here when checked against the physical board.
+ * The board, built in the in-browser editor and verified against the
+ * physical game map: 12 regions, 52 locations, havens, shadow strongholds,
+ * shadow (spawn) locations, and the battle-line segments whose chained
+ * colors derive all 21 shadow-card battle lines. Coordinates are in
+ * board.jpg image-pixel space. Regenerated from board-data/fate-board.json.
  */
 
 export const REGIONS: RegionDef[] = [
-  // The rulebook's Nazgûl example implies the Misty Mountains do not border
-  // Eriador directly (movement from there goes via Rhudaur or Enedwaith).
-  { id: 'eriador', name: 'Eriador', adjacent: ['rhudaur', 'enedwaith'], x: 350, y: 700 },
-  { id: 'rhudaur', name: 'Rhudaur', adjacent: ['eriador', 'misty_mountains'], x: 1258, y: 330 },
-  { id: 'misty_mountains', name: 'Misty Mountains', adjacent: ['rhudaur', 'enedwaith', 'rohan', 'mirkwood'], x: 1085, y: 655 },
-  { id: 'enedwaith', name: 'Enedwaith', adjacent: ['eriador', 'misty_mountains', 'rohan', 'gondor'], x: 700, y: 800 },
-  { id: 'rohan', name: 'Rohan', adjacent: ['enedwaith', 'misty_mountains', 'mirkwood', 'rhovanion', 'gondor'], x: 1370, y: 850 },
-  { id: 'gondor', name: 'Gondor', adjacent: ['enedwaith', 'rohan', 'ithilien', 'haradwaith'], x: 930, y: 1340 },
-  { id: 'ithilien', name: 'Ithilien', adjacent: ['gondor', 'mordor', 'haradwaith', 'rhovanion'], x: 1610, y: 1480 },
-  { id: 'mordor', name: 'Mordor', adjacent: ['ithilien', 'rhovanion', 'haradwaith'], x: 2140, y: 1560 },
-  { id: 'rhovanion', name: 'Rhovanion', adjacent: ['rohan', 'mirkwood', 'dale', 'mordor', 'ithilien'], x: 2075, y: 795 },
-  { id: 'mirkwood', name: 'Mirkwood', adjacent: ['misty_mountains', 'rohan', 'rhovanion', 'dale'], x: 1500, y: 470 },
-  { id: 'dale', name: 'Dale', adjacent: ['mirkwood', 'rhovanion'], x: 1870, y: 100 },
-  { id: 'haradwaith', name: 'Haradwaith', adjacent: ['gondor', 'ithilien', 'mordor'], x: 1330, y: 1700 },
+  { id: 'eriador', name: "Eriador", adjacent: ['rhudaur', 'enedwaith'], x: 350, y: 700 },
+  { id: 'rhudaur', name: "Rhudaur", adjacent: ['eriador', 'misty_mountains'], x: 1258, y: 330 },
+  { id: 'misty_mountains', name: "Misty Mountains", adjacent: ['rhudaur', 'enedwaith', 'rohan', 'mirkwood'], x: 1085, y: 655 },
+  { id: 'enedwaith', name: "Enedwaith", adjacent: ['eriador', 'misty_mountains', 'rohan', 'gondor'], x: 700, y: 800 },
+  { id: 'rohan', name: "Rohan", adjacent: ['enedwaith', 'misty_mountains', 'mirkwood', 'rhovanion', 'gondor'], x: 1370, y: 850 },
+  { id: 'gondor', name: "Gondor", adjacent: ['enedwaith', 'rohan', 'ithilien', 'haradwaith'], x: 930, y: 1340 },
+  { id: 'ithilien', name: "Ithilien", adjacent: ['gondor', 'mordor', 'haradwaith', 'rhovanion'], x: 1610, y: 1480 },
+  { id: 'mordor', name: "Mordor", adjacent: ['ithilien', 'rhovanion', 'haradwaith'], x: 2140, y: 1560 },
+  { id: 'rhovanion', name: "Rhovanion", adjacent: ['rohan', 'mirkwood', 'dale', 'mordor', 'ithilien'], x: 2075, y: 795 },
+  { id: 'mirkwood', name: "Mirkwood", adjacent: ['misty_mountains', 'rohan', 'rhovanion', 'dale'], x: 1500, y: 470 },
+  { id: 'dale', name: "Dale", adjacent: ['mirkwood', 'rhovanion'], x: 1870, y: 100 },
+  { id: 'haradwaith', name: "Haradwaith", adjacent: ['gondor', 'ithilien', 'mordor'], x: 1330, y: 1700 },
 ];
 
 const L = (
@@ -46,197 +42,176 @@ const L = (
 ): LocationDef => ({ id, name, region, x, y, ...opts });
 
 export const LOCATIONS: LocationDef[] = [
-  // Eriador
-  L('grey_havens', 'Grey Havens', 'eriador', 233, 390, { haven: true, muster: 'sylvan' }),
-  L('ered_luin', 'Ered Luin', 'eriador', 205, 240, { muster: 'deepholm' }),
-  L('the_shire', 'The Shire', 'eriador', 383, 325, { haven: true }),
-  L('bree', 'Bree', 'eriador', 563, 395),
-  L('sarn_ford', 'Sarn Ford', 'eriador', 455, 560),
-  L('weather_hills', 'Weather Hills', 'eriador', 720, 350),
-  L('tharbad', 'Tharbad', 'eriador', 723, 555),
-  // Rhudaur
-  L('rivendell', 'Rivendell', 'rhudaur', 1023, 225, { haven: true, muster: 'sylvan' }),
-  // Misty Mountains
-  L('hollin', 'Hollin', 'misty_mountains', 995, 435),
-  L('moria', 'Moria', 'misty_mountains', 1205, 445, { shadowLoc: true, stronghold: true, stopsSpawnWhenCaptured: true }),
-  L('gladden_fields', 'Gladden Fields', 'misty_mountains', 1330, 430),
-  L('carrock', 'Carrock', 'misty_mountains', 1278, 230),
-  // Enedwaith
-  L('dunland', 'Dunland', 'enedwaith', 878, 630, { shadowLoc: true }),
-  L('isengard', 'Isengard', 'enedwaith', 995, 748, { shadowLoc: true, stronghold: true, stopsSpawnWhenCaptured: true }),
-  L('druwaith_iaur', 'Drúwaith Iaur', 'enedwaith', 665, 909),
-  // Rohan
-  L('fords_of_isen', 'Fords of Isen', 'rohan', 872, 940, { muster: 'riders' }),
-  L('helms_deep', "Helm's Deep", 'rohan', 1063, 949, { haven: true, muster: 'riders' }),
-  L('edoras', 'Edoras', 'rohan', 1193, 1024, { muster: 'riders' }),
-  L('eastemnet', 'Eastemnet', 'rohan', 1313, 909, { muster: 'riders' }),
-  L('fangorn_forest', 'Fangorn Forest', 'rohan', 1128, 742),
-  // Gondor
-  L('minas_tirith', 'Minas Tirith', 'gondor', 1480, 1205, { haven: true, muster: 'vale' }),
-  L('osgiliath', 'Osgiliath', 'gondor', 1660, 1175),
-  L('druadan_forest', 'Drúadan Forest', 'gondor', 1360, 1135),
-  L('pelargir', 'Pelargir', 'gondor', 1450, 1352, { muster: 'vale' }),
-  L('dol_amroth', 'Dol Amroth', 'gondor', 1068, 1400, { haven: true, muster: 'vale' }),
-  L('lamedon', 'Lamedon', 'gondor', 1290, 1280, { muster: 'vale' }),
-  L('erech', 'Erech', 'gondor', 1053, 1139),
-  L('pinnath_gelin', 'Pinnath Gelin', 'gondor', 665, 1244),
-  // Ithilien
-  L('north_ithilien', 'North Ithilien', 'ithilien', 1560, 1040),
-  L('south_ithilien', 'South Ithilien', 'ithilien', 1635, 1338),
-  // Mordor
-  L('minas_morgul', 'Minas Morgul', 'mordor', 1827, 1295, { shadowLoc: true, stronghold: true }),
-  L('mount_doom', 'Mount Doom', 'mordor', 1870, 1127),
-  L('plateau_of_gorgoroth', 'Plateau of Gorgoroth', 'mordor', 2052, 1200, { shadowLoc: false }),
-  L('barad_dur', 'Barad-dûr', 'mordor', 1992, 1032, { shadowLoc: true, stronghold: true }),
-  L('udun', 'Udûn', 'mordor', 1730, 1027, { stronghold: true }),
-  L('nurn', 'Núrn', 'mordor', 2280, 1230, { shadowLoc: true }),
-  // Rhovanion
-  L('brown_lands', 'Brown Lands', 'rhovanion', 1665, 775),
-  L('emyn_muil', 'Emyn Muil', 'rhovanion', 1532, 860),
-  L('dagorlad', 'Dagorlad', 'rhovanion', 1767, 864),
-  L('rhun', 'Rhûn', 'rhovanion', 2358, 716, { shadowLoc: true }),
-  // Mirkwood
-  L('lorien', 'Lórien', 'mirkwood', 1228, 595, { haven: true, muster: 'sylvan' }),
-  L('dol_guldur', 'Dol Guldur', 'mirkwood', 1473, 617, { shadowLoc: true, stronghold: true, stopsSpawnWhenCaptured: true }),
-  L('southern_mirkwood', 'Southern Mirkwood', 'mirkwood', 1680, 520),
-  L('old_forest_road', 'Old Forest Road', 'mirkwood', 1563, 278),
-  L('woodland_realm', 'Woodland Realm', 'mirkwood', 1473, 140, { haven: true, muster: 'sylvan' }),
-  // Dale
-  L('erebor', 'Erebor', 'dale', 1692, 120, { haven: true, muster: 'deepholm' }),
-  L('iron_hills', 'Iron Hills', 'dale', 1965, 205, { muster: 'deepholm' }),
-  L('lake_town', 'Lake Town', 'dale', 1767, 285),
-  L('dorwinion', 'Dorwinion', 'dale', 1997, 505),
-  // Haradwaith
-  L('harondor', 'Harondor', 'haradwaith', 1672, 1660),
-  L('near_harad', 'Near Harad', 'haradwaith', 1792, 1878, { shadowLoc: true }),
-  L('umbar', 'Umbar', 'haradwaith', 1543, 1898, { shadowLoc: true, stronghold: true, stopsSpawnWhenCaptured: true }),
+  L('grey_havens', "Grey Havens", 'eriador', 235, 418, { haven: true, muster: "sylvan" }),
+  L('ered_luin', "Ered Luin", 'eriador', 212, 245, { muster: "deepholm" }),
+  L('the_shire', "The Shire", 'eriador', 379, 334, { haven: true }),
+  L('bree', "Bree", 'eriador', 563, 395),
+  L('sarn_ford', "Sarn Ford", 'eriador', 453, 560),
+  L('weather_hills', "Weather Hills", 'eriador', 720, 350),
+  L('tharbad', "Tharbad", 'eriador', 726, 548),
+  L('rivendell', "Rivendell", 'rhudaur', 1044, 231, { haven: true, muster: "sylvan" }),
+  L('hollin', "Hollin", 'rhudaur', 993, 429),
+  L('moria', "Moria", 'misty_mountains', 1194, 469, { stronghold: true, shadowLoc: true, stopsSpawnWhenCaptured: true }),
+  L('gladden_fields', "Gladden Fields", 'misty_mountains', 1348, 435),
+  L('carrock', "Carrock", 'misty_mountains', 1281, 232),
+  L('dunland', "Dunland", 'enedwaith', 877, 641, { shadowLoc: true }),
+  L('isengard', "Isengard", 'misty_mountains', 1017, 746, { stronghold: true, shadowLoc: true, stopsSpawnWhenCaptured: true }),
+  L('druwaith_iaur', "Dr\u00fawaith Iaur", 'enedwaith', 674, 913),
+  L('fords_of_isen', "Fords of Isen", 'rohan', 867, 933, { muster: "riders" }),
+  L('helms_deep', "Helm's Deep", 'rohan', 1065, 964, { haven: true, muster: "riders" }),
+  L('edoras', "Edoras", 'rohan', 1197, 1015, { muster: "riders" }),
+  L('eastemnet', "Eastemnet", 'rohan', 1312, 880, { muster: "riders" }),
+  L('fangorn_forest', "Fangorn Forest", 'misty_mountains', 1135, 745),
+  L('minas_tirith', "Minas Tirith", 'gondor', 1480, 1205, { haven: true, muster: "vale" }),
+  L('osgiliath', "Osgiliath", 'ithilien', 1660, 1175),
+  L('druadan_forest', "Dr\u00faadan Forest", 'gondor', 1367, 1137),
+  L('pelargir', "Pelargir", 'gondor', 1466, 1355, { muster: "vale" }),
+  L('dol_amroth', "Dol Amroth", 'gondor', 1071, 1384, { haven: true, muster: "vale" }),
+  L('lamedon', "Lamedon", 'gondor', 1269, 1271, { muster: "vale" }),
+  L('erech', "Erech", 'gondor', 1053, 1139),
+  L('pinnath_gelin', "Pinnath Gelin", 'gondor', 668, 1254),
+  L('north_ithilien', "North Ithilien", 'ithilien', 1558, 1048),
+  L('south_ithilien', "South Ithilien", 'ithilien', 1640, 1329),
+  L('minas_morgul', "Minas Morgul", 'mordor', 1827, 1295, { stronghold: true, shadowLoc: true }),
+  L('mount_doom', "Mount Doom", 'mordor', 1870, 1127),
+  L('plateau_of_gorgoroth', "Plateau of Gorgoroth", 'mordor', 2058, 1195),
+  L('barad_dur', "Barad-d\u00fbr", 'mordor', 2001, 1032, { stronghold: true, shadowLoc: true }),
+  L('udun', "Ud\u00fbn", 'mordor', 1733, 1021, { stronghold: true }),
+  L('nurn', "N\u00farn", 'mordor', 2298, 1224, { shadowLoc: true }),
+  L('brown_lands', "Brown Lands", 'rhovanion', 1665, 775),
+  L('emyn_muil', "Emyn Muil", 'rhovanion', 1523, 874),
+  L('dagorlad', "Dagorlad", 'rhovanion', 1767, 864),
+  L('rhun', "Rh\u00fbn", 'rhovanion', 2356, 724, { shadowLoc: true }),
+  L('lorien', "L\u00f3rien", 'misty_mountains', 1233, 616, { haven: true, muster: "sylvan" }),
+  L('dol_guldur', "Dol Guldur", 'mirkwood', 1479, 625, { stronghold: true, shadowLoc: true, stopsSpawnWhenCaptured: true }),
+  L('southern_mirkwood', "Southern Mirkwood", 'mirkwood', 1684, 528),
+  L('old_forest_road', "Old Forest Road", 'mirkwood', 1563, 278),
+  L('woodland_realm', "Woodland Realm", 'mirkwood', 1482, 155, { haven: true, muster: "sylvan" }),
+  L('erebor', "Erebor", 'dale', 1708, 146, { haven: true, muster: "deepholm" }),
+  L('iron_hills', "Iron Hills", 'dale', 1965, 205, { muster: "deepholm" }),
+  L('lake_town', "Lake Town", 'dale', 1767, 285),
+  L('dorwinion', "Dorwinion", 'rhovanion', 1997, 505),
+  L('harondor', "Harondor", 'haradwaith', 1677, 1652),
+  L('near_harad', "Near Harad", 'haradwaith', 1813, 1879, { shadowLoc: true }),
+  L('umbar', "Umbar", 'haradwaith', 1560, 1911, { stronghold: true, shadowLoc: true, stopsSpawnWhenCaptured: true }),
 ];
 
-/**
- * Edges: every connection between two locations is EITHER a white path
- * (players only; may carry a symbol cost) OR a battle line segment (a
- * colored, directed arrow; shadow troops advance along it, and players may
- * travel it too). Multiple edges may join the same pair of locations.
- *
- * Full battle lines are DERIVED by chaining same-colored segments head to
- * tail. This entire list is editable in the in-game board editor (#editor).
- */
 export const EDGES: EdgeDef[] = [
-  { a: "grey_havens", b: "ered_luin", kind: "path" },
-  { a: "grey_havens", b: "the_shire", kind: "path" },
-  { a: "grey_havens", b: "sarn_ford", kind: "path" },
-  { a: "ered_luin", b: "the_shire", kind: "path" },
-  { a: "the_shire", b: "bree", kind: "path" },
-  { a: "the_shire", b: "sarn_ford", kind: "path" },
-  { a: "bree", b: "weather_hills", kind: "path" },
-  { a: "bree", b: "sarn_ford", kind: "path" },
-  { a: "sarn_ford", b: "tharbad", kind: "path" },
-  { a: "weather_hills", b: "rivendell", kind: "path" },
-  { a: "tharbad", b: "bree", kind: "path" },
-  { a: "rivendell", b: "hollin", kind: "path" },
-  { a: "rivendell", b: "carrock", kind: "path", cost: ["stealth"] },
-  { a: "hollin", b: "moria", kind: "path", cost: ["friendship"] },
-  { a: "hollin", b: "carrock", kind: "path", cost: ["resistance"] },
-  { a: "hollin", b: "dunland", kind: "path" },
-  { a: "hollin", b: "tharbad", kind: "path" },
-  { a: "moria", b: "gladden_fields", kind: "path" },
-  { a: "gladden_fields", b: "carrock", kind: "path" },
-  { a: "gladden_fields", b: "lorien", kind: "path" },
-  { a: "carrock", b: "old_forest_road", kind: "path" },
-  { a: "tharbad", b: "dunland", kind: "path" },
-  { a: "tharbad", b: "druwaith_iaur", kind: "path" },
-  { a: "dunland", b: "isengard", kind: "path" },
-  { a: "druwaith_iaur", b: "pinnath_gelin", kind: "path" },
-  { a: "druwaith_iaur", b: "fords_of_isen", kind: "path" },
-  { a: "isengard", b: "fangorn_forest", kind: "path", cost: ["stealth"] },
-  { a: "isengard", b: "fords_of_isen", kind: "path" },
-  { a: "fangorn_forest", b: "lorien", kind: "path", cost: ["friendship"] },
-  { a: "fangorn_forest", b: "eastemnet", kind: "path" },
-  { a: "fangorn_forest", b: "fords_of_isen", kind: "path" },
-  { a: "fords_of_isen", b: "helms_deep", kind: "path" },
-  { a: "helms_deep", b: "edoras", kind: "path" },
-  { a: "edoras", b: "eastemnet", kind: "path" },
-  { a: "edoras", b: "druadan_forest", kind: "path" },
-  { a: "edoras", b: "erech", kind: "path", cost: ["stealth"] },
-  { a: "eastemnet", b: "emyn_muil", kind: "path" },
-  { a: "eastemnet", b: "brown_lands", kind: "path" },
-  { a: "druadan_forest", b: "minas_tirith", kind: "path" },
-  { a: "minas_tirith", b: "osgiliath", kind: "path" },
-  { a: "minas_tirith", b: "pelargir", kind: "path" },
-  { a: "pelargir", b: "lamedon", kind: "path" },
-  { a: "pelargir", b: "south_ithilien", kind: "path" },
-  { a: "pelargir", b: "harondor", kind: "path" },
-  { a: "dol_amroth", b: "lamedon", kind: "path" },
-  { a: "dol_amroth", b: "pinnath_gelin", kind: "path" },
-  { a: "lamedon", b: "erech", kind: "path" },
-  { a: "erech", b: "pinnath_gelin", kind: "path" },
-  { a: "grey_havens", b: "dol_amroth", kind: "path", cost: ["friendship", "friendship"] },
-  { a: "osgiliath", b: "north_ithilien", kind: "path" },
-  { a: "osgiliath", b: "south_ithilien", kind: "path" },
-  { a: "north_ithilien", b: "south_ithilien", kind: "path" },
-  { a: "emyn_muil", b: "north_ithilien", kind: "path", cost: ["resistance"] },
-  { a: "north_ithilien", b: "udun", kind: "path", cost: ["stealth", "stealth", "stealth"] },
-  { a: "south_ithilien", b: "minas_morgul", kind: "path", cost: ["stealth", "stealth"] },
-  { a: "south_ithilien", b: "harondor", kind: "path" },
-  { a: "minas_morgul", b: "mount_doom", kind: "path", cost: ["stealth", "stealth"] },
-  { a: "minas_morgul", b: "plateau_of_gorgoroth", kind: "path", cost: ["stealth"] },
-  { a: "mount_doom", b: "plateau_of_gorgoroth", kind: "path", cost: ["stealth", "stealth"] },
-  { a: "mount_doom", b: "barad_dur", kind: "path" },
-  { a: "mount_doom", b: "udun", kind: "path", cost: ["stealth", "stealth", "stealth"] },
-  { a: "plateau_of_gorgoroth", b: "barad_dur", kind: "path" },
-  { a: "plateau_of_gorgoroth", b: "nurn", kind: "path" },
-  { a: "barad_dur", b: "udun", kind: "path", cost: ["stealth"] },
-  { a: "udun", b: "dagorlad", kind: "path", cost: ["stealth"] },
-  { a: "nurn", b: "near_harad", kind: "path" },
-  { a: "brown_lands", b: "emyn_muil", kind: "path" },
-  { a: "brown_lands", b: "dagorlad", kind: "path" },
-  { a: "brown_lands", b: "southern_mirkwood", kind: "path" },
-  { a: "dagorlad", b: "rhun", kind: "path" },
-  { a: "lorien", b: "dol_guldur", kind: "path" },
-  { a: "dol_guldur", b: "southern_mirkwood", kind: "path" },
-  { a: "southern_mirkwood", b: "old_forest_road", kind: "path" },
-  { a: "old_forest_road", b: "woodland_realm", kind: "path" },
-  { a: "woodland_realm", b: "lake_town", kind: "path" },
-  { a: "lake_town", b: "erebor", kind: "path" },
-  { a: "lake_town", b: "dorwinion", kind: "path" },
-  { a: "erebor", b: "iron_hills", kind: "path" },
-  { a: "iron_hills", b: "dorwinion", kind: "path" },
-  { a: "harondor", b: "near_harad", kind: "path" },
-  { a: "umbar", b: "near_harad", kind: "path" },
-  { a: "umbar", b: "harondor", kind: "path" },
-  { a: "moria", b: "hollin", kind: "line", color: "#7fbf5f", dir: "ab" },
-  { a: "hollin", b: "weather_hills", kind: "line", color: "#7fbf5f", dir: "ab" },
-  { a: "weather_hills", b: "rivendell", kind: "line", color: "#7fbf5f", dir: "ab" },
-  { a: "dunland", b: "tharbad", kind: "line", color: "#8f6fc0", dir: "ab" },
-  { a: "tharbad", b: "sarn_ford", kind: "line", color: "#8f6fc0", dir: "ab" },
-  { a: "sarn_ford", b: "the_shire", kind: "line", color: "#8f6fc0", dir: "ab" },
-  { a: "isengard", b: "fords_of_isen", kind: "line", color: "#5fb3a1", dir: "ab" },
-  { a: "fords_of_isen", b: "helms_deep", kind: "line", color: "#5fb3a1", dir: "ab" },
-  { a: "isengard", b: "druwaith_iaur", kind: "line", color: "#e8836a", dir: "ab" },
-  { a: "druwaith_iaur", b: "pinnath_gelin", kind: "line", color: "#e8836a", dir: "ab" },
-  { a: "pinnath_gelin", b: "lamedon", kind: "line", color: "#e8836a", dir: "ab" },
-  { a: "lamedon", b: "dol_amroth", kind: "line", color: "#e8836a", dir: "ab" },
-  { a: "dol_guldur", b: "lorien", kind: "line", color: "#e0c050", dir: "ab" },
-  { a: "dol_guldur", b: "old_forest_road", kind: "line", color: "#6fb8e8", dir: "ab" },
-  { a: "old_forest_road", b: "woodland_realm", kind: "line", color: "#6fb8e8", dir: "ab" },
-  { a: "rhun", b: "dorwinion", kind: "line", color: "#c98ad1", dir: "ab" },
-  { a: "dorwinion", b: "lake_town", kind: "line", color: "#c98ad1", dir: "ab" },
-  { a: "lake_town", b: "erebor", kind: "line", color: "#c98ad1", dir: "ab" },
-  { a: "barad_dur", b: "dagorlad", kind: "line", color: "#55c8dc", dir: "ab" },
-  { a: "dagorlad", b: "emyn_muil", kind: "line", color: "#55c8dc", dir: "ab" },
-  { a: "emyn_muil", b: "eastemnet", kind: "line", color: "#55c8dc", dir: "ab" },
-  { a: "eastemnet", b: "edoras", kind: "line", color: "#55c8dc", dir: "ab" },
-  { a: "edoras", b: "helms_deep", kind: "line", color: "#55c8dc", dir: "ab" },
-  { a: "nurn", b: "plateau_of_gorgoroth", kind: "line", color: "#e8d060", dir: "ab" },
-  { a: "plateau_of_gorgoroth", b: "osgiliath", kind: "line", color: "#e8d060", dir: "ab" },
-  { a: "osgiliath", b: "minas_tirith", kind: "line", color: "#e8d060", dir: "ab" },
-  { a: "minas_morgul", b: "south_ithilien", kind: "line", color: "#a98ae0", dir: "ab" },
-  { a: "south_ithilien", b: "pelargir", kind: "line", color: "#a98ae0", dir: "ab" },
-  { a: "pelargir", b: "dol_amroth", kind: "line", color: "#a98ae0", dir: "ab" },
-  { a: "near_harad", b: "harondor", kind: "line", color: "#e8946a", dir: "ab" },
-  { a: "harondor", b: "south_ithilien", kind: "line", color: "#e8946a", dir: "ab" },
-  { a: "south_ithilien", b: "minas_tirith", kind: "line", color: "#e8946a", dir: "ab" },
-  { a: "umbar", b: "dol_amroth", kind: "line", color: "#8a9ae0", dir: "ab" },
+  { a: 'grey_havens', b: 'ered_luin', kind: 'line', color: '#8f6fc0', dir: 'ba' },
+  { a: 'the_shire', b: 'ered_luin', kind: 'line', color: '#8f6fc0', dir: 'ab' },
+  { a: 'bree', b: 'the_shire', kind: 'line', color: '#8f6fc0', dir: 'ab' },
+  { a: 'sarn_ford', b: 'bree', kind: 'line', color: '#8f6fc0', dir: 'ab' },
+  { a: 'sarn_ford', b: 'the_shire', kind: 'path' },
+  { a: 'tharbad', b: 'sarn_ford', kind: 'line', color: '#8f6fc0', dir: 'ab' },
+  { a: 'tharbad', b: 'bree', kind: 'line', color: '#9acd5a', dir: 'ab' },
+  { a: 'bree', b: 'weather_hills', kind: 'line', color: '#9acd5a', dir: 'ab' },
+  { a: 'weather_hills', b: 'rivendell', kind: 'line', color: '#9acd5a', dir: 'ab' },
+  { a: 'weather_hills', b: 'hollin', kind: 'path' },
+  { a: 'hollin', b: 'rivendell', kind: 'path' },
+  { a: 'rivendell', b: 'carrock', kind: 'path', cost: ['stealth'] },
+  { a: 'carrock', b: 'old_forest_road', kind: 'line', color: '#3fa8a0', dir: 'ab' },
+  { a: 'carrock', b: 'gladden_fields', kind: 'line', color: '#3fa8a0', dir: 'ba' },
+  { a: 'woodland_realm', b: 'old_forest_road', kind: 'line', color: '#3fa8a0', dir: 'ba' },
+  { a: 'woodland_realm', b: 'erebor', kind: 'line', color: '#3fa8a0', dir: 'ab' },
+  { a: 'erebor', b: 'woodland_realm', kind: 'line', color: '#e8834a', dir: 'ab' },
+  { a: 'erebor', b: 'woodland_realm', kind: 'line', color: '#e87fb0', dir: 'ab' },
+  { a: 'erebor', b: 'iron_hills', kind: 'line', color: '#e87fb0', dir: 'ba' },
+  { a: 'lake_town', b: 'erebor', kind: 'line', color: '#e8834a', dir: 'ab' },
+  { a: 'lake_town', b: 'iron_hills', kind: 'line', color: '#e87fb0', dir: 'ab' },
+  { a: 'lake_town', b: 'woodland_realm', kind: 'path' },
+  { a: 'dorwinion', b: 'lake_town', kind: 'line', color: '#e87fb0', dir: 'ab' },
+  { a: 'dorwinion', b: 'iron_hills', kind: 'path' },
+  { a: 'dorwinion', b: 'southern_mirkwood', kind: 'line', color: '#e8834a', dir: 'ab' },
+  { a: 'southern_mirkwood', b: 'old_forest_road', kind: 'line', color: '#e8834a', dir: 'ab' },
+  { a: 'southern_mirkwood', b: 'old_forest_road', kind: 'line', color: '#3fa8a0', dir: 'ab' },
+  { a: 'dol_guldur', b: 'southern_mirkwood', kind: 'line', color: '#e8cf4f', dir: 'ab' },
+  { a: 'dol_guldur', b: 'southern_mirkwood', kind: 'line', color: '#3fa8a0', dir: 'ab' },
+  { a: 'dol_guldur', b: 'gladden_fields', kind: 'line', color: '#2f8f3e', dir: 'ab' },
+  { a: 'dol_guldur', b: 'gladden_fields', kind: 'line', color: '#e8cf4f', dir: 'ba' },
+  { a: 'gladden_fields', b: 'moria', kind: 'line', color: '#3fa8a0', dir: 'ba' },
+  { a: 'gladden_fields', b: 'moria', kind: 'line', color: '#e8cf4f', dir: 'ba' },
+  { a: 'gladden_fields', b: 'hollin', kind: 'path', cost: ['resistance'] },
+  { a: 'moria', b: 'hollin', kind: 'line', color: '#9acd5a', dir: 'ab', cost: ['friendship'] },
+  { a: 'hollin', b: 'tharbad', kind: 'line', color: '#9acd5a', dir: 'ab' },
+  { a: 'dunland', b: 'hollin', kind: 'line', color: '#9acd5a', dir: 'ab' },
+  { a: 'dunland', b: 'tharbad', kind: 'line', color: '#8f6fc0', dir: 'ab' },
+  { a: 'lorien', b: 'gladden_fields', kind: 'line', color: '#2f8f3e', dir: 'ba' },
+  { a: 'fangorn_forest', b: 'lorien', kind: 'line', color: '#2f8f3e', dir: 'ba' },
+  { a: 'lorien', b: 'dol_guldur', kind: 'path' },
+  { a: 'lorien', b: 'emyn_muil', kind: 'path', cost: ['friendship'] },
+  { a: 'isengard', b: 'fangorn_forest', kind: 'path', cost: ['stealth'] },
+  { a: 'brown_lands', b: 'dol_guldur', kind: 'line', color: '#3fa8a0', dir: 'ab' },
+  { a: 'emyn_muil', b: 'brown_lands', kind: 'line', color: '#3fa8a0', dir: 'ab' },
+  { a: 'brown_lands', b: 'dagorlad', kind: 'path' },
+  { a: 'southern_mirkwood', b: 'dagorlad', kind: 'line', color: '#e8cf4f', dir: 'ab' },
+  { a: 'dagorlad', b: 'dorwinion', kind: 'path' },
+  { a: 'rhun', b: 'dagorlad', kind: 'line', color: '#e8cf4f', dir: 'ab' },
+  { a: 'rhun', b: 'dorwinion', kind: 'line', color: '#e8834a', dir: 'ab' },
+  { a: 'rhun', b: 'dorwinion', kind: 'line', color: '#e87fb0', dir: 'ab' },
+  { a: 'dagorlad', b: 'emyn_muil', kind: 'line', color: '#3fa8a0', dir: 'ab' },
+  { a: 'emyn_muil', b: 'eastemnet', kind: 'path' },
+  { a: 'dagorlad', b: 'north_ithilien', kind: 'line', color: '#3fa8a0', dir: 'ba' },
+  { a: 'dagorlad', b: 'north_ithilien', kind: 'line', color: '#e8cf4f', dir: 'ab' },
+  { a: 'north_ithilien', b: 'emyn_muil', kind: 'path', cost: ['resistance'] },
+  { a: 'fangorn_forest', b: 'eastemnet', kind: 'line', color: '#2f8f3e', dir: 'ab' },
+  { a: 'eastemnet', b: 'helms_deep', kind: 'line', color: '#2f8f3e', dir: 'ab' },
+  { a: 'fangorn_forest', b: 'helms_deep', kind: 'path' },
+  { a: 'eastemnet', b: 'edoras', kind: 'path' },
+  { a: 'edoras', b: 'helms_deep', kind: 'line', color: '#8f6fc0', dir: 'ab' },
+  { a: 'helms_deep', b: 'edoras', kind: 'line', color: '#e87fb0', dir: 'ab' },
+  { a: 'edoras', b: 'druadan_forest', kind: 'line', color: '#e87fb0', dir: 'ab' },
+  { a: 'druadan_forest', b: 'edoras', kind: 'line', color: '#8f6fc0', dir: 'ab' },
+  { a: 'druadan_forest', b: 'minas_tirith', kind: 'line', color: '#e87fb0', dir: 'ab' },
+  { a: 'fords_of_isen', b: 'helms_deep', kind: 'line', color: '#e87fb0', dir: 'ab' },
+  { a: 'fords_of_isen', b: 'helms_deep', kind: 'line', color: '#e8834a', dir: 'ab' },
+  { a: 'isengard', b: 'fords_of_isen', kind: 'line', color: '#9acd5a', dir: 'ab' },
+  { a: 'isengard', b: 'fords_of_isen', kind: 'line', color: '#e87fb0', dir: 'ab' },
+  { a: 'isengard', b: 'fords_of_isen', kind: 'line', color: '#e8834a', dir: 'ab' },
+  { a: 'fords_of_isen', b: 'dunland', kind: 'line', color: '#9acd5a', dir: 'ab' },
+  { a: 'dunland', b: 'druwaith_iaur', kind: 'line', color: '#e8834a', dir: 'ab' },
+  { a: 'pinnath_gelin', b: 'druwaith_iaur', kind: 'line', color: '#e8834a', dir: 'ab' },
+  { a: 'druwaith_iaur', b: 'fords_of_isen', kind: 'line', color: '#e8834a', dir: 'ab' },
+  { a: 'erech', b: 'pinnath_gelin', kind: 'line', color: '#e8834a', dir: 'ab' },
+  { a: 'lamedon', b: 'erech', kind: 'line', color: '#e8834a', dir: 'ab' },
+  { a: 'erech', b: 'edoras', kind: 'path', cost: ['stealth'] },
+  { a: 'lamedon', b: 'dol_amroth', kind: 'path' },
+  { a: 'grey_havens', b: 'dol_amroth', kind: 'line', color: '#e87fb0', dir: 'ba', cost: ['friendship', 'friendship'] },
+  { a: 'pelargir', b: 'dol_amroth', kind: 'line', color: '#e87fb0', dir: 'ab' },
+  { a: 'pelargir', b: 'lamedon', kind: 'line', color: '#e8834a', dir: 'ab' },
+  { a: 'pelargir', b: 'south_ithilien', kind: 'line', color: '#8f6fc0', dir: 'ab' },
+  { a: 'south_ithilien', b: 'pelargir', kind: 'line', color: '#e87fb0', dir: 'ab' },
+  { a: 'minas_tirith', b: 'osgiliath', kind: 'line', color: '#e87fb0', dir: 'ab' },
+  { a: 'osgiliath', b: 'minas_tirith', kind: 'line', color: '#8f6fc0', dir: 'ab' },
+  { a: 'osgiliath', b: 'minas_tirith', kind: 'line', color: '#e8cf4f', dir: 'ab' },
+  { a: 'south_ithilien', b: 'osgiliath', kind: 'line', color: '#3fa8a0', dir: 'ab' },
+  { a: 'osgiliath', b: 'south_ithilien', kind: 'line', color: '#8f6fc0', dir: 'ba' },
+  { a: 'osgiliath', b: 'south_ithilien', kind: 'line', color: '#e87fb0', dir: 'ab' },
+  { a: 'harondor', b: 'pelargir', kind: 'line', color: '#e87fb0', dir: 'ab' },
+  { a: 'harondor', b: 'pelargir', kind: 'line', color: '#e8834a', dir: 'ab' },
+  { a: 'harondor', b: 'south_ithilien', kind: 'line', color: '#3fa8a0', dir: 'ab' },
+  { a: 'harondor', b: 'south_ithilien', kind: 'line', color: '#8f6fc0', dir: 'ab' },
+  { a: 'umbar', b: 'pelargir', kind: 'line', color: '#8f6fc0', dir: 'ab' },
+  { a: 'umbar', b: 'harondor', kind: 'line', color: '#e87fb0', dir: 'ab' },
+  { a: 'umbar', b: 'harondor', kind: 'line', color: '#e8834a', dir: 'ab' },
+  { a: 'near_harad', b: 'harondor', kind: 'line', color: '#e8834a', dir: 'ab' },
+  { a: 'near_harad', b: 'harondor', kind: 'line', color: '#3fa8a0', dir: 'ab' },
+  { a: 'minas_morgul', b: 'south_ithilien', kind: 'line', color: '#8f6fc0', dir: 'ab', cost: ['stealth', 'stealth'] },
+  { a: 'plateau_of_gorgoroth', b: 'minas_morgul', kind: 'line', color: '#8f6fc0', dir: 'ab', cost: ['stealth'] },
+  { a: 'minas_morgul', b: 'udun', kind: 'path' },
+  { a: 'barad_dur', b: 'udun', kind: 'line', color: '#3fa8a0', dir: 'ab', cost: ['stealth'] },
+  { a: 'mount_doom', b: 'udun', kind: 'line', color: '#e8cf4f', dir: 'ab', cost: ['stealth', 'stealth', 'stealth'] },
+  { a: 'plateau_of_gorgoroth', b: 'mount_doom', kind: 'line', color: '#e8cf4f', dir: 'ab', cost: ['stealth', 'stealth'] },
+  { a: 'nurn', b: 'plateau_of_gorgoroth', kind: 'line', color: '#e8cf4f', dir: 'ab' },
+  { a: 'nurn', b: 'plateau_of_gorgoroth', kind: 'line', color: '#3fa8a0', dir: 'ab' },
+  { a: 'nurn', b: 'plateau_of_gorgoroth', kind: 'line', color: '#8f6fc0', dir: 'ab' },
+  { a: 'plateau_of_gorgoroth', b: 'barad_dur', kind: 'line', color: '#3fa8a0', dir: 'ab' },
+  { a: 'mount_doom', b: 'barad_dur', kind: 'path' },
+  { a: 'north_ithilien', b: 'osgiliath', kind: 'line', color: '#e8cf4f', dir: 'ab' },
+  { a: 'osgiliath', b: 'north_ithilien', kind: 'line', color: '#3fa8a0', dir: 'ab' },
+  { a: 'udun', b: 'north_ithilien', kind: 'line', color: '#3fa8a0', dir: 'ab', cost: ['stealth', 'stealth', 'stealth', 'stealth'] },
+  { a: 'udun', b: 'north_ithilien', kind: 'line', color: '#e8cf4f', dir: 'ab', cost: ['stealth', 'stealth', 'stealth', 'stealth'] },
+  { a: 'old_forest_road', b: 'lake_town', kind: 'line', color: '#e8834a', dir: 'ab' },
+  { a: 'minas_tirith', b: 'druadan_forest', kind: 'line', color: '#8f6fc0', dir: 'ab' },
 ];
 
 /** White paths (derived from EDGES; kept for compatibility). */
@@ -302,15 +277,55 @@ export const BATTLE_LINES: BattleLineDef[] = deriveBattleLines(EDGES).map((l) =>
 }));
 
 /**
- * Resolve the battle line a shadow card names by its endpoints. Falls back to
- * any line leaving the same origin while the drawn board data is still being
- * trued up against the physical map; returns undefined if none exists.
+ * Resolve the battle line a shadow card names by its endpoints. Battle lines
+ * merge and pass through strongholds, so a card's origin can sit mid-chain on
+ * a longer colored route; we search each color for a directed path from the
+ * origin to the destination and return that specific sub-path. Prefers an
+ * exact pre-derived line when one exists (identical result, stable id).
  */
 export function findBattleLine(from: LocationId, to: LocationId): BattleLineDef | undefined {
-  return (
-    BATTLE_LINES.find((l) => l.path[0] === from && l.path[l.path.length - 1] === to) ??
-    BATTLE_LINES.find((l) => l.path[0] === from)
-  );
+  const exact = BATTLE_LINES.find((l) => l.path[0] === from && l.path[l.path.length - 1] === to);
+  if (exact) return exact;
+
+  // Directed same-color adjacency, built once per color as needed.
+  for (const color of new Set(EDGES.filter((e) => e.kind === 'line').map((e) => e.color))) {
+    const adj = new Map<LocationId, LocationId[]>();
+    for (const e of EDGES) {
+      if (e.kind !== 'line' || e.color !== color) continue;
+      const a = e.dir === 'ba' ? e.b : e.a;
+      const b = e.dir === 'ba' ? e.a : e.b;
+      (adj.get(a) ?? adj.set(a, []).get(a)!).push(b);
+    }
+    // BFS for the shortest directed path from -> to in this color.
+    const prev = new Map<LocationId, LocationId>();
+    const seen = new Set<LocationId>([from]);
+    const queue: LocationId[] = [from];
+    while (queue.length) {
+      const n = queue.shift()!;
+      if (n === to) {
+        const path: LocationId[] = [to];
+        let cur = to;
+        while (cur !== from) {
+          cur = prev.get(cur)!;
+          path.unshift(cur);
+        }
+        return {
+          id: `bl_${(color ?? '').replace('#', '')}_${from}_${to}`,
+          name: `${LOC_NAME[from]} → ${LOC_NAME[to]}`,
+          path,
+          color,
+        };
+      }
+      for (const m of adj.get(n) ?? []) {
+        if (!seen.has(m)) {
+          seen.add(m);
+          prev.set(m, n);
+          queue.push(m);
+        }
+      }
+    }
+  }
+  return undefined;
 }
 
 // ---------------------------------------------------------------------------

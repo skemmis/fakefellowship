@@ -20,7 +20,6 @@ import {
   THREAT_TRACK,
 } from './data/cards.js';
 import {
-  BATTLE_LINES,
   CONNECTIONS,
   connection,
   findBattleLine,
@@ -37,6 +36,7 @@ import type {
   Action,
   ActionResult,
   BattleFace,
+  BattleLineDef,
   CharacterId,
   Faction,
   GameEvent,
@@ -721,8 +721,7 @@ function drawShadowCard(s: GameState, rng: Rng): ShadowCard | undefined {
   return s.shadowDeck.pop();
 }
 
-function advanceLine(s: GameState, lineId: string, events: GameEvent[]): void {
-  const line = BATTLE_LINES.find((l) => l.id === lineId);
+function advanceLine(s: GameState, line: BattleLineDef | undefined, events: GameEvent[]): void {
   if (!line) return;
   events.push({ kind: 'shadow', text: `The shadow advances: ${line.name}.` });
   // Front troops move first; troops at the end of the line hold position.
@@ -857,8 +856,8 @@ function resolveShadowCard(s: GameState, rng: Rng, events: GameEvent[]): void {
       text: `Shadow card: the ${lineName} line ADVANCES.`,
       fx: { fx: 'shadowCard', half: 'advance', lineName, lineColor: lineDef?.color, reinforce: card.reinforce, order: card.order },
     });
-    if (lineDef) advanceLine(s, lineDef.id, events);
-    else events.push({ kind: 'shadow', text: `(No matching battle line drawn on the board yet — nothing advances.)` });
+    if (lineDef) advanceLine(s, lineDef, events);
+    else events.push({ kind: 'shadow', text: `(No matching battle line on the board — nothing advances.)` });
   } else {
     events.push({
       kind: 'shadow',

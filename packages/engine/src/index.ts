@@ -8,6 +8,7 @@ export {
   EDGES,
   PATHS,
   BATTLE_LINES,
+  findBattleLine,
   CONNECTIONS,
   connection,
   regionDistance,

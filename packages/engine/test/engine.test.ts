@@ -3,6 +3,7 @@ import {
   applyAction,
   BATTLE_LINES,
   BEARER,
+  findBattleLine,
   canAct,
   checkInvariants,
   CONNECTIONS,
@@ -17,6 +18,7 @@ import {
   RuleError,
   simulateGame,
   type GameState,
+  type LocationId,
 } from '../src/index.js';
 
 function newGame(seed = 7, players = 2): GameState {
@@ -69,10 +71,27 @@ describe('board data', () => {
     }
   });
 
-  it('battle lines start at shadow locations and end at printed havens', () => {
-    for (const line of BATTLE_LINES) {
-      expect(MAP[line.path[0]].shadowLoc).toBe(true);
-      expect(MAP[line.path[line.path.length - 1]].haven).toBe(true);
+  it('all 21 shadow-card battle lines resolve from origin to destination', () => {
+    // Battle lines merge and pass through strongholds on the real board, so
+    // the derivation yields intermediate sub-paths too. What matters is that
+    // every line a shadow card names (shadow origin → haven) resolves.
+    const CARD_LINES: [LocationId, LocationId][] = [
+      ['rhun', 'woodland_realm'], ['rhun', 'minas_tirith'],
+      ['isengard', 'grey_havens'], ['isengard', 'rivendell'], ['isengard', 'helms_deep'],
+      ['umbar', 'helms_deep'], ['umbar', 'grey_havens'],
+      ['nurn', 'minas_tirith'], ['nurn', 'helms_deep'], ['nurn', 'erebor'],
+      ['dunland', 'rivendell'], ['dunland', 'grey_havens'], ['dunland', 'helms_deep'],
+      ['moria', 'minas_tirith'], ['moria', 'erebor'], ['moria', 'rivendell'],
+      ['dol_guldur', 'erebor'], ['dol_guldur', 'helms_deep'], ['dol_guldur', 'minas_tirith'],
+      ['near_harad', 'erebor'], ['near_harad', 'helms_deep'],
+    ];
+    for (const [from, to] of CARD_LINES) {
+      const line = findBattleLine(from, to);
+      expect(line, `${from} → ${to}`).toBeDefined();
+      expect(line!.path[0]).toBe(from);
+      expect(line!.path[line!.path.length - 1]).toBe(to);
+      expect(MAP[from].shadowLoc).toBe(true);
+      expect(MAP[to].haven).toBe(true);
     }
   });
 
