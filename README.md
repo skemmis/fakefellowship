@@ -40,7 +40,8 @@ generate a domain — every push redeploys.
 - Moving Frodo opens a **cover picker** that previews exactly how many search
   dice each choice risks (stealth / open travel / putting on the Ring).
 - The **4+1 action rule** is tracked visually — the turn banner shows each
-  character's remaining actions and locks a character once you've switched.
+  character's remaining actions. Either character can act first; the 4-action
+  slot locks in only once a character takes its second action.
 
 ## Architecture
 

@@ -337,22 +337,18 @@ export function Game({
     return p.characters.map((c) => {
       const used = state.turn.actionsUsed[c] ?? 0;
       if (state.solo) {
-        if (c === BEARER) return { character: c, used, cap: 1, locked: used >= 1 };
-        // Whoever acts first among the four claims the 4-action slot.
-        const token = state.turn.actedOrder.find((x) => x !== BEARER);
-        if (token === undefined) return { character: c, used, cap: 4, locked: false };
-        const cap = token === c ? 4 : 0;
-        return { character: c, used, cap, locked: token !== c || used >= cap };
+        const token = state.solo.order[state.solo.idx];
+        const cap = c === token ? 4 : c === BEARER ? 1 : 0;
+        return { character: c, used, cap, locked: used >= cap };
       }
-      const order = state.turn.actedOrder;
-      let cap = 4;
-      if (order.length >= 1 && order[0] !== c) {
-        const firstUsed = state.turn.actionsUsed[order[0]] ?? 0;
-        cap = firstUsed <= 1 ? 4 : 1;
+      // Standard 4/1: the four-action character is committed only when a
+      // character takes its 2nd action, so before then either may act.
+      const four = p.characters.find((x) => (state.turn.actionsUsed[x] ?? 0) >= 2);
+      if (four) {
+        const cap = c === four ? 4 : 1;
+        return { character: c, used, cap, locked: used >= cap };
       }
-      if (order.length >= 1 && order[0] === c && order.length === 2) cap = used; // locked out
-      const locked = order.length === 2 && order[1] !== c;
-      return { character: c, used, cap, locked: locked || used >= cap };
+      return { character: c, used, cap: 4, locked: false };
     });
   }, [state, active]);
 
@@ -388,7 +384,7 @@ export function Game({
                     style={{ borderColor: CHARACTER_MAP[character].color }}
                     title={
                       locked
-                        ? 'Finished for this turn (one character takes up to 4 actions, the other up to 1 — no switching back)'
+                        ? 'Finished for this turn (one character takes up to 4 actions, the other up to 1; the 4-slot is locked in once a character acts twice)'
                         : `${cap - used} actions left`
                     }
                   >

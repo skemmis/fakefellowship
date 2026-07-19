@@ -11,8 +11,10 @@ repository is paraphrased, and no artwork or card text is copied.
 **Transcribed from the rulebook / board (exact):**
 
 - Turn structure: up to 4 actions with one of your two characters and up to 1
-  with the other, finishing one character before the other; then draw 2 player
-  cards; then resolve shadow cards equal to the threat rate. Hand limit 7.
+  with the other. Which character is the "4" is not fixed until one of them
+  takes a second action, so single actions may be interleaved first (you can
+  spend the 1-action character before committing). Then draw 2 player cards;
+  then resolve shadow cards equal to the threat rate. Hand limit 7.
 - The six actions: Travel (paths / symbol-costed special paths / battle
   lines; bringing troops and characters along; Frodo must spend Stealth or
   face a search), Fellowship (trade a region card matching your current

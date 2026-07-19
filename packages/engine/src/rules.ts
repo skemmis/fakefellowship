@@ -990,9 +990,10 @@ function pump(s: GameState, rng: Rng, events: GameEvent[]): void {
         s.turn.abilityUsed = {};
         s.turnNumber += 1;
         if (s.solo) {
+          s.solo.idx = (s.solo.idx + 1) % s.solo.order.length;
           events.push({
             kind: 'turn',
-            text: `— Turn ${s.turnNumber}: choose a companion for up to 4 actions, plus 1 for Frodo & Sam —`,
+            text: `— Turn ${s.turnNumber}: the solo token passes to ${charName(s.solo.order[s.solo.idx])} (plus 1 Frodo & Sam action) —`,
           });
         } else {
           events.push({ kind: 'turn', text: `— Turn ${s.turnNumber}: ${activePlayer(s).name} —` });
@@ -1017,31 +1018,23 @@ export function canAct(s: GameState, character: CharacterId): boolean {
     return true;
   }
   const used = s.turn.actionsUsed[character] ?? 0;
-  // Solo variant: Frodo & Sam take 1 bonus action; among the other four, the
-  // player chooses organically which one carries the turn — the first
-  // non-bearer to act claims up to 4 actions, and the rest sit the turn out.
+  // Solo variant: the token character takes up to 4 actions; Frodo & Sam
+  // take 1 bonus action; nobody else acts this turn. The token rotates
+  // automatically each turn (it is not player-chosen).
   if (s.solo) {
+    const token = s.solo.order[s.solo.idx];
+    if (character === token) return used < ACTIONS_PRIMARY;
     if (character === BEARER) return used < ACTIONS_SECONDARY;
-    const token = s.turn.actedOrder.find((c) => c !== BEARER);
-    if (token === undefined || token === character) return used < ACTIONS_PRIMARY;
     return false;
   }
-  const order = s.turn.actedOrder;
-  if (order.length === 0) return true;
-  if (order.length === 1) {
-    if (order[0] === character) {
-      return used < ACTIONS_PRIMARY;
-    }
-    // Switching: the first character is done. Its usage decides the caps.
-    const firstUsed = s.turn.actionsUsed[order[0]] ?? 0;
-    const cap = firstUsed <= ACTIONS_SECONDARY ? ACTIONS_PRIMARY : ACTIONS_SECONDARY;
-    return used < cap;
-  }
-  // Both have acted: only the second may continue.
-  if (order[1] !== character) return false;
-  const firstUsed = s.turn.actionsUsed[order[0]] ?? 0;
-  const cap = firstUsed <= ACTIONS_SECONDARY ? ACTIONS_PRIMARY : ACTIONS_SECONDARY;
-  return used < cap;
+  // Standard: up to 4 actions with one character and up to 1 with the other.
+  // Which character is the "4" is not fixed until one of them takes a second
+  // action, so the player may interleave single actions first and use the
+  // 1-action character before committing. Once a character has acted twice it
+  // owns the 4-slot; the other is then capped at its single action.
+  const four = p.characters.find((c) => (s.turn.actionsUsed[c] ?? 0) >= 2);
+  if (four) return character === four ? used < ACTIONS_PRIMARY : used < ACTIONS_SECONDARY;
+  return used < ACTIONS_PRIMARY;
 }
 
 function spendAction(s: GameState, character: CharacterId): void {

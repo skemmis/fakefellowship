@@ -124,7 +124,7 @@ describe('setup', () => {
   });
 });
 
-describe('turn structure (4 + 1, no interleaving)', () => {
+describe('turn structure (4 + 1, commit the four on a 2nd action)', () => {
   it('allows 4 actions with one character then 1 with the other', () => {
     let s = riggedGame();
     for (let i = 0; i < 4; i++) {
@@ -138,16 +138,25 @@ describe('turn structure (4 + 1, no interleaving)', () => {
     expect(canAct(s, BEARER)).toBe(false);
   });
 
-  it('forbids returning to the first character after switching', () => {
+  it('interleaves single actions until a 2nd action commits the four-slot', () => {
     let s = riggedGame();
-    let to = CONNECTIONS[s.characters['aragorn'].location].find((c) => !c.cost)!.to;
-    s = applyAction(s, 'p1', { type: 'travel', character: 'aragorn', to }).state;
-    // Switch to Frodo (1 action so far on Aragorn -> Frodo gets the 4-slot).
-    to = CONNECTIONS[s.characters[BEARER].location].find((c) => !c.cost)!.to;
-    s = applyAction(s, 'p1', { type: 'travel', character: BEARER, to, cover: 'search' }).state;
-    while (s.pending) s = applyAction(s, 'p1', { type: 'confirm' }).state;
-    expect(canAct(s, 'aragorn')).toBe(false); // may not go back
-    expect(canAct(s, BEARER)).toBe(true); // up to 4
+    const move = (c: typeof BEARER | 'aragorn') => {
+      const to = CONNECTIONS[s.characters[c].location].find((cn) => !cn.cost)!.to;
+      s = applyAction(s, 'p1', { type: 'travel', character: c, to, ...(c === BEARER ? { cover: 'search' as const } : {}) }).state;
+      while (s.pending) s = applyAction(s, 'p1', { type: 'confirm' }).state;
+    };
+    // One action each — neither has committed the 4-slot yet.
+    move('aragorn');
+    if (s.phase !== 'playing') return;
+    move(BEARER);
+    if (s.phase !== 'playing') return;
+    expect(canAct(s, 'aragorn')).toBe(true); // may still return
+    expect(canAct(s, BEARER)).toBe(true);
+    // Aragorn's 2nd action locks him as the four; Frodo is capped at his one.
+    move('aragorn');
+    if (s.phase !== 'playing') return;
+    expect(canAct(s, 'aragorn')).toBe(true); // up to 4
+    expect(canAct(s, BEARER)).toBe(false); // done at a single action
   });
 
   it('rejects out-of-turn actions', () => {
@@ -399,7 +408,7 @@ describe('full-game simulation', () => {
 });
 
 describe('solo variant', () => {
-  it('deals Frodo & Sam plus 4 companions to one player', () => {
+  it('deals Frodo & Sam plus 4 companions to one player with a rotating token', () => {
     const s = createGame([{ id: 'solo', name: 'Solo' }], 5);
     checkInvariants(s);
     expect(s.players[0].characters).toHaveLength(5);
@@ -408,29 +417,30 @@ describe('solo variant', () => {
     expect(s.solo?.order).not.toContain('frodo_sam');
   });
 
-  it('the first companion to act claims up to 4 actions; the rest sit out; Frodo gets 1', () => {
+  it('only the token character (4 actions) and Frodo (1 action) may act; the token rotates', () => {
     let s = createGame([{ id: 'solo', name: 'Solo' }], 5);
-    const four = s.solo!.order;
-    // Before the turn's choice is made, every companion is eligible — the
-    // player picks organically by acting — plus Frodo's bonus action.
-    for (const c of four) expect(canAct(s, c)).toBe(true);
+    const token = s.solo!.order[0];
+    const other = s.solo!.order[1];
+    // The token is fixed by the rotation, not player choice: only it and Frodo
+    // may act; the other companions sit the turn out.
+    expect(canAct(s, token)).toBe(true);
     expect(canAct(s, BEARER)).toBe(true);
-    // Act with a companion that has a cost-free move (non-bearer travel rolls
-    // no dice, so the game state stays deterministic here).
-    const actor = four.find((c) => CONNECTIONS[s.characters[c].location].some((cn) => !cn.cost))!;
-    expect(actor).toBeDefined();
-    const to = CONNECTIONS[s.characters[actor].location].find((cn) => !cn.cost)!.to;
-    s = applyAction(s, 'solo', { type: 'travel', character: actor, to }).state;
-    // That companion now carries the turn; the other three are locked out.
-    for (const c of four) expect(canAct(s, c)).toBe(c === actor);
-    expect(canAct(s, BEARER)).toBe(true);
-    // Frodo's lone bonus action, then he too is spent.
-    const fto = CONNECTIONS[s.characters[BEARER].location].find((c) => !c.cost)!.to;
-    s = applyAction(s, 'solo', { type: 'travel', character: BEARER, to: fto, cover: 'search' }).state;
+    expect(canAct(s, other)).toBe(false);
+    // Frodo takes his single bonus action.
+    const to = CONNECTIONS[s.characters[BEARER].location].find((c) => !c.cost)!.to;
+    s = applyAction(s, 'solo', { type: 'travel', character: BEARER, to, cover: 'search' }).state;
     while (s.pending) s = applyAction(s, 'solo', { type: 'confirm' }).state;
     if (s.phase !== 'playing') return; // an unlucky rigged search can end early
     expect(canAct(s, BEARER)).toBe(false);
-    expect(canAct(s, actor)).toBe(true);
+    expect(canAct(s, token)).toBe(true);
+    // End the turn: the token passes to the next character.
+    s = applyAction(s, 'solo', { type: 'endTurn' }).state;
+    let guard = 0;
+    while (s.pending && guard++ < 30) {
+      const acts = legalActions(s, 'solo');
+      s = applyAction(s, 'solo', acts[0]).state;
+    }
+    if (s.phase === 'playing') expect(s.solo!.idx).toBe(1);
   });
 
   it('solo games skip Fellowship and restrict Prepare to matching regions', () => {
