@@ -1090,3 +1090,90 @@ select {
   border-radius: 6px;
 }
 .prepare-picker .gicon { height: 1.05em; vertical-align: -0.18em; }
+
+/* ---- Shadow resolve area (persists through the turn) ---- */
+.resolve-strip {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  max-width: 62%;
+  background: rgba(18, 14, 10, 0.86);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 8px;
+  pointer-events: none;
+}
+.resolve-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--ink-dim);
+  margin-bottom: 4px;
+}
+.resolve-cards {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.resolve-card {
+  width: 150px;
+  border: 1px solid #4a4335;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #221d16;
+  font-size: 11px;
+}
+.rc-half {
+  padding: 3px 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.rc-half.off {
+  opacity: 0.32;
+}
+.rc-half.on {
+  background: rgba(224, 164, 88, 0.16);
+}
+.rc-half + .rc-half {
+  border-top: 1px solid #3a332765;
+}
+.rc-tag {
+  font-size: 9px;
+  font-weight: bold;
+  letter-spacing: 1px;
+  color: #14120e;
+  background: #9a9a9a;
+  border-radius: 3px;
+  padding: 0 4px;
+  align-self: flex-start;
+}
+.rc-tag.reinforce {
+  background: #c0392b;
+  color: #fff;
+}
+.rc-detail {
+  color: var(--ink);
+}
+.resolve-card.darken,
+.resolve-card.special {
+  width: 150px;
+  padding: 5px 7px;
+}
+.resolve-card.darken {
+  background: #1a1414;
+  border-color: #5a2a2a;
+}
+.rc-title {
+  font-size: 10px;
+  font-weight: bold;
+  letter-spacing: 1px;
+  color: var(--accent);
+}
+.resolve-card.darken .rc-title {
+  color: #e0776a;
+}
+.rc-body {
+  color: var(--ink-dim);
+  font-size: 11px;
+}

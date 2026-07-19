@@ -89,6 +89,16 @@ export interface FxRevealState {
   color?: string;
   dark?: boolean;
 }
+export interface FxCardState {
+  id: number;
+  kind: 'advance' | 'reinforce' | 'special' | 'darken';
+  lineName?: string;
+  lineColor?: string;
+  reinforce?: string;
+  order?: 'eye' | 'hunt2' | 'deploy3';
+  specialName?: string;
+  darkenLoc?: string;
+}
 
 function fxPos(id: string): { x: number; y: number } | null {
   const loc = MAP[id];
@@ -103,6 +113,7 @@ function useFx(batch: { events: GameEvent[]; id: number }, turnKey: string) {
   const [trails, setTrails] = useState<FxTrailState[]>([]);
   const [pulse, setPulse] = useState<FxPulseState | null>(null);
   const [reveal, setReveal] = useState<FxRevealState | null>(null);
+  const [cards, setCards] = useState<FxCardState[]>([]);
   const queue = useRef<NonNullable<GameEvent['fx']>[]>([]);
   const busy = useRef(false);
   const seq = useRef(0);
@@ -149,6 +160,18 @@ function useFx(batch: { events: GameEvent[]; id: number }, turnKey: string) {
       setTimeout(() => setPulse(null), 800);
       done(850);
     } else if (fx.fx === 'shadowCard') {
+      setCards((cs) => [
+        ...cs.slice(-11),
+        {
+          id,
+          kind: fx.half,
+          lineName: fx.lineName,
+          lineColor: fx.lineColor,
+          reinforce: fx.reinforce ? MAP[fx.reinforce]?.name : undefined,
+          order: fx.order,
+          specialName: fx.specialName,
+        },
+      ]);
       setReveal({
         id,
         title:
@@ -168,6 +191,7 @@ function useFx(batch: { events: GameEvent[]; id: number }, turnKey: string) {
       setTimeout(() => setReveal((r) => (r?.id === id ? null : r)), 2600);
       done(1100);
     } else if (fx.fx === 'darken') {
+      setCards((cs) => [...cs.slice(-11), { id, kind: 'darken', darkenLoc: MAP[fx.location]?.name }]);
       setReveal({
         id,
         title: 'SKIES DARKEN',
@@ -187,13 +211,14 @@ function useFx(batch: { events: GameEvent[]; id: number }, turnKey: string) {
     if (turnKey !== lastTurn.current) {
       lastTurn.current = turnKey;
       setTrails([]);
+      setCards([]);
     }
     for (const e of batch.events) if (e.fx) queue.current.push(e.fx);
     pump();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [batch.id, turnKey]);
 
-  return { marker, trails, pulse, reveal };
+  return { marker, trails, pulse, reveal, cards };
 }
 
 export function Game({
@@ -398,6 +423,7 @@ export function Game({
               <div className="fx-reveal-detail">{fx.reveal.detail}</div>
             </div>
           )}
+          {fx.cards.length > 0 && <ResolveStrip cards={fx.cards} />}
           <button
             className="board-only-toggle"
             title="Toggle the game overlay to see the board art underneath"
@@ -802,6 +828,60 @@ function CardView({
     );
   }
   return null;
+}
+
+const ORDER_LABEL: Record<string, string> = {
+  eye: 'the Eye seeks Frodo',
+  hunt2: '2 Nazgûl close in',
+  deploy3: '3 Nazgûl deploy to the Eye',
+};
+
+/** The resolve area: shadow cards drawn this turn, with the half that
+ * actually resolved (top = Advance, bottom = Reinforce) lit up. Persists
+ * until the next turn. */
+function ResolveStrip({ cards }: { cards: FxCardState[] }) {
+  return (
+    <div className="resolve-strip">
+      <div className="resolve-label">Shadow this turn</div>
+      <div className="resolve-cards">
+        {cards.map((c) => {
+          if (c.kind === 'darken') {
+            return (
+              <div key={c.id} className="resolve-card darken">
+                <div className="rc-title">SKIES DARKEN</div>
+                <div className="rc-body">+3 at {c.darkenLoc}, threat rises, deck recycles</div>
+              </div>
+            );
+          }
+          if (c.kind === 'special') {
+            return (
+              <div key={c.id} className="resolve-card special">
+                <div className="rc-title">SPECIAL</div>
+                <div className="rc-body">{c.specialName}</div>
+              </div>
+            );
+          }
+          return (
+            <div key={c.id} className="resolve-card">
+              <div className={`rc-half ${c.kind === 'advance' ? 'on' : 'off'}`}>
+                <span className="rc-tag" style={c.lineColor ? { background: c.lineColor } : undefined}>
+                  ADVANCE
+                </span>
+                <span className="rc-detail">{c.lineName}</span>
+              </div>
+              <div className={`rc-half ${c.kind === 'reinforce' ? 'on' : 'off'}`}>
+                <span className="rc-tag reinforce">REINFORCE</span>
+                <span className="rc-detail">
+                  +1 {c.reinforce}
+                  {c.order ? ` · ${ORDER_LABEL[c.order]}` : ''}
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 function cardLabel(state: GameState, id: string): string {
