@@ -17,7 +17,10 @@ export {
   PRINTED_HAVENS,
   MORDOR,
   MOUNT_DOOM,
+  TRACKS,
+  trackPos,
   type Connection,
+  type TrackDef,
 } from './data/board.js';
 export { CHARACTERS, CHARACTER_MAP, BEARER } from './data/characters.js';
 export * from './data/cards.js';

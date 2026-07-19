@@ -4,8 +4,11 @@ import {
   LOCATIONS,
   MAP,
   REGIONS,
+  TRACKS,
+  trackPos,
   type GameState,
   type LocationId,
+  type TrackDef,
 } from '@emberfall/engine';
 import type { FxMarkerState, FxPulseState, FxTrailState } from './Game.js';
 
@@ -56,17 +59,28 @@ function CharPin({ id, x, y }: { id: string; x: number; y: number }) {
   );
 }
 
-/** Board-pixel centers of the hope-track spaces (value 0 despair → 8). */
-const HOPE_X = 108;
-const HOPE_Y = [1575, 1462, 1350, 1237, 1125, 1012, 900, 787, 675];
-
-/** The hope marker: a sun token that sits on the current space and glides
- * (leaving a green/red tracer) when hope changes. The tracer is cleared
+/** A marker that sits on a calibrated track (hope or threat), gliding along
+ * it and leaving a colored tracer when its value changes. The tracer clears
  * turn-by-turn via the `turnKey` prop. */
-function HopeMarker({ hope, turnKey }: { hope: number; turnKey: string }) {
-  const v = Math.max(0, Math.min(8, hope));
-  const [y, setY] = useState(HOPE_Y[v]);
-  const [tracer, setTracer] = useState<{ y1: number; y2: number; up: boolean } | null>(null);
+function TrackMarker({
+  track,
+  value,
+  spaces,
+  icon,
+  turnKey,
+  upClass,
+}: {
+  track: TrackDef;
+  value: number;
+  spaces: number;
+  icon: string;
+  turnKey: string;
+  /** 'good' = green when the value rises (hope); 'bad' = red when it rises (threat). */
+  upClass: 'good' | 'bad';
+}) {
+  const v = Math.max(0, Math.min(spaces - 1, value));
+  const [xy, setXy] = useState(() => trackPos(track, v, spaces));
+  const [tracer, setTracer] = useState<{ a: { x: number; y: number }; b: { x: number; y: number }; up: boolean } | null>(null);
   const prev = useRef(v);
   const prevTurn = useRef(turnKey);
 
@@ -79,28 +93,23 @@ function HopeMarker({ hope, turnKey }: { hope: number; turnKey: string }) {
 
   useEffect(() => {
     if (v === prev.current) return;
-    const from = HOPE_Y[prev.current];
-    const to = HOPE_Y[v];
-    setTracer({ y1: from, y2: to, up: v > prev.current });
+    const a = trackPos(track, prev.current, spaces);
+    const b = trackPos(track, v, spaces);
+    setTracer({ a, b, up: v > prev.current });
     prev.current = v;
-    // double-rAF so the transition animates to the new position
-    requestAnimationFrame(() => requestAnimationFrame(() => setY(to)));
+    requestAnimationFrame(() => requestAnimationFrame(() => setXy(b)));
   }, [v]);
 
+  // A rising tracer is green for hope but red for threat, and vice-versa.
+  const cls = tracer ? (tracer.up === (upClass === 'good') ? 'up' : 'down') : '';
   return (
     <g className="hope-layer">
       {tracer && (
-        <line
-          x1={HOPE_X}
-          y1={tracer.y1}
-          x2={HOPE_X}
-          y2={tracer.y2}
-          className={`hope-tracer ${tracer.up ? 'up' : 'down'}`}
-        />
+        <line x1={tracer.a.x} y1={tracer.a.y} x2={tracer.b.x} y2={tracer.b.y} className={`hope-tracer ${cls}`} />
       )}
-      <g className="hope-marker" style={{ transform: `translate(${HOPE_X}px, ${y}px)` }}>
+      <g className="hope-marker" style={{ transform: `translate(${xy.x}px, ${xy.y}px)` }}>
         <circle r={30} className="hope-marker-ring" />
-        <image href="/icons/hope.png" x={-26} y={-26} width={52} height={52} />
+        <image href={`/icons/${icon}.png`} x={-26} y={-26} width={52} height={52} />
       </g>
     </g>
   );
@@ -168,7 +177,8 @@ export function MapView({
     <svg className="map" viewBox="0 0 2500 2143" preserveAspectRatio="xMidYMid meet">
       <image href="/board.jpg" x="0" y="0" width="2500" height="2143" />
 
-      <HopeMarker hope={state.hope} turnKey={turnKey} />
+      <TrackMarker track={TRACKS.hope} value={state.hope} spaces={9} icon="hope" turnKey={turnKey} upClass="good" />
+      <TrackMarker track={TRACKS.threat} value={state.threatIdx} spaces={7} icon="threat" turnKey={turnKey} upClass="bad" />
 
       {/* Region overlays: the big Eye of Sauron + a Nazgûl count chip */}
       {REGIONS.map((r) => {

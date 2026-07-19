@@ -408,3 +408,27 @@ export const SHADOW_LOCATIONS = LOCATIONS.filter((l) => l.shadowLoc).map((l) => 
 export const PRINTED_HAVENS = LOCATIONS.filter((l) => l.haven).map((l) => l.id);
 export const MORDOR: RegionId = 'mordor';
 export const MOUNT_DOOM: LocationId = 'mount_doom';
+
+// ---------------------------------------------------------------------------
+// Marker tracks — where the hope and threat markers sit on the board art.
+// Each track is a straight line between the first and last space; the marker
+// for space i of n is the linear interpolation. Calibrate in the editor.
+// ---------------------------------------------------------------------------
+
+export interface TrackDef {
+  /** Position of the first space (hope 0 / threat idx 0). */
+  from: { x: number; y: number };
+  /** Position of the last space (hope 8 / threat idx 6). */
+  to: { x: number; y: number };
+}
+
+export const TRACKS: { hope: TrackDef; threat: TrackDef } = {
+  hope: { from: { x: 108, y: 1575 }, to: { x: 108, y: 675 } },
+  threat: { from: { x: 285, y: 158 }, to: { x: 905, y: 158 } },
+};
+
+/** Board-pixel position of space `i` of `n` on a track. */
+export function trackPos(t: TrackDef, i: number, n: number): { x: number; y: number } {
+  const f = n <= 1 ? 0 : Math.max(0, Math.min(n - 1, i)) / (n - 1);
+  return { x: t.from.x + (t.to.x - t.from.x) * f, y: t.from.y + (t.to.y - t.from.y) * f };
+}

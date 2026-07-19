@@ -4,12 +4,15 @@ import {
   EDGES,
   LOCATIONS,
   REGIONS,
+  TRACKS,
+  trackPos,
   type EdgeDef,
   type Faction,
   type LocationDef,
   type LocationId,
   type RegionDef,
   type SymbolKind,
+  type TrackDef,
 } from '@emberfall/engine';
 
 /**
@@ -46,13 +49,17 @@ const LINE_PALETTE = [
 ];
 const LINE_COLOR_NAMES = ['orange', 'teal', 'yellow', 'green', 'light green', 'purple', 'pink'];
 
-type Mode = 'move' | 'region' | 'flags' | 'edges';
+type Mode = 'move' | 'region' | 'flags' | 'edges' | 'tracks';
 
 interface BoardData {
   regions: RegionDef[];
   locations: LocationDef[];
   edges: EdgeDef[];
+  tracks?: { hope: TrackDef; threat: TrackDef };
 }
+
+/** Which track endpoint is being dragged. */
+type TrackHandle = 'hope.from' | 'hope.to' | 'threat.from' | 'threat.to';
 
 const STORAGE_KEY = 'fellowship.boardEdits.v2';
 
@@ -66,7 +73,12 @@ function initialData(): BoardData {
       // fall through
     }
   }
-  return JSON.parse(JSON.stringify({ regions: REGIONS, locations: LOCATIONS, edges: EDGES })) as BoardData;
+  return JSON.parse(JSON.stringify({ regions: REGIONS, locations: LOCATIONS, edges: EDGES, tracks: TRACKS })) as BoardData;
+}
+
+/** The board's marker tracks, defaulting to the shipped calibration. */
+function tracksOf(data: BoardData): { hope: TrackDef; threat: TrackDef } {
+  return data.tracks ?? TRACKS;
 }
 
 /** Chain same-colored directed segments into full battle lines (preview). */
@@ -121,6 +133,7 @@ export function Editor() {
   const [boardOnly, setBoardOnly] = useState(false);
   const [lastPaint, setLastPaint] = useState<string | null>(null);
   const dragging = useRef<LocationId | null>(null);
+  const trackDrag = useRef<TrackHandle | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
 
   useEffect(() => {
@@ -240,9 +253,19 @@ export function Editor() {
                   l.y = y;
                 }
               });
+            } else if (trackDrag.current) {
+              const { x, y } = toSvg(e);
+              const [tk, end] = trackDrag.current.split('.') as ['hope' | 'threat', 'from' | 'to'];
+              update((d) => {
+                d.tracks = JSON.parse(JSON.stringify(tracksOf(d)));
+                d.tracks![tk][end] = { x: Math.round(x), y: Math.round(y) };
+              });
             }
           }}
-          onPointerUp={() => (dragging.current = null)}
+          onPointerUp={() => {
+            dragging.current = null;
+            trackDrag.current = null;
+          }}
         >
           <image href="/board.jpg" x="0" y="0" width="2500" height="2143" />
 
@@ -337,15 +360,43 @@ export function Editor() {
                 )}
               </g>
             ))}
+
+          {/* Marker tracks: interpolated spaces + draggable endpoints */}
+          {mode === 'tracks' &&
+            (['hope', 'threat'] as const).map((tk) => {
+              const track = tracksOf(data)[tk];
+              const spaces = tk === 'hope' ? 9 : 7;
+              const col = tk === 'hope' ? '#ffd23f' : '#d0402f';
+              return (
+                <g key={tk}>
+                  <line x1={track.from.x} y1={track.from.y} x2={track.to.x} y2={track.to.y} stroke={col} strokeWidth={3} opacity={0.6} />
+                  {Array.from({ length: spaces }, (_, i) => {
+                    const p = trackPos(track, i, spaces);
+                    return <circle key={i} cx={p.x} cy={p.y} r={14} fill="none" stroke={col} strokeWidth={2} opacity={0.85} />;
+                  })}
+                  {(['from', 'to'] as const).map((end) => {
+                    const p = track[end];
+                    return (
+                      <g key={end} style={{ cursor: 'grab' }} onPointerDown={() => (trackDrag.current = `${tk}.${end}` as TrackHandle)}>
+                        <circle cx={p.x} cy={p.y} r={26} fill={col} stroke="#14120e" strokeWidth={3} />
+                        <text x={p.x} y={p.y + 7} textAnchor="middle" fontSize={22} fontWeight="bold" fill="#14120e">
+                          {end === 'from' ? (tk === 'hope' ? '0' : '1') : (tk === 'hope' ? '8' : '7')}
+                        </text>
+                      </g>
+                    );
+                  })}
+                </g>
+              );
+            })}
         </svg>
       </div>
 
       <aside className="editor-side">
         <h2>Board editor</h2>
         <div className="ed-modes">
-          {(['edges', 'move', 'region', 'flags'] as Mode[]).map((m) => (
+          {(['edges', 'move', 'region', 'flags', 'tracks'] as Mode[]).map((m) => (
             <button key={m} className={mode === m ? 'primary' : ''} onClick={() => { setMode(m); setPairFrom(null); }}>
-              {m === 'edges' ? 'Edges' : m === 'move' ? 'Positions' : m === 'region' ? 'Regions' : 'Location flags'}
+              {m === 'edges' ? 'Edges' : m === 'move' ? 'Positions' : m === 'region' ? 'Regions' : m === 'flags' ? 'Location flags' : 'Tracks'}
             </button>
           ))}
         </div>
@@ -512,6 +563,27 @@ export function Editor() {
               Drag any node onto its printed circle.{' '}
               {selected ? `Selected: ${locMap[selected]?.name} (${locMap[selected]?.x}, ${locMap[selected]?.y})` : ''}
             </p>
+          </section>
+        )}
+
+        {mode === 'tracks' && (
+          <section className="panel">
+            <h3>Marker tracks</h3>
+            <p className="hint">
+              Drag the big numbered handles onto the first and last spaces of each track. The rings preview where
+              every space lands (the hope + threat markers snap to these in-game). Gold = hope (0→8), red = threat (1→7).
+            </p>
+            {(['hope', 'threat'] as const).map((tk) => {
+              const t = tracksOf(data)[tk];
+              return (
+                <p key={tk} className="hint">
+                  <strong>{tk}</strong>: {tk === 'hope' ? '0' : '1'} ({t.from.x}, {t.from.y}) → {tk === 'hope' ? '8' : '7'} ({t.to.x}, {t.to.y})
+                </p>
+              );
+            })}
+            <button onClick={() => update((d) => { d.tracks = JSON.parse(JSON.stringify(TRACKS)); })}>
+              Reset tracks to shipped
+            </button>
           </section>
         )}
 
