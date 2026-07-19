@@ -30,18 +30,21 @@ const REGION_COLORS = [
   '#46f0f0', '#f032e6', '#bcf60c', '#fabebe', '#008080', '#e6beff',
 ];
 /**
- * The board's six printed battle-line colors. Routes outnumber colors, so
- * a color repeats on routes that never touch (the derivation splits
- * disconnected same-color chains into separate lines).
+ * The board's printed battle-line colors. Routes outnumber colors, so a
+ * color repeats on routes that never touch (the derivation splits
+ * disconnected same-color chains into separate lines). Note there are
+ * THREE distinct green-ish routes: teal, green, and light/bright green.
  */
 const LINE_PALETTE = [
   '#e8834a', // orange
   '#3fa8a0', // teal
   '#e8cf4f', // yellow
-  '#9acd5a', // light green
+  '#2f8f3e', // green
+  '#9acd5a', // light/bright green
   '#8f6fc0', // purple
   '#e87fb0', // pink
 ];
+const LINE_COLOR_NAMES = ['orange', 'teal', 'yellow', 'green', 'light green', 'purple', 'pink'];
 
 type Mode = 'move' | 'region' | 'flags' | 'edges';
 
@@ -434,7 +437,7 @@ export function Editor() {
                                 key={c}
                                 className={`ed-swatch-btn ${e.color === c ? 'selected' : ''}`}
                                 style={{ background: c }}
-                                title={['orange', 'teal', 'yellow', 'light green', 'purple', 'pink'][ci]}
+                                title={LINE_COLOR_NAMES[ci]}
                                 onClick={() => update((d) => { d.edges[i].color = c; })}
                               />
                             ))}
