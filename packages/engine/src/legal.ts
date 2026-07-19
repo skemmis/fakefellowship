@@ -97,8 +97,7 @@ export function legalActions(s: GameState, playerId?: string): Action[] {
       return out;
     }
     const present = player.characters.some((c) => s.characters[c]?.location === pend.location);
-    const gandalfHere = pend.type === 'battle' && s.characters['gandalf']?.location === pend.location;
-    if (present && (canPayList(player, ['resistance']) || (gandalfHere && canPayList(player, ['valor'])))) {
+    if (present && canPayList(player, ['resistance'])) {
       for (let i = 0; i < pend.dice.length; i++) out.push({ type: 'reroll', die: i });
     }
     // Free once-per-roll rerolls: Aragorn (searches), Galadriel (battles with elves).
@@ -129,17 +128,21 @@ export function legalActions(s: GameState, playerId?: string): Action[] {
     if (pend.type === 'battle' && present && canPayList(player, ['valor']) && pend.valorKills < (s.shadow[pend.location] ?? 0)) {
       out.push({ type: 'showValor' });
     }
-    // Gandalf the White may command the whole roll for 1 Valor. Bots take
-    // the obvious best result; the UI composes richer picks.
-    if (
-      (pend.type === 'search' || pend.type === 'battle') &&
-      (s.objProgress['gandalf_white'] ?? 0) > 0 &&
-      player.characters.includes('gandalf') &&
-      s.characters['gandalf']?.location === pend.location &&
-      canPayList(player, ['valor']) &&
-      pend.dice.some((f) => (pend.type === 'search' ? f !== 'slip' : f !== 'rout'))
-    ) {
-      out.push({ type: 'gandalfWhite', faces: pend.dice.map(() => (pend.type === 'search' ? 'slip' : 'rout')) });
+    // Light and Flame: Gandalf present at a battle may spend Valor to change
+    // battle dice to any faces (as the White, searches too). Bots take the
+    // obvious best face; the UI composes richer picks.
+    {
+      const white = (s.objProgress['gandalf_white'] ?? 0) > 0;
+      const canBend = pend.type === 'battle' || (pend.type === 'search' && white);
+      if (
+        canBend &&
+        player.characters.includes('gandalf') &&
+        s.characters['gandalf']?.location === pend.location &&
+        canPayList(player, ['valor']) &&
+        pend.dice.some((f) => (pend.type === 'search' ? f !== 'slip' : f !== 'rout'))
+      ) {
+        out.push({ type: 'gandalfWhite', faces: pend.dice.map(() => (pend.type === 'search' ? 'slip' : 'rout')) });
+      }
     }
     // Shieldmaiden No Longer: Éowyn may turn a battle die to the Nazgûl face.
     if (
@@ -298,11 +301,13 @@ export function legalActions(s: GameState, playerId?: string): Action[] {
 
     // Prepare (Gollum needs no haven; solo: card must match the region)
     if (s.siteStatus[here] === 'haven' || character === 'gollum') {
+      // Arwen may Prepare one off-region card per turn in the solo game.
+      const arwenFree = character === 'arwen' && !s.turn.abilityUsed['arwen_prepare'];
       for (const card of p.hand) {
         if (
           card.kind === 'region' &&
           s.supply.tokens[card.symbol] > 0 &&
-          (!s.solo || card.region === MAP[here].region)
+          (!s.solo || card.region === MAP[here].region || arwenFree)
         ) {
           out.push({ type: 'prepare', character, card: card.id });
         }

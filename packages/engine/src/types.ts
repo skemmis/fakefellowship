@@ -341,7 +341,7 @@ export type Action =
       /** Hobbits' pledge: the Friendship region card discarded. */
       card?: string;
     }
-  | { type: 'prepare'; character: CharacterId; card: string }
+  | { type: 'prepare'; character: CharacterId; card: string; location2?: LocationId }
   | { type: 'muster'; character: CharacterId }
   | { type: 'attack'; character: CharacterId; dice: number }
   | {

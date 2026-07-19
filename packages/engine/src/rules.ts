@@ -165,6 +165,22 @@ function checkHavens(s: GameState, events: GameEvent[]): void {
   }
 }
 
+/**
+ * Gollum's treachery: whenever Gollum, Frodo & Sam, and a friendly troop are
+ * all present in one location (as one enters or is added), the Ring's malice
+ * costs 1 hope.
+ */
+function gollumTrap(s: GameState, loc: LocationId, events: GameEvent[]): void {
+  if (
+    s.characters['gollum']?.location === loc &&
+    s.characters[BEARER]?.location === loc &&
+    friendlyAt(s, loc) > 0
+  ) {
+    events.push({ kind: 'turn', text: 'Sméagol schemes where Frodo and soldiers gather...' });
+    changeHope(s, -1, events, "Gollum's treachery");
+  }
+}
+
 /** Shift the Eye of Sauron, emitting an animation payload. */
 function setEye(s: GameState, region: RegionId, events: GameEvent[], why: string): void {
   if (s.eye === region) return;
@@ -1461,7 +1477,12 @@ export function applyAction(state: GameState, playerId: PlayerId, action: Action
       const card = p.hand[idx];
       if (card.kind !== 'region') throw new RuleError('Discard a region card to Prepare.');
       if (s.solo && card.region !== regionOf(here)) {
-        throw new RuleError('Solo rule: Prepare only with a card matching the region you are in.');
+        // Arwen, once per turn, may Prepare a card that doesn't match her region.
+        if (c === 'arwen' && !s.turn.abilityUsed['arwen_prepare']) {
+          s.turn.abilityUsed['arwen_prepare'] = true;
+        } else {
+          throw new RuleError('Solo rule: Prepare only with a card matching the region you are in.');
+        }
       }
       // Frodo & Sam bank an extra token at a haven within the card's region.
       const take = c === BEARER && isHaven(s, here) && card.region === regionOf(here) ? 2 : 1;
@@ -1486,6 +1507,20 @@ export function applyAction(state: GameState, playerId: PlayerId, action: Action
           events.push({ kind: 'action', text: `Arwen sends aid: an Elven troop joins ${charName(target)} at ${locName(dest)}.` });
           checkHavens(s, events);
         }
+      }
+      // Gollum's cunning: he may slip 1 friendly troop to an adjacent location.
+      if (c === 'gollum' && action.location2) {
+        const dst = action.location2;
+        if (!connection(here, dst)) throw new RuleError('Gollum can only nudge a troop to an adjacent location.');
+        const at = s.friendly[here] ?? {};
+        const f = (Object.keys(at) as Faction[]).find((k) => (at[k] ?? 0) > 0);
+        if (!f) throw new RuleError('No friendly troop here for Gollum to move.');
+        at[f]! -= 1;
+        const dest = (s.friendly[dst] ??= {});
+        dest[f] = (dest[f] ?? 0) + 1;
+        events.push({ kind: 'action', text: `Gollum leads a ${FACTION_NAMES[f]} troop from ${locName(here)} to ${locName(dst)} (no battle).` });
+        gollumTrap(s, dst, events);
+        checkHavens(s, events);
       }
       break;
     }
@@ -1514,6 +1549,7 @@ export function applyAction(state: GameState, playerId: PlayerId, action: Action
       const at = (s.friendly[here] ??= {});
       at[faction] = (at[faction] ?? 0) + amount;
       events.push({ kind: 'action', text: `${charName(c)} musters ${amount} troop${amount > 1 ? 's' : ''} at ${locName(here)}.` });
+      gollumTrap(s, here, events);
       checkStateObjectives(s, events);
       break;
     }
@@ -1745,15 +1781,6 @@ export function applyAction(state: GameState, playerId: PlayerId, action: Action
       break;
 
     case 'endTurn':
-      // Gollum's company wears on the Ring-bearers.
-      if (
-        s.characters['gollum'] &&
-        s.characters[BEARER] &&
-        s.characters['gollum'].location === s.characters[BEARER].location
-      ) {
-        events.push({ kind: 'turn', text: 'Gollum whispers poison in the dark beside Frodo...' });
-        changeHope(s, -1, events, "Gollum's company");
-      }
       s.queue.push({ step: 'drawPlayerCards', count: CARDS_PER_TURN });
       s.queue.push({ step: 'shadowDraw', remaining: THREAT_TRACK[s.threatIdx] });
       s.queue.push({ step: 'endTurn' });
@@ -2052,6 +2079,7 @@ function doTravel(
   if (c === 'faramir' && Object.values(troops).some((n) => (n ?? 0) > 0)) {
     s.turn.freeAttack = { character: c, location: action.to };
   }
+  gollumTrap(s, action.to, events);
   checkHavens(s, events);
 
   if (bearerMoves) {
@@ -2223,15 +2251,7 @@ function handlePendingAction(s: GameState, rng: Rng, playerId: PlayerId, action:
         if (!ok) throw new RuleError('No character grants a free reroll here.');
         pend.freeRerollUsed = true;
       } else {
-        // Resistance pays for rerolls; with Gandalf present, Valor serves too.
-        const hasResistance =
-          player.tokens.resistance > 0 ||
-          player.hand.some((cd) => cd.kind === 'region' && cd.symbol === 'resistance');
-        if (!hasResistance && pend.type === 'battle' && s.characters['gandalf']?.location === pend.location) {
-          pay(s, player, ['valor'], events);
-        } else {
-          pay(s, player, ['resistance'], events);
-        }
+        pay(s, player, ['resistance'], events);
       }
       if (pend.type === 'search') {
         pend.dice[action.die] = SEARCH_DIE[nextInt(rng, 6)] as SearchFace;
@@ -2265,23 +2285,32 @@ function handlePendingAction(s: GameState, rng: Rng, playerId: PlayerId, action:
       return;
     }
     case 'gandalfWhite': {
-      // Gandalf the White's mastered flame: 1 Valor sets any dice of this
-      // roll to the results the players want.
+      // Light and Flame: Gandalf present at a battle may spend Valor to change
+      // that many battle dice to any faces the players want. As the White, the
+      // same power reaches searches too.
       if (pend.type !== 'search' && pend.type !== 'battle') throw new RuleError('No roll to command.');
-      if (!(s.objProgress['gandalf_white'] ?? 0)) throw new RuleError('Gandalf has not yet returned in white.');
       if (!player.characters.includes('gandalf') || s.characters['gandalf']?.location !== pend.location) {
         throw new RuleError('Gandalf must be present at the roll.');
       }
+      const white = (s.objProgress['gandalf_white'] ?? 0) > 0;
+      if (pend.type === 'search' && !white) throw new RuleError('Only Gandalf the White can bend a search.');
       if (!action.faces || action.faces.length !== pend.dice.length) throw new RuleError('Give a result for every die.');
       const legalFaces: string[] = pend.type === 'search' ? [...SEARCH_DIE] : [...BATTLE_DIE];
-      for (const f of action.faces) {
-        if (!legalFaces.includes(f)) throw new RuleError(`Not a ${pend.type} face: ${f}.`);
+      // He may change at most as many dice as the Valor he pays.
+      let changed = 0;
+      for (let i = 0; i < pend.dice.length; i++) {
+        if (!legalFaces.includes(action.faces[i])) throw new RuleError(`Not a ${pend.type} face: ${action.faces[i]}.`);
+        if (action.faces[i] !== pend.dice[i]) changed++;
       }
-      pay(s, player, ['valor'], events);
+      if (changed === 0) throw new RuleError('Pick at least one die to change.');
+      pay(s, player, Array(changed).fill('valor') as SymbolKind[], events);
       for (let i = 0; i < pend.dice.length; i++) {
         (pend.dice as string[])[i] = action.faces[i];
       }
-      events.push({ kind: pend.type, text: `Gandalf the White commands the roll: [${pend.dice.join(' ')}].` });
+      events.push({
+        kind: pend.type,
+        text: `${white ? 'Gandalf the White' : 'Gandalf'} commands the ${pend.type}: [${pend.dice.join(' ')}] (${changed} Valor).`,
+      });
       return;
     }
     case 'eowynStrike': {

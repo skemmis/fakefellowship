@@ -53,14 +53,18 @@ repository is paraphrased, and no artwork or card text is copied.
   draws, per-player-count event mix and hand sizes, difficulty table
   (4/5/5/6/6 darkenings; 4/4/5/5/6 objectives), first player = lowest region
   card number, hope starts at 6 (max 8), threat track 2/2/3/3/4/4/5.
-- Characters: all 13 names, starting locations, and abilities (implemented
-  from a community reference sheet, paraphrased). Frodo & Sam and
-  Merry & Pippin are single units; Frodo is always in play. Known
-  simplifications: Galadriel's Mirror reveals the next 4 player cards but
-  doesn't let you rearrange them; Gandalf's battle magic rerolls dice rather
-  than setting faces; Arwen's Send Aid picks its beneficiary automatically;
-  the solo "Frodo before or after the token character" ordering may
-  interleave.
+- Characters: all 13 names, starting locations, and abilities, verified
+  against the printed character cards (paraphrased). Frodo & Sam and
+  Merry & Pippin are single units; Frodo is always in play. Gandalf's Light
+  and Flame sets battle dice for Valor (searches too once he is the White);
+  Gollum's treachery costs 1 hope whenever he, Frodo, and a friendly troop
+  gather in one location, and his Prepare may nudge a friendly troop to an
+  adjacent location; Arwen's off-region Prepare (solo) and Send Aid are in.
+  Remaining simplifications: Galadriel's Mirror reveals the next 4 player
+  cards but does not yet let you reorder them; Legolas's Keen Sight peek is a
+  free once-per-turn action rather than tied to his Prepare; Arwen's Send Aid
+  picks its beneficiary automatically; the solo "Frodo before or after the
+  token character" ordering may interleave.
 - Captured strongholds never receive card-driven shadow troops.
 
 **Transcribed from the physical cards (photos supplied by the owner):**

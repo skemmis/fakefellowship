@@ -45,7 +45,7 @@ export const CHARACTERS: CharacterDef[] = [
     title: 'Evenstar',
     start: 'rivendell',
     abilityText:
-      'Musters at Elven locations without spending Friendship. When she Prepares, if a character stands in the card\'s region, an Elven troop travels from her to them. Once per turn, her Fellowship at a haven needs no matching region.',
+      'Musters at Elven locations without spending Friendship. When she Prepares, if a character stands in the card\'s region, an Elven troop travels from her to them. Once per turn, her Fellowship at a haven needs no matching region. Solo game: once per turn her Prepare card need not match her region either.',
     abilityReconstructed: false,
     color: '#8ea8c3',
   },
@@ -105,8 +105,8 @@ export const CHARACTERS: CharacterDef[] = [
     title: 'The Grey Pilgrim',
     start: 'tharbad',
     abilityText:
-      'His Muster adds an extra troop. Traveling alone on ordinary roads, he covers 2 connections. In battles where he stands, Valor may pay for die rerolls.',
-    abilityReconstructed: true, // printed card changes dice rather than rerolling
+      'His Muster adds an extra troop. Traveling alone on ordinary roads, he covers 2 connections. In battles where he stands, spend Valor to change that many battle dice to any faces you choose.',
+    abilityReconstructed: false,
     color: '#a0a0b8',
   },
   {
@@ -125,7 +125,7 @@ export const CHARACTERS: CharacterDef[] = [
     title: 'The Wretched Guide',
     start: 'moria',
     abilityText:
-      'Cannot Muster, Attack, or Capture — and hope frays (−1 at turn\'s end) while he keeps company with Frodo & Sam. Searches where he lurks roll 3 fewer dice. He Prepares anywhere (no haven needed). Once per turn (action): he filches any card from the discard pile.',
+      'Cannot Muster, Attack, or Capture. Treachery: whenever Gollum, Frodo, and a friendly troop all come together in one location, lose 1 hope. Searches where he lurks roll 3 fewer dice. He Prepares anywhere (no haven needed) and may send 1 friendly troop from his location to an adjacent one (no battle). Once per turn (action): he filches any card from the discard pile.',
     abilityReconstructed: false,
     color: '#6f8f6a',
   },

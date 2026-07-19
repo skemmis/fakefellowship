@@ -977,13 +977,13 @@ function PendingPanel({
           </button>
         )}
         {(() => {
-          const white = legal.find((a) => a.type === 'gandalfWhite');
-          return white ? (
+          const bend = legal.find((a) => a.type === 'gandalfWhite');
+          return bend ? (
             <button
-              onClick={() => onAct(white)}
-              title="Gandalf the White: spend 1 Valor to set every die of this roll to the result you want (this sets them all to the harmless face)."
+              onClick={() => onAct(bend)}
+              title="Light and Flame: Gandalf spends Valor (1 per die changed) to set dice to the faces you want (this sets them all to the harmless face)."
             >
-              Gandalf the White: command the roll (<Sym s="valor" />)
+              Gandalf: command the {pend.type} (<Sym s="valor" />)
             </button>
           ) : null;
         })()}
