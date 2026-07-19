@@ -751,7 +751,7 @@
       "a": "dol_guldur",
       "b": "gladden_fields",
       "kind": "line",
-      "color": "#3fa8a0",
+      "color": "#2f8f3e",
       "dir": "ab"
     },
     {
@@ -818,15 +818,15 @@
       "a": "lorien",
       "b": "gladden_fields",
       "kind": "line",
-      "color": "#3fa8a0",
-      "dir": "ab"
+      "color": "#2f8f3e",
+      "dir": "ba"
     },
     {
       "a": "fangorn_forest",
       "b": "lorien",
       "kind": "line",
-      "color": "#3fa8a0",
-      "dir": "ab"
+      "color": "#2f8f3e",
+      "dir": "ba"
     },
     {
       "a": "lorien",
@@ -939,14 +939,14 @@
       "a": "fangorn_forest",
       "b": "eastemnet",
       "kind": "line",
-      "color": "#3fa8a0",
+      "color": "#2f8f3e",
       "dir": "ab"
     },
     {
       "a": "eastemnet",
       "b": "helms_deep",
       "kind": "line",
-      "color": "#3fa8a0",
+      "color": "#2f8f3e",
       "dir": "ab"
     },
     {
@@ -1089,7 +1089,7 @@
       "b": "dol_amroth",
       "kind": "line",
       "color": "#e87fb0",
-      "dir": "ab",
+      "dir": "ba",
       "cost": [
         "friendship",
         "friendship"
@@ -1359,6 +1359,13 @@
         "stealth",
         "stealth"
       ]
+    },
+    {
+      "a": "old_forest_road",
+      "b": "lake_town",
+      "kind": "line",
+      "color": "#e8834a",
+      "dir": "ab"
     }
   ]
 }
