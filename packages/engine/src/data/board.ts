@@ -423,8 +423,8 @@ export interface TrackDef {
 }
 
 export const TRACKS: { hope: TrackDef; threat: TrackDef } = {
-  hope: { from: { x: 108, y: 1575 }, to: { x: 108, y: 675 } },
-  threat: { from: { x: 285, y: 158 }, to: { x: 905, y: 158 } },
+  hope: { from: { x: 103, y: 1425 }, to: { x: 105, y: 736 } },
+  threat: { from: { x: 294, y: 91 }, to: { x: 911, y: 90 } },
 };
 
 /** Board-pixel position of space `i` of `n` on a track. */

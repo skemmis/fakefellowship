@@ -247,6 +247,7 @@ export function Game({
   >({ kind: 'idle' });
   const [chatText, setChatText] = useState('');
   const [boardOnly, setBoardOnly] = useState(false);
+  const [confirmReset, setConfirmReset] = useState(false);
   const logRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -255,6 +256,7 @@ export function Game({
 
   useEffect(() => {
     setMode({ kind: 'idle' });
+    setConfirmReset(false);
   }, [state.turn.playerIdx, state.turnNumber]);
 
   const legal = useMemo(() => legalActions(state, playerId), [state, playerId]);
@@ -335,9 +337,12 @@ export function Game({
     return p.characters.map((c) => {
       const used = state.turn.actionsUsed[c] ?? 0;
       if (state.solo) {
-        const token = state.solo.order[state.solo.idx];
-        const cap = c === token ? 4 : c === BEARER ? 1 : 0;
-        return { character: c, used, cap, locked: used >= cap };
+        if (c === BEARER) return { character: c, used, cap: 1, locked: used >= 1 };
+        // Whoever acts first among the four claims the 4-action slot.
+        const token = state.turn.actedOrder.find((x) => x !== BEARER);
+        if (token === undefined) return { character: c, used, cap: 4, locked: false };
+        const cap = token === c ? 4 : 0;
+        return { character: c, used, cap, locked: token !== c || used >= cap };
       }
       const order = state.turn.actedOrder;
       let cap = 4;
@@ -492,6 +497,33 @@ export function Game({
                   End turn → draw cards, then the Shadow moves
                 </button>
               )}
+              {myTurn &&
+                (Object.values(state.turn.actionsUsed).some((n) => (n ?? 0) > 0) || !!pend) &&
+                (confirmReset ? (
+                  <div className="reset-confirm">
+                    <span>Undo every action taken this turn?</span>
+                    <button
+                      className="reset-yes"
+                      onClick={() => {
+                        net.send({ type: 'resetTurn' });
+                        setConfirmReset(false);
+                      }}
+                    >
+                      Yes, reset
+                    </button>
+                    <button className="reset-no" onClick={() => setConfirmReset(false)}>
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    className="reset-turn"
+                    title="Roll back to the start of your turn, undoing every action and dice result since."
+                    onClick={() => setConfirmReset(true)}
+                  >
+                    ↺ Reset turn
+                  </button>
+                ))}
             </section>
           )}
 

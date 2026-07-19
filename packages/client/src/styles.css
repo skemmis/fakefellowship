@@ -484,6 +484,45 @@ select {
   border-color: var(--accent);
 }
 
+.reset-turn {
+  width: 100%;
+  margin-top: 6px;
+  background: transparent;
+  border-color: #6b5a48;
+  color: #b7a998;
+  font-size: 13px;
+}
+.reset-turn:hover {
+  border-color: #a06a4a;
+  color: #e6d8c6;
+}
+.reset-confirm {
+  margin-top: 6px;
+  padding: 8px;
+  border: 1px solid #7a4a3a;
+  border-radius: 6px;
+  background: #2c1c16;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+.reset-confirm span {
+  flex: 1 1 100%;
+  color: #e6c9b6;
+}
+.reset-confirm .reset-yes {
+  background: #7a2f22;
+  border-color: #a94a36;
+  flex: 1;
+}
+.reset-confirm .reset-no {
+  background: transparent;
+  border-color: #6b5a48;
+  flex: 1;
+}
+
 /* Hand */
 .tokens {
   display: flex;

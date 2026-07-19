@@ -990,10 +990,9 @@ function pump(s: GameState, rng: Rng, events: GameEvent[]): void {
         s.turn.abilityUsed = {};
         s.turnNumber += 1;
         if (s.solo) {
-          s.solo.idx = (s.solo.idx + 1) % s.solo.order.length;
           events.push({
             kind: 'turn',
-            text: `— Turn ${s.turnNumber}: the solo token passes to ${charName(s.solo.order[s.solo.idx])} (plus 1 Frodo & Sam action) —`,
+            text: `— Turn ${s.turnNumber}: choose a companion for up to 4 actions, plus 1 for Frodo & Sam —`,
           });
         } else {
           events.push({ kind: 'turn', text: `— Turn ${s.turnNumber}: ${activePlayer(s).name} —` });
@@ -1018,12 +1017,13 @@ export function canAct(s: GameState, character: CharacterId): boolean {
     return true;
   }
   const used = s.turn.actionsUsed[character] ?? 0;
-  // Solo variant: the token character takes up to 4 actions; Frodo & Sam
-  // take 1 bonus action; nobody else acts this turn.
+  // Solo variant: Frodo & Sam take 1 bonus action; among the other four, the
+  // player chooses organically which one carries the turn — the first
+  // non-bearer to act claims up to 4 actions, and the rest sit the turn out.
   if (s.solo) {
-    const token = s.solo.order[s.solo.idx];
-    if (character === token) return used < ACTIONS_PRIMARY;
     if (character === BEARER) return used < ACTIONS_SECONDARY;
+    const token = s.turn.actedOrder.find((c) => c !== BEARER);
+    if (token === undefined || token === character) return used < ACTIONS_PRIMARY;
     return false;
   }
   const order = s.turn.actedOrder;
@@ -1821,7 +1821,12 @@ function oncePerTurn(s: GameState, key: string): void {
 }
 
 function gainToken(s: GameState, p: PlayerState, sym: SymbolKind, events: GameEvent[], why: string): void {
-  if (s.supply.tokens[sym] <= 0) throw new RuleError(`No ${sym} tokens left in the supply.`);
+  // Rewards are best-effort: if the shared supply is dry, you simply take what
+  // is there (nothing) rather than derailing the game.
+  if (s.supply.tokens[sym] <= 0) {
+    events.push({ kind: 'action', text: `${why}: no ${sym} tokens remain in the supply.` });
+    return;
+  }
   s.supply.tokens[sym] -= 1;
   p.tokens[sym] += 1;
   events.push({ kind: 'action', text: `${why}: ${p.name} gains a ${sym} token.` });

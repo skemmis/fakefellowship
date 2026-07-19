@@ -23,11 +23,12 @@ export type ClientMessage =
   | { type: 'setDifficulty'; difficulty: Difficulty }
   | { type: 'start' }
   | { type: 'action'; action: Action }
+  | { type: 'resetTurn' }
   | { type: 'chat'; text: string };
 
 export type ServerMessage =
   | { type: 'joined'; room: string; playerId: string; playerToken: string }
   | { type: 'room'; info: RoomInfo }
-  | { type: 'game'; state: GameState; events: GameEvent[] }
+  | { type: 'game'; state: GameState; events: GameEvent[]; replace?: boolean }
   | { type: 'chat'; from: string; text: string }
   | { type: 'error'; message: string };

@@ -41,6 +41,10 @@ interface Room {
   state: GameState | null;
   /** Full event history so reconnecting clients can rebuild the log. */
   eventLog: GameEvent[];
+  /** State captured at the start of the active player's turn (for Reset Turn). */
+  turnStartState: GameState | null;
+  /** eventLog length at the start of the active player's turn. */
+  turnStartLogLen: number;
   createdAt: number;
 }
 
@@ -132,6 +136,8 @@ function handleMessage(ws: WebSocket, ctx: ConnCtx, msg: ClientMessage): void {
         difficulty: 'introductory',
         state: null,
         eventLog: [],
+        turnStartState: null,
+        turnStartLogLen: 0,
         createdAt: Date.now(),
       };
       rooms.set(room.code, room);
@@ -183,6 +189,8 @@ function handleMessage(ws: WebSocket, ctx: ConnCtx, msg: ClientMessage): void {
         },
       ];
       room.eventLog.push(...opening);
+      room.turnStartState = room.state;
+      room.turnStartLogLen = room.eventLog.length;
       pushRoom(room);
       broadcast(room, { type: 'game', state: room.state, events: opening });
       break;
@@ -193,9 +201,17 @@ function handleMessage(ws: WebSocket, ctx: ConnCtx, msg: ClientMessage): void {
       if (!room || !player) return;
       if (!room.state) return send(ws, { type: 'error', message: 'The game has not started.' });
       try {
+        const prevTurn = room.state.turnNumber;
         const result = applyAction(room.state, player.id, msg.action as Action);
         room.state = result.state;
         room.eventLog.push(...result.events);
+        // A new turn has begun: fix this as the point Reset Turn rolls back to.
+        // (applyAction never mutates its input, so the returned state is a safe
+        // immutable snapshot to hold by reference.)
+        if (room.state.turnNumber !== prevTurn) {
+          room.turnStartState = room.state;
+          room.turnStartLogLen = room.eventLog.length;
+        }
         broadcast(room, { type: 'game', state: room.state, events: result.events });
       } catch (err) {
         if (err instanceof RuleError) {
@@ -205,6 +221,28 @@ function handleMessage(ws: WebSocket, ctx: ConnCtx, msg: ClientMessage): void {
           send(ws, { type: 'error', message: 'Internal engine error.' });
         }
       }
+      break;
+    }
+
+    case 'resetTurn': {
+      const { room, player } = requireRoom(ws, ctx);
+      if (!room || !player) return;
+      if (!room.state || !room.turnStartState) {
+        return send(ws, { type: 'error', message: 'Nothing to reset yet.' });
+      }
+      if (room.state.phase !== 'playing') {
+        return send(ws, { type: 'error', message: 'The turn can no longer be reset.' });
+      }
+      const activeId = room.state.players[room.state.turn.playerIdx].id;
+      if (player.id !== activeId) {
+        return send(ws, { type: 'error', message: 'Only the active player may reset the turn.' });
+      }
+      // Roll back to the snapshot taken when this turn began.
+      room.state = room.turnStartState;
+      room.eventLog.length = room.turnStartLogLen;
+      const notice: GameEvent = { kind: 'turn', text: `— ${player.name} resets the turn —` };
+      room.eventLog.push(notice);
+      broadcast(room, { type: 'game', state: room.state, events: room.eventLog, replace: true });
       break;
     }
 

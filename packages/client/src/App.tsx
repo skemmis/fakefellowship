@@ -40,12 +40,18 @@ function GameApp() {
           break;
         case 'game': {
           setGame(msg.state);
+          // A Reset Turn (replace) or full-history reconnect replaces the log
+          // wholesale; ordinary updates append. Reset fires no map animation.
           const isReplay = msg.events.length > 20;
-          setLog((prev) =>
-            // A full-history replay (reconnect) replaces the log; otherwise append.
-            isReplay && prev.length === 0 ? msg.events : [...prev, ...msg.events].slice(-400),
-          );
-          if (!isReplay) setBatch((b) => ({ events: msg.events, id: b.id + 1 }));
+          if (msg.replace) {
+            setLog(msg.events.slice(-400));
+            setBatch((b) => ({ events: [], id: b.id + 1 }));
+          } else {
+            setLog((prev) =>
+              isReplay && prev.length === 0 ? msg.events : [...prev, ...msg.events].slice(-400),
+            );
+            if (!isReplay) setBatch((b) => ({ events: msg.events, id: b.id + 1 }));
+          }
           break;
         }
         case 'chat':
