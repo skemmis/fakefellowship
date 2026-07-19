@@ -206,7 +206,7 @@
     {
       "id": "hollin",
       "name": "Hollin",
-      "region": "misty_mountains",
+      "region": "rhudaur",
       "x": 993,
       "y": 429
     },
@@ -245,7 +245,7 @@
     {
       "id": "isengard",
       "name": "Isengard",
-      "region": "enedwaith",
+      "region": "misty_mountains",
       "x": 1017,
       "y": 746,
       "shadowLoc": true,
@@ -295,7 +295,7 @@
     {
       "id": "fangorn_forest",
       "name": "Fangorn Forest",
-      "region": "rohan",
+      "region": "misty_mountains",
       "x": 1135,
       "y": 745
     },
@@ -311,7 +311,7 @@
     {
       "id": "osgiliath",
       "name": "Osgiliath",
-      "region": "gondor",
+      "region": "ithilien",
       "x": 1660,
       "y": 1175
     },
@@ -456,7 +456,7 @@
     {
       "id": "lorien",
       "name": "Lórien",
-      "region": "mirkwood",
+      "region": "misty_mountains",
       "x": 1233,
       "y": 616,
       "haven": true,
@@ -522,7 +522,7 @@
     {
       "id": "dorwinion",
       "name": "Dorwinion",
-      "region": "dale",
+      "region": "rhovanion",
       "x": 1997,
       "y": 505
     },
