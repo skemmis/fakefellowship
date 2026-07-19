@@ -281,17 +281,22 @@ export function Game({
     if (mode.kind === 'travel') {
       const character = mode.character;
       const from = state.characters[character].location;
-      const bearerHere = state.characters[BEARER]?.location === from;
       const troopsHere = state.friendly[from] ?? {};
+      const hasTroops = Object.values(troopsHere).some((n) => (n ?? 0) > 0);
       const othersHere = Object.keys(state.characters).filter(
         (c) => c !== character && state.characters[c].location === from,
       );
-      const needsPlan =
-        character === BEARER || bearerHere || othersHere.length > 0 || Object.values(troopsHere).some((n) => (n ?? 0) > 0);
-      if (needsPlan) {
+      // The bearer only needs the cover decision when a search would actually
+      // roll at the destination (Nazgûl in its region or shadow troops there).
+      const destRegion = MAP[loc].region;
+      const searchDice = Math.min(7, (state.wraiths[destRegion] ?? 0) + (state.shadow[loc] ?? 0));
+      const bearerNeedsCover = character === BEARER && searchDice > 0;
+      const canBring = othersHere.length > 0 || hasTroops;
+      if (bearerNeedsCover || canBring) {
         setMode({ kind: 'travelPlan', plan: { character, to: loc, companions: [], troops: {} } });
       } else {
-        send({ type: 'travel', character, to: loc });
+        // Ordinary move (incl. the bearer with no search risk): just go.
+        send({ type: 'travel', character, to: loc, ...(character === BEARER ? { cover: 'search' } : {}) });
       }
     } else if (mode.kind === 'eventTarget') {
       const character = me?.characters.find((c) => state.characters[c]);
@@ -643,6 +648,8 @@ function CharacterPanel({
   const fellowships = legal.filter((a) => a.type === 'fellowship' && a.character === character);
   const prepares = legal.filter((a) => a.type === 'prepare' && a.character === character);
   const destroy = legal.find((a) => a.type === 'destroyEmber');
+  const [preparing, setPreparing] = useState(false);
+  const myHand = state.players.find((p) => p.characters.includes(character))?.hand ?? [];
 
   return (
     <div className="char-panel">
@@ -682,11 +689,31 @@ function CharacterPanel({
           </button>
           {prepares.length > 0 && (
             <button
-              onClick={() => onAct(prepares[0])}
-              title="At a haven: discard a region card to bank its symbol as a token."
+              onClick={() => (prepares.length === 1 ? onAct(prepares[0]) : setPreparing((v) => !v))}
+              title="At a haven: discard a region card to bank its symbol as a token. You choose which card."
             >
-              Prepare
+              Prepare{prepares.length > 1 ? ' …' : ''}
             </button>
+          )}
+          {preparing && (
+            <div className="prepare-picker">
+              <span className="hint">Bank which card as a token?</span>
+              {prepares.map((a) => {
+                const card = myHand.find((c) => c.id === (a as { card: string }).card);
+                if (!card || card.kind !== 'region') return null;
+                return (
+                  <button
+                    key={a.type === 'prepare' ? a.card : ''}
+                    onClick={() => {
+                      setPreparing(false);
+                      onAct(a);
+                    }}
+                  >
+                    <Sym s={card.symbol} /> {REGIONS.find((r) => r.id === card.region)?.name}
+                  </button>
+                );
+              })}
+            </div>
           )}
           <button
             disabled={!can('capture')}
@@ -1186,7 +1213,7 @@ function TravelDialog({
           ))}
         </div>
       )}
-      {bearerMoving ? (
+      {bearerMoving && searchDice > 0 ? (
         <div className="dialog-row cover">
           <p>
             <strong>Frodo is moving.</strong> A search at {MAP[plan.to].name} would roll{' '}

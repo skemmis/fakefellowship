@@ -1077,3 +1077,16 @@ select {
   height: 1.05em;
   vertical-align: -0.18em;
 }
+
+/* ---- Prepare card picker ---- */
+.prepare-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  align-items: center;
+  width: 100%;
+  padding: 6px;
+  background: var(--panel-2);
+  border-radius: 6px;
+}
+.prepare-picker .gicon { height: 1.05em; vertical-align: -0.18em; }
