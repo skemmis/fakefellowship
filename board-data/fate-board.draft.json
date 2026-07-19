@@ -1,0 +1,794 @@
+{
+  "version": 2,
+  "regions": [
+    {
+      "id": "eriador",
+      "name": "Eriador",
+      "adjacent": [
+        "rhudaur",
+        "enedwaith"
+      ],
+      "x": 350,
+      "y": 700
+    },
+    {
+      "id": "rhudaur",
+      "name": "Rhudaur",
+      "adjacent": [
+        "eriador",
+        "misty_mountains"
+      ],
+      "x": 1258,
+      "y": 330
+    },
+    {
+      "id": "misty_mountains",
+      "name": "Misty Mountains",
+      "adjacent": [
+        "rhudaur",
+        "enedwaith",
+        "rohan",
+        "mirkwood"
+      ],
+      "x": 1085,
+      "y": 655
+    },
+    {
+      "id": "enedwaith",
+      "name": "Enedwaith",
+      "adjacent": [
+        "eriador",
+        "misty_mountains",
+        "rohan",
+        "gondor"
+      ],
+      "x": 700,
+      "y": 800
+    },
+    {
+      "id": "rohan",
+      "name": "Rohan",
+      "adjacent": [
+        "enedwaith",
+        "misty_mountains",
+        "mirkwood",
+        "rhovanion",
+        "gondor"
+      ],
+      "x": 1370,
+      "y": 850
+    },
+    {
+      "id": "gondor",
+      "name": "Gondor",
+      "adjacent": [
+        "enedwaith",
+        "rohan",
+        "ithilien",
+        "haradwaith"
+      ],
+      "x": 930,
+      "y": 1340
+    },
+    {
+      "id": "ithilien",
+      "name": "Ithilien",
+      "adjacent": [
+        "gondor",
+        "mordor",
+        "haradwaith",
+        "rhovanion"
+      ],
+      "x": 1610,
+      "y": 1480
+    },
+    {
+      "id": "mordor",
+      "name": "Mordor",
+      "adjacent": [
+        "ithilien",
+        "rhovanion",
+        "haradwaith"
+      ],
+      "x": 2140,
+      "y": 1560
+    },
+    {
+      "id": "rhovanion",
+      "name": "Rhovanion",
+      "adjacent": [
+        "rohan",
+        "mirkwood",
+        "dale",
+        "mordor",
+        "ithilien"
+      ],
+      "x": 2075,
+      "y": 795
+    },
+    {
+      "id": "mirkwood",
+      "name": "Mirkwood",
+      "adjacent": [
+        "misty_mountains",
+        "rohan",
+        "rhovanion",
+        "dale"
+      ],
+      "x": 1500,
+      "y": 470
+    },
+    {
+      "id": "dale",
+      "name": "Dale",
+      "adjacent": [
+        "mirkwood",
+        "rhovanion"
+      ],
+      "x": 1870,
+      "y": 100
+    },
+    {
+      "id": "haradwaith",
+      "name": "Haradwaith",
+      "adjacent": [
+        "gondor",
+        "ithilien",
+        "mordor"
+      ],
+      "x": 1330,
+      "y": 1700
+    }
+  ],
+  "locations": [
+    {
+      "id": "grey_havens",
+      "name": "Grey Havens",
+      "region": "eriador",
+      "x": 235,
+      "y": 418,
+      "haven": true,
+      "muster": "sylvan"
+    },
+    {
+      "id": "ered_luin",
+      "name": "Ered Luin",
+      "region": "eriador",
+      "x": 212,
+      "y": 245,
+      "muster": "deepholm"
+    },
+    {
+      "id": "the_shire",
+      "name": "The Shire",
+      "region": "eriador",
+      "x": 379,
+      "y": 334,
+      "haven": true
+    },
+    {
+      "id": "bree",
+      "name": "Bree",
+      "region": "eriador",
+      "x": 563,
+      "y": 395
+    },
+    {
+      "id": "sarn_ford",
+      "name": "Sarn Ford",
+      "region": "eriador",
+      "x": 453,
+      "y": 560
+    },
+    {
+      "id": "weather_hills",
+      "name": "Weather Hills",
+      "region": "eriador",
+      "x": 720,
+      "y": 350
+    },
+    {
+      "id": "tharbad",
+      "name": "Tharbad",
+      "region": "eriador",
+      "x": 726,
+      "y": 548
+    },
+    {
+      "id": "rivendell",
+      "name": "Rivendell",
+      "region": "rhudaur",
+      "x": 1044,
+      "y": 231,
+      "haven": true,
+      "muster": "sylvan"
+    },
+    {
+      "id": "hollin",
+      "name": "Hollin",
+      "region": "misty_mountains",
+      "x": 993,
+      "y": 429
+    },
+    {
+      "id": "moria",
+      "name": "Moria",
+      "region": "misty_mountains",
+      "x": 1194,
+      "y": 469,
+      "shadowLoc": true,
+      "stronghold": true,
+      "stopsSpawnWhenCaptured": true
+    },
+    {
+      "id": "gladden_fields",
+      "name": "Gladden Fields",
+      "region": "misty_mountains",
+      "x": 1348,
+      "y": 435
+    },
+    {
+      "id": "carrock",
+      "name": "Carrock",
+      "region": "misty_mountains",
+      "x": 1281,
+      "y": 232
+    },
+    {
+      "id": "dunland",
+      "name": "Dunland",
+      "region": "enedwaith",
+      "x": 877,
+      "y": 641,
+      "shadowLoc": true
+    },
+    {
+      "id": "isengard",
+      "name": "Isengard",
+      "region": "enedwaith",
+      "x": 1017,
+      "y": 746,
+      "shadowLoc": true,
+      "stronghold": true,
+      "stopsSpawnWhenCaptured": true
+    },
+    {
+      "id": "druwaith_iaur",
+      "name": "Drúwaith Iaur",
+      "region": "enedwaith",
+      "x": 674,
+      "y": 913
+    },
+    {
+      "id": "fords_of_isen",
+      "name": "Fords of Isen",
+      "region": "rohan",
+      "x": 867,
+      "y": 933,
+      "muster": "riders"
+    },
+    {
+      "id": "helms_deep",
+      "name": "Helm's Deep",
+      "region": "rohan",
+      "x": 1065,
+      "y": 964,
+      "haven": true,
+      "muster": "riders"
+    },
+    {
+      "id": "edoras",
+      "name": "Edoras",
+      "region": "rohan",
+      "x": 1197,
+      "y": 1015,
+      "muster": "riders"
+    },
+    {
+      "id": "eastemnet",
+      "name": "Eastemnet",
+      "region": "rohan",
+      "x": 1312,
+      "y": 880,
+      "muster": "riders"
+    },
+    {
+      "id": "fangorn_forest",
+      "name": "Fangorn Forest",
+      "region": "rohan",
+      "x": 1135,
+      "y": 745
+    },
+    {
+      "id": "minas_tirith",
+      "name": "Minas Tirith",
+      "region": "gondor",
+      "x": 1480,
+      "y": 1205,
+      "haven": true,
+      "muster": "vale"
+    },
+    {
+      "id": "osgiliath",
+      "name": "Osgiliath",
+      "region": "gondor",
+      "x": 1660,
+      "y": 1175
+    },
+    {
+      "id": "druadan_forest",
+      "name": "Drúadan Forest",
+      "region": "gondor",
+      "x": 1367,
+      "y": 1137
+    },
+    {
+      "id": "pelargir",
+      "name": "Pelargir",
+      "region": "gondor",
+      "x": 1466,
+      "y": 1355,
+      "muster": "vale"
+    },
+    {
+      "id": "dol_amroth",
+      "name": "Dol Amroth",
+      "region": "gondor",
+      "x": 1071,
+      "y": 1384,
+      "haven": true,
+      "muster": "vale"
+    },
+    {
+      "id": "lamedon",
+      "name": "Lamedon",
+      "region": "gondor",
+      "x": 1269,
+      "y": 1271,
+      "muster": "vale"
+    },
+    {
+      "id": "erech",
+      "name": "Erech",
+      "region": "gondor",
+      "x": 1053,
+      "y": 1139
+    },
+    {
+      "id": "pinnath_gelin",
+      "name": "Pinnath Gelin",
+      "region": "gondor",
+      "x": 668,
+      "y": 1254
+    },
+    {
+      "id": "north_ithilien",
+      "name": "North Ithilien",
+      "region": "ithilien",
+      "x": 1558,
+      "y": 1048
+    },
+    {
+      "id": "south_ithilien",
+      "name": "South Ithilien",
+      "region": "ithilien",
+      "x": 1640,
+      "y": 1329
+    },
+    {
+      "id": "minas_morgul",
+      "name": "Minas Morgul",
+      "region": "mordor",
+      "x": 1827,
+      "y": 1295,
+      "shadowLoc": true,
+      "stronghold": true
+    },
+    {
+      "id": "mount_doom",
+      "name": "Mount Doom",
+      "region": "mordor",
+      "x": 1870,
+      "y": 1127
+    },
+    {
+      "id": "plateau_of_gorgoroth",
+      "name": "Plateau of Gorgoroth",
+      "region": "mordor",
+      "x": 2058,
+      "y": 1195,
+      "shadowLoc": false
+    },
+    {
+      "id": "barad_dur",
+      "name": "Barad-dûr",
+      "region": "mordor",
+      "x": 2001,
+      "y": 1032,
+      "shadowLoc": true,
+      "stronghold": true
+    },
+    {
+      "id": "udun",
+      "name": "Udûn",
+      "region": "mordor",
+      "x": 1733,
+      "y": 1021,
+      "stronghold": true
+    },
+    {
+      "id": "nurn",
+      "name": "Núrn",
+      "region": "mordor",
+      "x": 2298,
+      "y": 1224,
+      "shadowLoc": true
+    },
+    {
+      "id": "brown_lands",
+      "name": "Brown Lands",
+      "region": "rhovanion",
+      "x": 1665,
+      "y": 775
+    },
+    {
+      "id": "emyn_muil",
+      "name": "Emyn Muil",
+      "region": "rhovanion",
+      "x": 1523,
+      "y": 874
+    },
+    {
+      "id": "dagorlad",
+      "name": "Dagorlad",
+      "region": "rhovanion",
+      "x": 1767,
+      "y": 864
+    },
+    {
+      "id": "rhun",
+      "name": "Rhûn",
+      "region": "rhovanion",
+      "x": 2356,
+      "y": 724,
+      "shadowLoc": true
+    },
+    {
+      "id": "lorien",
+      "name": "Lórien",
+      "region": "mirkwood",
+      "x": 1233,
+      "y": 616,
+      "haven": true,
+      "muster": "sylvan"
+    },
+    {
+      "id": "dol_guldur",
+      "name": "Dol Guldur",
+      "region": "mirkwood",
+      "x": 1479,
+      "y": 625,
+      "shadowLoc": true,
+      "stronghold": true,
+      "stopsSpawnWhenCaptured": true
+    },
+    {
+      "id": "southern_mirkwood",
+      "name": "Southern Mirkwood",
+      "region": "mirkwood",
+      "x": 1684,
+      "y": 528
+    },
+    {
+      "id": "old_forest_road",
+      "name": "Old Forest Road",
+      "region": "mirkwood",
+      "x": 1563,
+      "y": 278
+    },
+    {
+      "id": "woodland_realm",
+      "name": "Woodland Realm",
+      "region": "mirkwood",
+      "x": 1482,
+      "y": 155,
+      "haven": true,
+      "muster": "sylvan"
+    },
+    {
+      "id": "erebor",
+      "name": "Erebor",
+      "region": "dale",
+      "x": 1708,
+      "y": 146,
+      "haven": true,
+      "muster": "deepholm"
+    },
+    {
+      "id": "iron_hills",
+      "name": "Iron Hills",
+      "region": "dale",
+      "x": 1965,
+      "y": 205,
+      "muster": "deepholm"
+    },
+    {
+      "id": "lake_town",
+      "name": "Lake Town",
+      "region": "dale",
+      "x": 1767,
+      "y": 285
+    },
+    {
+      "id": "dorwinion",
+      "name": "Dorwinion",
+      "region": "dale",
+      "x": 1997,
+      "y": 505
+    },
+    {
+      "id": "harondor",
+      "name": "Harondor",
+      "region": "haradwaith",
+      "x": 1677,
+      "y": 1652
+    },
+    {
+      "id": "near_harad",
+      "name": "Near Harad",
+      "region": "haradwaith",
+      "x": 1813,
+      "y": 1879,
+      "shadowLoc": true
+    },
+    {
+      "id": "umbar",
+      "name": "Umbar",
+      "region": "haradwaith",
+      "x": 1560,
+      "y": 1911,
+      "shadowLoc": true,
+      "stronghold": true,
+      "stopsSpawnWhenCaptured": true
+    }
+  ],
+  "edges": [
+    {
+      "a": "grey_havens",
+      "b": "ered_luin",
+      "kind": "line",
+      "color": "#8f6fc0",
+      "dir": "ba"
+    },
+    {
+      "a": "the_shire",
+      "b": "ered_luin",
+      "kind": "line",
+      "color": "#8f6fc0",
+      "dir": "ab"
+    },
+    {
+      "a": "bree",
+      "b": "the_shire",
+      "kind": "line",
+      "color": "#8f6fc0",
+      "dir": "ab"
+    },
+    {
+      "a": "sarn_ford",
+      "b": "bree",
+      "kind": "line",
+      "color": "#8f6fc0",
+      "dir": "ab"
+    },
+    {
+      "a": "sarn_ford",
+      "b": "the_shire",
+      "kind": "path"
+    },
+    {
+      "a": "tharbad",
+      "b": "sarn_ford",
+      "kind": "line",
+      "color": "#8f6fc0",
+      "dir": "ab"
+    },
+    {
+      "a": "tharbad",
+      "b": "bree",
+      "kind": "line",
+      "color": "#9acd5a",
+      "dir": "ab"
+    },
+    {
+      "a": "bree",
+      "b": "weather_hills",
+      "kind": "line",
+      "color": "#9acd5a",
+      "dir": "ab"
+    },
+    {
+      "a": "weather_hills",
+      "b": "rivendell",
+      "kind": "line",
+      "color": "#9acd5a",
+      "dir": "ab"
+    },
+    {
+      "a": "weather_hills",
+      "b": "hollin",
+      "kind": "path"
+    },
+    {
+      "a": "hollin",
+      "b": "rivendell",
+      "kind": "path"
+    },
+    {
+      "a": "rivendell",
+      "b": "carrock",
+      "kind": "path",
+      "cost": [
+        "stealth"
+      ]
+    },
+    {
+      "a": "carrock",
+      "b": "old_forest_road",
+      "kind": "line",
+      "color": "#3fa8a0",
+      "dir": "ab"
+    },
+    {
+      "a": "carrock",
+      "b": "gladden_fields",
+      "kind": "line",
+      "color": "#3fa8a0",
+      "dir": "ba"
+    },
+    {
+      "a": "woodland_realm",
+      "b": "old_forest_road",
+      "kind": "line",
+      "color": "#3fa8a0",
+      "dir": "ba"
+    },
+    {
+      "a": "woodland_realm",
+      "b": "erebor",
+      "kind": "line",
+      "color": "#3fa8a0",
+      "dir": "ab"
+    },
+    {
+      "a": "erebor",
+      "b": "woodland_realm",
+      "kind": "line",
+      "color": "#e8834a",
+      "dir": "ab"
+    },
+    {
+      "a": "erebor",
+      "b": "woodland_realm",
+      "kind": "line",
+      "color": "#e87fb0",
+      "dir": "ab"
+    },
+    {
+      "a": "erebor",
+      "b": "iron_hills",
+      "kind": "line",
+      "color": "#e87fb0",
+      "dir": "ba"
+    },
+    {
+      "a": "lake_town",
+      "b": "erebor",
+      "kind": "line",
+      "color": "#e8834a",
+      "dir": "ab"
+    },
+    {
+      "a": "lake_town",
+      "b": "iron_hills",
+      "kind": "line",
+      "color": "#e87fb0",
+      "dir": "ab"
+    },
+    {
+      "a": "lake_town",
+      "b": "woodland_realm",
+      "kind": "path"
+    },
+    {
+      "a": "dorwinion",
+      "b": "lake_town",
+      "kind": "line",
+      "color": "#e87fb0",
+      "dir": "ab"
+    },
+    {
+      "a": "dorwinion",
+      "b": "iron_hills",
+      "kind": "path"
+    },
+    {
+      "a": "dorwinion",
+      "b": "southern_mirkwood",
+      "kind": "line",
+      "color": "#e8834a",
+      "dir": "ab"
+    },
+    {
+      "a": "southern_mirkwood",
+      "b": "old_forest_road",
+      "kind": "line",
+      "color": "#e8834a",
+      "dir": "ab"
+    },
+    {
+      "a": "southern_mirkwood",
+      "b": "old_forest_road",
+      "kind": "line",
+      "color": "#3fa8a0",
+      "dir": "ab"
+    },
+    {
+      "a": "dol_guldur",
+      "b": "southern_mirkwood",
+      "kind": "line",
+      "color": "#e8cf4f",
+      "dir": "ab"
+    },
+    {
+      "a": "dol_guldur",
+      "b": "southern_mirkwood",
+      "kind": "line",
+      "color": "#3fa8a0",
+      "dir": "ab"
+    },
+    {
+      "a": "dol_guldur",
+      "b": "gladden_fields",
+      "kind": "line",
+      "color": "#3fa8a0",
+      "dir": "ab"
+    },
+    {
+      "a": "dol_guldur",
+      "b": "gladden_fields",
+      "kind": "line",
+      "color": "#e8cf4f",
+      "dir": "ba"
+    },
+    {
+      "a": "gladden_fields",
+      "b": "moria",
+      "kind": "line",
+      "color": "#3fa8a0",
+      "dir": "ba"
+    },
+    {
+      "a": "gladden_fields",
+      "b": "moria",
+      "kind": "line",
+      "color": "#e8cf4f",
+      "dir": "ba"
+    },
+    {
+      "a": "gladden_fields",
+      "b": "hollin",
+      "kind": "path",
+      "cost": [
+        "resistance"
+      ]
+    },
+    {
+      "a": "moria",
+      "b": "hollin",
+      "kind": "line",
+      "color": "#9acd5a",
+      "dir": "ab"
+    }
+  ]
+}

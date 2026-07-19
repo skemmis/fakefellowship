@@ -55,7 +55,7 @@ export interface EdgeDef {
   a: LocationId;
   b: LocationId;
   kind: 'path' | 'line';
-  /** Paths only: symbols spent to travel. */
+  /** Symbols a player spends to traverse (paths AND battle-line segments). */
   cost?: SymbolKind[];
   /** Line segments only: the route's printed color. */
   color?: string;

@@ -272,7 +272,7 @@ export function Editor() {
                   stroke={e.kind === 'line' ? e.color ?? '#999' : undefined}
                 />
                 {arrow}
-                {e.kind === 'path' && e.cost && (
+                {e.cost && (
                   <g>
                     <rect x={mx - 34} y={my - 20} width={68} height={40} rx={8} className="ed-cost-bg" />
                     <text x={mx} y={my + 10} textAnchor="middle" className="ed-cost-text">
@@ -396,7 +396,18 @@ export function Editor() {
                           <span>
                             <span className="ed-swatch" style={{ background: e.color }} /> Battle line segment,{' '}
                             arrow: {locMap[e.dir === 'ba' ? e.b : e.a]?.name} → {locMap[e.dir === 'ba' ? e.a : e.b]?.name}
+                            {' — '}player cost: {e.cost?.map((c) => GLYPH[c]).join('') || 'free'}
                           </span>
+                          <div className="ed-chiprow">
+                            {SYMBOLS.map((sym) => (
+                              <button key={sym} className="mini" title={`Players traversing this segment spend ${sym}`} onClick={() => update((d) => {
+                                d.edges[i].cost = [...(d.edges[i].cost ?? []), sym];
+                              })}>
+                                +{GLYPH[sym]}
+                              </button>
+                            ))}
+                            <button className="mini" onClick={() => update((d) => { delete d.edges[i].cost; })}>free</button>
+                          </div>
                           <div className="ed-chiprow">
                             {LINE_PALETTE.map((c, ci) => (
                               <button

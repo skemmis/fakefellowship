@@ -350,14 +350,13 @@ export const CONNECTIONS: Record<LocationId, Connection[]> = (() => {
     add(p.a, p.b, p.cost);
     add(p.b, p.a, p.cost);
   }
-  for (const line of BATTLE_LINES) {
-    for (let i = 0; i + 1 < line.path.length; i++) {
-      if (!MAP[line.path[i]] || !MAP[line.path[i + 1]]) {
-        throw new Error(`bad battle line ${line.id}`);
-      }
-      add(line.path[i], line.path[i + 1], undefined, true);
-      add(line.path[i + 1], line.path[i], undefined, true);
-    }
+  // Battle-line segments are traversable by players in either direction and
+  // may carry their own printed symbol cost.
+  for (const e of EDGES) {
+    if (e.kind !== 'line') continue;
+    if (!MAP[e.a] || !MAP[e.b]) throw new Error(`bad battle line ${e.a}-${e.b}`);
+    add(e.a, e.b, e.cost, true);
+    add(e.b, e.a, e.cost, true);
   }
   return out;
 })();
