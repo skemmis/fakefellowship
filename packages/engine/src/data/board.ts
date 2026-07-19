@@ -212,6 +212,7 @@ export const EDGES: EdgeDef[] = [
   { a: 'udun', b: 'north_ithilien', kind: 'line', color: '#e8cf4f', dir: 'ab', cost: ['stealth', 'stealth', 'stealth', 'stealth'] },
   { a: 'old_forest_road', b: 'lake_town', kind: 'line', color: '#e8834a', dir: 'ab' },
   { a: 'minas_tirith', b: 'druadan_forest', kind: 'line', color: '#8f6fc0', dir: 'ab' },
+  { a: 'the_shire', b: 'grey_havens', kind: 'path' },
 ];
 
 /** White paths (derived from EDGES; kept for compatibility). */

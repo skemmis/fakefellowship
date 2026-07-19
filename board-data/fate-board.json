@@ -1373,6 +1373,11 @@
       "kind": "line",
       "color": "#8f6fc0",
       "dir": "ab"
+    },
+    {
+      "a": "the_shire",
+      "b": "grey_havens",
+      "kind": "path"
     }
   ],
   "tracks": {
