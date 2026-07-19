@@ -788,7 +788,577 @@
       "b": "hollin",
       "kind": "line",
       "color": "#9acd5a",
+      "dir": "ab",
+      "cost": [
+        "friendship"
+      ]
+    },
+    {
+      "a": "hollin",
+      "b": "tharbad",
+      "kind": "line",
+      "color": "#9acd5a",
       "dir": "ab"
+    },
+    {
+      "a": "dunland",
+      "b": "hollin",
+      "kind": "line",
+      "color": "#9acd5a",
+      "dir": "ab"
+    },
+    {
+      "a": "dunland",
+      "b": "tharbad",
+      "kind": "line",
+      "color": "#8f6fc0",
+      "dir": "ab"
+    },
+    {
+      "a": "lorien",
+      "b": "gladden_fields",
+      "kind": "line",
+      "color": "#3fa8a0",
+      "dir": "ab"
+    },
+    {
+      "a": "fangorn_forest",
+      "b": "lorien",
+      "kind": "line",
+      "color": "#3fa8a0",
+      "dir": "ab"
+    },
+    {
+      "a": "lorien",
+      "b": "dol_guldur",
+      "kind": "path"
+    },
+    {
+      "a": "lorien",
+      "b": "emyn_muil",
+      "kind": "path",
+      "cost": [
+        "friendship"
+      ]
+    },
+    {
+      "a": "isengard",
+      "b": "fangorn_forest",
+      "kind": "path",
+      "cost": [
+        "stealth"
+      ]
+    },
+    {
+      "a": "brown_lands",
+      "b": "dol_guldur",
+      "kind": "line",
+      "color": "#3fa8a0",
+      "dir": "ab"
+    },
+    {
+      "a": "emyn_muil",
+      "b": "brown_lands",
+      "kind": "line",
+      "color": "#3fa8a0",
+      "dir": "ab"
+    },
+    {
+      "a": "brown_lands",
+      "b": "dagorlad",
+      "kind": "path"
+    },
+    {
+      "a": "southern_mirkwood",
+      "b": "dagorlad",
+      "kind": "line",
+      "color": "#e8cf4f",
+      "dir": "ab"
+    },
+    {
+      "a": "dagorlad",
+      "b": "dorwinion",
+      "kind": "path"
+    },
+    {
+      "a": "rhun",
+      "b": "dagorlad",
+      "kind": "line",
+      "color": "#e8cf4f",
+      "dir": "ab"
+    },
+    {
+      "a": "rhun",
+      "b": "dorwinion",
+      "kind": "line",
+      "color": "#e8834a",
+      "dir": "ab"
+    },
+    {
+      "a": "rhun",
+      "b": "dorwinion",
+      "kind": "line",
+      "color": "#e87fb0",
+      "dir": "ab"
+    },
+    {
+      "a": "dagorlad",
+      "b": "emyn_muil",
+      "kind": "line",
+      "color": "#3fa8a0",
+      "dir": "ab"
+    },
+    {
+      "a": "emyn_muil",
+      "b": "eastemnet",
+      "kind": "path"
+    },
+    {
+      "a": "dagorlad",
+      "b": "north_ithilien",
+      "kind": "line",
+      "color": "#3fa8a0",
+      "dir": "ba"
+    },
+    {
+      "a": "dagorlad",
+      "b": "north_ithilien",
+      "kind": "line",
+      "color": "#e8cf4f",
+      "dir": "ab"
+    },
+    {
+      "a": "north_ithilien",
+      "b": "emyn_muil",
+      "kind": "path",
+      "cost": [
+        "resistance"
+      ]
+    },
+    {
+      "a": "fangorn_forest",
+      "b": "eastemnet",
+      "kind": "line",
+      "color": "#3fa8a0",
+      "dir": "ab"
+    },
+    {
+      "a": "eastemnet",
+      "b": "helms_deep",
+      "kind": "line",
+      "color": "#3fa8a0",
+      "dir": "ab"
+    },
+    {
+      "a": "fangorn_forest",
+      "b": "helms_deep",
+      "kind": "path"
+    },
+    {
+      "a": "eastemnet",
+      "b": "edoras",
+      "kind": "path"
+    },
+    {
+      "a": "edoras",
+      "b": "helms_deep",
+      "kind": "line",
+      "color": "#8f6fc0",
+      "dir": "ab"
+    },
+    {
+      "a": "helms_deep",
+      "b": "edoras",
+      "kind": "line",
+      "color": "#e87fb0",
+      "dir": "ab"
+    },
+    {
+      "a": "edoras",
+      "b": "druadan_forest",
+      "kind": "line",
+      "color": "#e87fb0",
+      "dir": "ab"
+    },
+    {
+      "a": "druadan_forest",
+      "b": "edoras",
+      "kind": "line",
+      "color": "#8f6fc0",
+      "dir": "ab"
+    },
+    {
+      "a": "druadan_forest",
+      "b": "minas_tirith",
+      "kind": "line",
+      "color": "#e87fb0",
+      "dir": "ab"
+    },
+    {
+      "a": "fords_of_isen",
+      "b": "helms_deep",
+      "kind": "line",
+      "color": "#e87fb0",
+      "dir": "ab"
+    },
+    {
+      "a": "fords_of_isen",
+      "b": "helms_deep",
+      "kind": "line",
+      "color": "#e8834a",
+      "dir": "ab"
+    },
+    {
+      "a": "isengard",
+      "b": "fords_of_isen",
+      "kind": "line",
+      "color": "#9acd5a",
+      "dir": "ab"
+    },
+    {
+      "a": "isengard",
+      "b": "fords_of_isen",
+      "kind": "line",
+      "color": "#e87fb0",
+      "dir": "ab"
+    },
+    {
+      "a": "isengard",
+      "b": "fords_of_isen",
+      "kind": "line",
+      "color": "#e8834a",
+      "dir": "ab"
+    },
+    {
+      "a": "fords_of_isen",
+      "b": "dunland",
+      "kind": "line",
+      "color": "#9acd5a",
+      "dir": "ab"
+    },
+    {
+      "a": "dunland",
+      "b": "druwaith_iaur",
+      "kind": "line",
+      "color": "#e8834a",
+      "dir": "ab"
+    },
+    {
+      "a": "pinnath_gelin",
+      "b": "druwaith_iaur",
+      "kind": "line",
+      "color": "#e8834a",
+      "dir": "ab"
+    },
+    {
+      "a": "druwaith_iaur",
+      "b": "fords_of_isen",
+      "kind": "line",
+      "color": "#e8834a",
+      "dir": "ab"
+    },
+    {
+      "a": "erech",
+      "b": "pinnath_gelin",
+      "kind": "line",
+      "color": "#e8834a",
+      "dir": "ab"
+    },
+    {
+      "a": "lamedon",
+      "b": "erech",
+      "kind": "line",
+      "color": "#e8834a",
+      "dir": "ab"
+    },
+    {
+      "a": "erech",
+      "b": "edoras",
+      "kind": "path",
+      "cost": [
+        "stealth"
+      ]
+    },
+    {
+      "a": "lamedon",
+      "b": "dol_amroth",
+      "kind": "path"
+    },
+    {
+      "a": "grey_havens",
+      "b": "dol_amroth",
+      "kind": "line",
+      "color": "#e87fb0",
+      "dir": "ab",
+      "cost": [
+        "friendship",
+        "friendship"
+      ]
+    },
+    {
+      "a": "pelargir",
+      "b": "dol_amroth",
+      "kind": "line",
+      "color": "#e87fb0",
+      "dir": "ab"
+    },
+    {
+      "a": "pelargir",
+      "b": "lamedon",
+      "kind": "line",
+      "color": "#e8834a",
+      "dir": "ab"
+    },
+    {
+      "a": "pelargir",
+      "b": "south_ithilien",
+      "kind": "line",
+      "color": "#8f6fc0",
+      "dir": "ab"
+    },
+    {
+      "a": "south_ithilien",
+      "b": "pelargir",
+      "kind": "line",
+      "color": "#e87fb0",
+      "dir": "ab"
+    },
+    {
+      "a": "minas_tirith",
+      "b": "osgiliath",
+      "kind": "line",
+      "color": "#e87fb0",
+      "dir": "ab"
+    },
+    {
+      "a": "osgiliath",
+      "b": "minas_tirith",
+      "kind": "line",
+      "color": "#8f6fc0",
+      "dir": "ab"
+    },
+    {
+      "a": "osgiliath",
+      "b": "minas_tirith",
+      "kind": "line",
+      "color": "#e8cf4f",
+      "dir": "ab"
+    },
+    {
+      "a": "south_ithilien",
+      "b": "osgiliath",
+      "kind": "line",
+      "color": "#3fa8a0",
+      "dir": "ab"
+    },
+    {
+      "a": "osgiliath",
+      "b": "south_ithilien",
+      "kind": "line",
+      "color": "#8f6fc0",
+      "dir": "ba"
+    },
+    {
+      "a": "osgiliath",
+      "b": "south_ithilien",
+      "kind": "line",
+      "color": "#e87fb0",
+      "dir": "ab"
+    },
+    {
+      "a": "harondor",
+      "b": "pelargir",
+      "kind": "line",
+      "color": "#e87fb0",
+      "dir": "ab"
+    },
+    {
+      "a": "harondor",
+      "b": "pelargir",
+      "kind": "line",
+      "color": "#e8834a",
+      "dir": "ab"
+    },
+    {
+      "a": "harondor",
+      "b": "south_ithilien",
+      "kind": "line",
+      "color": "#3fa8a0",
+      "dir": "ab"
+    },
+    {
+      "a": "harondor",
+      "b": "south_ithilien",
+      "kind": "line",
+      "color": "#8f6fc0",
+      "dir": "ab"
+    },
+    {
+      "a": "umbar",
+      "b": "pelargir",
+      "kind": "line",
+      "color": "#8f6fc0",
+      "dir": "ab"
+    },
+    {
+      "a": "umbar",
+      "b": "harondor",
+      "kind": "line",
+      "color": "#e87fb0",
+      "dir": "ab"
+    },
+    {
+      "a": "umbar",
+      "b": "harondor",
+      "kind": "line",
+      "color": "#e8834a",
+      "dir": "ab"
+    },
+    {
+      "a": "near_harad",
+      "b": "harondor",
+      "kind": "line",
+      "color": "#e8834a",
+      "dir": "ab"
+    },
+    {
+      "a": "near_harad",
+      "b": "harondor",
+      "kind": "line",
+      "color": "#3fa8a0",
+      "dir": "ab"
+    },
+    {
+      "a": "minas_morgul",
+      "b": "south_ithilien",
+      "kind": "line",
+      "color": "#8f6fc0",
+      "dir": "ab",
+      "cost": [
+        "stealth",
+        "stealth"
+      ]
+    },
+    {
+      "a": "plateau_of_gorgoroth",
+      "b": "minas_morgul",
+      "kind": "line",
+      "color": "#8f6fc0",
+      "dir": "ab",
+      "cost": [
+        "stealth"
+      ]
+    },
+    {
+      "a": "minas_morgul",
+      "b": "udun",
+      "kind": "path"
+    },
+    {
+      "a": "barad_dur",
+      "b": "udun",
+      "kind": "line",
+      "color": "#3fa8a0",
+      "dir": "ab",
+      "cost": [
+        "stealth"
+      ]
+    },
+    {
+      "a": "mount_doom",
+      "b": "udun",
+      "kind": "line",
+      "color": "#e8cf4f",
+      "dir": "ab",
+      "cost": [
+        "stealth",
+        "stealth",
+        "stealth"
+      ]
+    },
+    {
+      "a": "plateau_of_gorgoroth",
+      "b": "mount_doom",
+      "kind": "line",
+      "color": "#e8cf4f",
+      "dir": "ab",
+      "cost": [
+        "stealth",
+        "stealth"
+      ]
+    },
+    {
+      "a": "nurn",
+      "b": "plateau_of_gorgoroth",
+      "kind": "line",
+      "color": "#e8cf4f",
+      "dir": "ab"
+    },
+    {
+      "a": "nurn",
+      "b": "plateau_of_gorgoroth",
+      "kind": "line",
+      "color": "#3fa8a0",
+      "dir": "ab"
+    },
+    {
+      "a": "nurn",
+      "b": "plateau_of_gorgoroth",
+      "kind": "line",
+      "color": "#8f6fc0",
+      "dir": "ab"
+    },
+    {
+      "a": "plateau_of_gorgoroth",
+      "b": "barad_dur",
+      "kind": "line",
+      "color": "#3fa8a0",
+      "dir": "ab"
+    },
+    {
+      "a": "mount_doom",
+      "b": "barad_dur",
+      "kind": "path"
+    },
+    {
+      "a": "north_ithilien",
+      "b": "osgiliath",
+      "kind": "line",
+      "color": "#e8cf4f",
+      "dir": "ab"
+    },
+    {
+      "a": "osgiliath",
+      "b": "north_ithilien",
+      "kind": "line",
+      "color": "#3fa8a0",
+      "dir": "ab"
+    },
+    {
+      "a": "udun",
+      "b": "north_ithilien",
+      "kind": "line",
+      "color": "#3fa8a0",
+      "dir": "ab",
+      "cost": [
+        "stealth",
+        "stealth",
+        "stealth",
+        "stealth"
+      ]
+    },
+    {
+      "a": "udun",
+      "b": "north_ithilien",
+      "kind": "line",
+      "color": "#e8cf4f",
+      "dir": "ab",
+      "cost": [
+        "stealth",
+        "stealth",
+        "stealth",
+        "stealth"
+      ]
     }
   ]
 }
