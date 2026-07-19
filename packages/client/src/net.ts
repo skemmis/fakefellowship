@@ -3,6 +3,16 @@ import type { ClientMessage, ServerMessage } from '@emberfall/engine';
 export type NetListener = (msg: ServerMessage) => void;
 export type StatusListener = (status: 'connecting' | 'open' | 'closed') => void;
 
+/** A durable per-browser identity so a player resumes their seat across reloads. */
+export function clientId(): string {
+  let id = localStorage.getItem('emberfall.clientId');
+  if (!id) {
+    id = (crypto.randomUUID?.() ?? `c${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    localStorage.setItem('emberfall.clientId', id);
+  }
+  return id;
+}
+
 /**
  * Thin WebSocket wrapper with auto-reconnect. On reconnect it replays the
  * join with the saved player token, so a dropped browser resumes its seat.
@@ -25,9 +35,13 @@ export class Net {
     this.ws.onopen = () => {
       this.reconnectDelay = 500;
       this.emitStatus('open');
-      const token = localStorage.getItem('emberfall.token') ?? undefined;
-      if (this.rejoin && token) {
-        this.send({ type: 'join', room: this.rejoin.room, name: this.rejoin.name, playerToken: token });
+      // Always tell the server who we are so it can list our active games.
+      this.send({ type: 'listGames', clientId: clientId() });
+      // Resume the game we were last viewing (survives a full page reload).
+      const room = this.rejoin?.room ?? localStorage.getItem('emberfall.room') ?? null;
+      const name = this.rejoin?.name ?? localStorage.getItem('fellowship.name') ?? 'Traveler';
+      if (room) {
+        this.send({ type: 'join', room, name, clientId: clientId() });
       }
     };
     this.ws.onmessage = (ev) => {

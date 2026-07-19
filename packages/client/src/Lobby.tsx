@@ -1,10 +1,22 @@
 import { useState } from 'react';
-import { DIFFICULTY_TABLE, type Difficulty, type RoomInfo } from '@emberfall/engine';
-import { net } from './net.js';
+import { DIFFICULTY_TABLE, type Difficulty, type GameSummary, type RoomInfo } from '@emberfall/engine';
+import { net, clientId } from './net.js';
 
 const DIFFICULTIES: Difficulty[] = ['introductory', 'standard', 'heroic', 'epic', 'legendary'];
 
-export function Lobby({ room, playerId }: { room: RoomInfo | null; playerId: string | null }) {
+export function Lobby({
+  room,
+  playerId,
+  games = [],
+  onResume,
+  onAbandon,
+}: {
+  room: RoomInfo | null;
+  playerId: string | null;
+  games?: GameSummary[];
+  onResume?: (code: string) => void;
+  onAbandon?: (code: string) => void;
+}) {
   const [name, setName] = useState(localStorage.getItem('fellowship.name') ?? '');
   const [code, setCode] = useState('');
 
@@ -37,7 +49,7 @@ export function Lobby({ room, playerId }: { room: RoomInfo | null; playerId: str
               disabled={!name.trim()}
               onClick={() => {
                 net.rejoin = null;
-                net.send({ type: 'create', name: name.trim() });
+                net.send({ type: 'create', name: name.trim(), clientId: clientId() });
               }}
             >
               Host a new game
@@ -55,12 +67,49 @@ export function Lobby({ room, playerId }: { room: RoomInfo | null; playerId: str
               onClick={() => {
                 const r = code.trim().toUpperCase();
                 net.rejoin = { room: r, name: name.trim() };
-                net.send({ type: 'join', room: r, name: name.trim() });
+                net.send({ type: 'join', room: r, name: name.trim(), clientId: clientId() });
               }}
             >
               Join
             </button>
           </div>
+          {games.length > 0 && (
+            <div className="lobby-games">
+              <h3>Your active games</h3>
+              <ul className="switcher-list">
+                {games.map((g) => (
+                  <li key={g.code}>
+                    <div className="switcher-main">
+                      <strong>{g.code}</strong>
+                      <span className={`switcher-phase ${g.yourTurn ? 'your-turn' : ''}`}>
+                        {g.phase === 'lobby'
+                          ? 'waiting to start'
+                          : g.phase === 'playing'
+                            ? g.yourTurn
+                              ? 'your turn'
+                              : `${g.activeName ?? 'someone'}’s turn`
+                            : g.phase}
+                      </span>
+                    </div>
+                    <div className="hint switcher-players">
+                      {g.playerCount === 1 ? 'Solo' : `${g.playerCount} players`}: {g.players.join(', ')}
+                    </div>
+                    <div className="switcher-actions">
+                      <button onClick={() => onResume?.(g.code)}>Resume</button>
+                      <button
+                        className="switcher-abandon"
+                        onClick={() => {
+                          if (confirm(`Abandon game ${g.code}?`)) onAbandon?.(g.code);
+                        }}
+                      >
+                        Abandon
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           <p className="hint">
             Have the physical game? <a href="#editor">Open the board editor</a> to verify locations,
             regions, path costs, and battle lines against your copy.

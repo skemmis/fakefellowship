@@ -18,6 +18,7 @@ import {
   type Difficulty,
   type GameEvent,
   type GameState,
+  type GameSummary,
   type RoomInfo,
   type ServerMessage,
 } from '@emberfall/engine';
@@ -29,6 +30,8 @@ const DIFFICULTIES: Difficulty[] = ['introductory', 'standard', 'heroic', 'epic'
 interface RoomPlayer {
   id: string;
   token: string;
+  /** Durable browser identity, so a player resumes their seat across reloads. */
+  clientId: string | null;
   name: string;
   ws: WebSocket | null;
 }
@@ -46,6 +49,8 @@ interface Room {
   /** eventLog length at the start of the active player's turn. */
   turnStartLogLen: number;
   createdAt: number;
+  /** ms of the last meaningful activity, for recency sorting. */
+  lastActivity: number;
 }
 
 const rooms = new Map<string, Room>();
@@ -84,9 +89,37 @@ function pushRoom(room: Room): void {
   broadcast(room, { type: 'room', info: roomInfo(room) });
 }
 
+/** Summaries of every active game a given client belongs to, newest first. */
+function gamesForClient(clientId: string): GameSummary[] {
+  const out: GameSummary[] = [];
+  for (const room of rooms.values()) {
+    if (!room.players.some((p) => p.clientId === clientId)) continue;
+    const st = room.state;
+    const activeId = st && st.phase === 'playing' ? st.players[st.turn.playerIdx]?.id : null;
+    const activePlayer = activeId ? room.players.find((p) => p.id === activeId) : null;
+    out.push({
+      code: room.code,
+      started: st !== null,
+      phase: st ? st.phase : 'lobby',
+      difficulty: room.difficulty,
+      players: room.players.map((p) => p.name),
+      playerCount: room.players.length,
+      yourTurn: !!activePlayer && activePlayer.clientId === clientId,
+      activeName: activePlayer ? activePlayer.name : st ? st.players[st.turn.playerIdx]?.name ?? null : null,
+      lastActivity: room.lastActivity,
+    });
+  }
+  return out.sort((a, b) => b.lastActivity - a.lastActivity);
+}
+
+function sendGames(ws: WebSocket, clientId: string | null): void {
+  if (clientId) send(ws, { type: 'games', games: gamesForClient(clientId) });
+}
+
 interface ConnCtx {
   roomCode: string | null;
   playerId: string | null;
+  clientId: string | null;
 }
 
 function requireRoom(ws: WebSocket, ctx: ConnCtx): { room: Room | null; player: RoomPlayer | null } {
@@ -99,16 +132,31 @@ function requireRoom(ws: WebSocket, ctx: ConnCtx): { room: Room | null; player: 
   return { room, player };
 }
 
-function joinRoom(ws: WebSocket, ctx: ConnCtx, room: Room, name: string, playerToken?: string): void {
-  const existing = playerToken ? room.players.find((p) => p.token === playerToken) : undefined;
+function joinRoom(
+  ws: WebSocket,
+  ctx: ConnCtx,
+  room: Room,
+  name: string,
+  opts: { clientId?: string; playerToken?: string },
+): void {
+  // Resume a seat by durable client identity first, then by legacy token.
+  const existing =
+    (opts.clientId && room.players.find((p) => p.clientId === opts.clientId)) ||
+    (opts.playerToken && room.players.find((p) => p.token === opts.playerToken)) ||
+    undefined;
   if (existing) {
     if (existing.ws && existing.ws !== ws) existing.ws.close();
     existing.ws = ws;
+    if (opts.clientId) existing.clientId = opts.clientId;
+    if (name.trim()) existing.name = name.slice(0, 24);
     ctx.roomCode = room.code;
     ctx.playerId = existing.id;
+    if (opts.clientId) ctx.clientId = opts.clientId;
+    room.lastActivity = Date.now();
     send(ws, { type: 'joined', room: room.code, playerId: existing.id, playerToken: existing.token });
     pushRoom(room);
     if (room.state) send(ws, { type: 'game', state: room.state, events: room.eventLog });
+    sendGames(ws, ctx.clientId);
     return;
   }
   if (room.state) return send(ws, { type: 'error', message: 'That game already started.' });
@@ -116,14 +164,18 @@ function joinRoom(ws: WebSocket, ctx: ConnCtx, room: Room, name: string, playerT
   const player: RoomPlayer = {
     id: `p${room.players.length + 1}-${randomBytes(3).toString('hex')}`,
     token: randomBytes(16).toString('hex'),
+    clientId: opts.clientId ?? null,
     name: (name || 'Traveler').slice(0, 24),
     ws,
   };
   room.players.push(player);
   ctx.roomCode = room.code;
   ctx.playerId = player.id;
+  if (opts.clientId) ctx.clientId = opts.clientId;
+  room.lastActivity = Date.now();
   send(ws, { type: 'joined', room: room.code, playerId: player.id, playerToken: player.token });
   pushRoom(room);
+  sendGames(ws, ctx.clientId);
 }
 
 function handleMessage(ws: WebSocket, ctx: ConnCtx, msg: ClientMessage): void {
@@ -139,9 +191,10 @@ function handleMessage(ws: WebSocket, ctx: ConnCtx, msg: ClientMessage): void {
         turnStartState: null,
         turnStartLogLen: 0,
         createdAt: Date.now(),
+        lastActivity: Date.now(),
       };
       rooms.set(room.code, room);
-      joinRoom(ws, ctx, room, msg.name, msg.playerToken);
+      joinRoom(ws, ctx, room, msg.name, { clientId: msg.clientId, playerToken: msg.playerToken });
       room.hostId = room.players[0].id;
       pushRoom(room);
       break;
@@ -150,7 +203,38 @@ function handleMessage(ws: WebSocket, ctx: ConnCtx, msg: ClientMessage): void {
     case 'join': {
       const room = rooms.get(msg.room.toUpperCase().trim());
       if (!room) return send(ws, { type: 'error', message: 'No such game room.' });
-      joinRoom(ws, ctx, room, msg.name, msg.playerToken);
+      joinRoom(ws, ctx, room, msg.name, { clientId: msg.clientId, playerToken: msg.playerToken });
+      break;
+    }
+
+    case 'listGames': {
+      ctx.clientId = msg.clientId;
+      sendGames(ws, msg.clientId);
+      break;
+    }
+
+    case 'leaveGame': {
+      const room = rooms.get(msg.room.toUpperCase().trim());
+      if (room && ctx.clientId) {
+        const idx = room.players.findIndex((p) => p.clientId === ctx.clientId);
+        if (idx >= 0) {
+          const [gone] = room.players.splice(idx, 1);
+          if (gone.ws && gone.ws !== ws) gone.ws.close();
+          if (room.players.length === 0) {
+            rooms.delete(room.code);
+          } else {
+            if (room.hostId === gone.id) room.hostId = room.players[0].id;
+            room.lastActivity = Date.now();
+            pushRoom(room);
+          }
+        }
+      }
+      // If they abandoned the room this connection was viewing, detach it.
+      if (ctx.roomCode === msg.room.toUpperCase().trim()) {
+        ctx.roomCode = null;
+        ctx.playerId = null;
+      }
+      sendGames(ws, ctx.clientId);
       break;
     }
 
@@ -205,6 +289,7 @@ function handleMessage(ws: WebSocket, ctx: ConnCtx, msg: ClientMessage): void {
         const result = applyAction(room.state, player.id, msg.action as Action);
         room.state = result.state;
         room.eventLog.push(...result.events);
+        room.lastActivity = Date.now();
         // A new turn has begun: fix this as the point Reset Turn rolls back to.
         // (applyAction never mutates its input, so the returned state is a safe
         // immutable snapshot to hold by reference.)
@@ -294,7 +379,7 @@ const httpServer = createServer(async (req, res) => {
 const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
 
 wss.on('connection', (ws) => {
-  const ctx: ConnCtx = { roomCode: null, playerId: null };
+  const ctx: ConnCtx = { roomCode: null, playerId: null, clientId: null };
   ws.on('message', (data) => {
     let msg: ClientMessage;
     try {
