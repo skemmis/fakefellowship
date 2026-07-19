@@ -3,6 +3,7 @@ import {
   BEARER,
   CHARACTER_MAP,
   connection,
+  CONNECTIONS,
   EVENTS,
   FACTION_NAMES,
   legalActions,
@@ -244,6 +245,7 @@ export function Game({
     | { kind: 'travel'; character: CharacterId }
     | { kind: 'travelPlan'; plan: TravelPlan }
     | { kind: 'eventTarget'; card: string; event: string }
+    | { kind: 'eventPath'; card: string; event: string; character: CharacterId | null; maxLegs: number; path: LocationId[] }
   >({ kind: 'idle' });
   const [chatText, setChatText] = useState('');
   const [boardOnly, setBoardOnly] = useState(false);
@@ -294,6 +296,9 @@ export function Game({
           if (friendly > 0) m.set(loc, 'card');
         }
       }
+    } else if (mode.kind === 'eventPath' && mode.character && mode.path.length < mode.maxLegs) {
+      const from = mode.path.length ? mode.path[mode.path.length - 1] : state.characters[mode.character]?.location;
+      if (from) for (const cn of CONNECTIONS[from] ?? []) m.set(cn.to, 'move');
     }
     return m;
   }, [mode, legal, state]);
@@ -328,6 +333,8 @@ export function Game({
     } else if (mode.kind === 'eventTarget') {
       const character = me?.characters.find((c) => state.characters[c]);
       send({ type: 'playEvent', card: mode.card, location: loc, character });
+    } else if (mode.kind === 'eventPath') {
+      setMode({ ...mode, path: [...mode.path, loc] });
     }
   };
 
@@ -444,6 +451,42 @@ export function Game({
               <button onClick={() => setMode({ kind: 'idle' })}>cancel</button>
             </div>
           )}
+          {mode.kind === 'eventPath' && (
+            <div className="overlay-hint">
+              {!mode.character ? (
+                <>
+                  <strong>{EVENTS.find((e) => e.key === mode.event)?.name}</strong> — choose a character to slip away (no
+                  search):{' '}
+                  {me!.characters
+                    .filter((c) => state.characters[c])
+                    .map((c) => (
+                      <button key={c} onClick={() => setMode({ ...mode, character: c, path: [] })}>
+                        {CHARACTER_MAP[c].name}
+                      </button>
+                    ))}{' '}
+                  <button onClick={() => setMode({ kind: 'idle' })}>cancel</button>
+                </>
+              ) : (
+                <>
+                  {CHARACTER_MAP[mode.character].name}: click up to {mode.maxLegs} destinations.
+                  {' Route: '}
+                  {[state.characters[mode.character].location, ...mode.path].map((l) => MAP[l].name).join(' → ')}
+                  {'  '}
+                  <button
+                    className="primary"
+                    disabled={mode.path.length === 0}
+                    onClick={() => send({ type: 'playEvent', card: mode.card, character: mode.character!, path: mode.path })}
+                  >
+                    Go
+                  </button>{' '}
+                  {mode.path.length > 0 && (
+                    <button onClick={() => setMode({ ...mode, path: mode.path.slice(0, -1) })}>undo leg</button>
+                  )}{' '}
+                  <button onClick={() => setMode({ kind: 'idle' })}>cancel</button>
+                </>
+              )}
+            </div>
+          )}
           {mode.kind === 'travelPlan' && (
             <TravelDialog
               state={state}
@@ -545,6 +588,8 @@ export function Game({
                     legal={legal}
                     onPlay={(a) => {
                       if (a) send(a);
+                      else if (card.kind === 'event' && card.event === 'elven_cloaks')
+                        setMode({ kind: 'eventPath', card: card.id, event: card.event, character: null, maxLegs: 2, path: [] });
                       else if (card.kind === 'event') setMode({ kind: 'eventTarget', card: card.id, event: card.event });
                     }}
                   />
@@ -870,6 +915,8 @@ function CardView({
     const def = EVENTS.find((e) => e.key === card.event)!;
     const direct = legal.find((a) => a.type === 'playEvent' && a.card === card.id && !a.location);
     const needsTarget = ['eagles', 'orc_infighting', 'conflicting_orders', 'red_arrow', 'gwaihir'].includes(card.event);
+    // Events that open a multi-leg character path picker.
+    const needsPath = card.event === 'elven_cloaks';
     return (
       <div className="card event-card">
         <div>
@@ -877,8 +924,8 @@ function CardView({
           <div className="card-text"><RichText>{def.text}</RichText>{def.reconstructed ? ' ≈' : ''}</div>
         </div>
         <div className="card-actions">
-          {direct && !needsTarget && <button onClick={() => onPlay(direct)}>Play</button>}
-          {needsTarget && <button onClick={() => onPlay(null)}>Play…</button>}
+          {direct && !needsTarget && !needsPath && <button onClick={() => onPlay(direct)}>Play</button>}
+          {(needsTarget || needsPath) && <button onClick={() => onPlay(null)}>Play…</button>}
         </div>
       </div>
     );
