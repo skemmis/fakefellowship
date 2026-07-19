@@ -1057,3 +1057,23 @@ select {
 .eye-marker image {
   filter: drop-shadow(0 0 10px rgba(220, 40, 20, 0.9));
 }
+
+/* ---- Named character abilities ---- */
+.abilities {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 6px 0 4px;
+}
+.ability-block {
+  line-height: 1.35;
+}
+.ability-name {
+  font-weight: bold;
+  color: var(--accent);
+  font-size: 13px;
+}
+.ability-block .gicon {
+  height: 1.05em;
+  vertical-align: -0.18em;
+}

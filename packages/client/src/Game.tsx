@@ -25,7 +25,7 @@ import {
 } from '@emberfall/engine';
 import { net } from './net.js';
 import { MapView } from './MapView.js';
-import { DieFace, GIcon, Sym } from './icons.js';
+import { DieFace, GIcon, RichText, Sym } from './icons.js';
 
 const SYMBOL_GLYPH: Record<SymbolKind, string> = {
   friendship: '❤',
@@ -579,7 +579,7 @@ function ObjectiveText({ id }: { id: string }) {
   const def = OBJECTIVE_MAP[id];
   return (
     <span title={def.text}>
-      <strong>{def.name}</strong> <span className="hint">— {def.text}</span>
+      <strong>{def.name}</strong> <span className="hint">— <RichText>{def.text}</RichText></span>
     </span>
   );
 }
@@ -651,8 +651,15 @@ function CharacterPanel({
         <strong>{def.name}</strong>
         <span className="hint"> at {MAP[loc].name}</span>
       </div>
-      <div className="hint ability" title={def.abilityReconstructed ? 'Reconstructed ability — verify against your physical card' : 'Transcribed from the printed card'}>
-        {def.abilityText} {def.abilityReconstructed ? '≈' : ''}
+      <div className="abilities">
+        {def.abilities.map((ab) => (
+          <div key={ab.name} className="ability-block">
+            <span className="ability-name">{ab.name}</span>{' '}
+            <span className="hint">
+              <RichText>{ab.text}</RichText>
+            </span>
+          </div>
+        ))}
       </div>
       {myTurn && (
         <div className="action-buttons">
@@ -704,7 +711,7 @@ function CharacterPanel({
           {legal
             .filter((a): a is Extract<Action, { type: 'ability' }> => a.type === 'ability' && a.character === character)
             .map((a, i) => (
-              <button key={i} onClick={() => onAct(a)} title={def.abilityText}>
+              <button key={i} onClick={() => onAct(a)} title={def.abilities.map((ab) => `${ab.name}: ${ab.text}`).join('\n')}>
                 {abilityLabel(a)}
               </button>
             ))}
@@ -758,7 +765,7 @@ function CardView({
       <div className="card event-card">
         <div>
           <span className="card-name">{def.name}</span>
-          <div className="card-text">{def.text}{def.reconstructed ? ' ≈' : ''}</div>
+          <div className="card-text"><RichText>{def.text}</RichText>{def.reconstructed ? ' ≈' : ''}</div>
         </div>
         <div className="card-actions">
           {direct && !needsTarget && <button onClick={() => onPlay(direct)}>Play</button>}

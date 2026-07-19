@@ -2,10 +2,10 @@ import type { CharacterDef, CharacterId } from '../types.js';
 
 /**
  * The 13 playable characters. Names and starting locations are from the
- * rulebook; abilities are implemented from a community reference sheet and
- * paraphrased here in our own words — spot-check against the printed cards.
- * `abilityReconstructed` stays true only where our implementation knowingly
- * simplifies (noted inline).
+ * rulebook; abilities are split out by their printed names and paraphrased
+ * here in our own words. Symbol names in the text (Friendship / Valor /
+ * Stealth / Resistance / hope / Nazgûl / shadow troop / Eye) are rendered as
+ * icons in the UI.
  */
 export const CHARACTERS: CharacterDef[] = [
   {
@@ -14,130 +14,156 @@ export const CHARACTERS: CharacterDef[] = [
     title: 'The Ring-bearers',
     start: 'the_shire',
     bearer: true,
-    abilityText:
-      'Every Travel costs 1 Stealth or a search. Sam can spend Friendship during a search to cancel harmful dice (1 each). Preparing at a haven inside the card\'s own region banks an extra token. Frodo may put on the Ring when traveling: lose 1 hope and draw the Eye, but the search ignores shadow troops.',
-    abilityReconstructed: false,
     color: '#e0a458',
+    abilities: [
+      { name: 'The Ring-bearers', text: 'Whenever Frodo Travels (or is brought along on a Travel), the current player must either spend 1 Stealth or roll a search at his destination.' },
+      { name: "Elrond's Support", text: "Once per turn, when Frodo Prepares at a haven in the card's own region, bank 1 extra token." },
+      { name: "Sam's Aid", text: 'Whenever a search is rolled, spend Friendship to ignore that many harmful dice (1 each).' },
+      { name: 'Put on the Ring', text: 'Before a search, Frodo may ignore all shadow troops present — lose 1 hope and the Eye shifts to his region.' },
+    ],
   },
   {
     id: 'merry_pippin',
     name: 'Merry & Pippin',
     title: 'The Young Hobbits',
     start: 'the_shire',
-    abilityText:
-      'Once per turn (action): gain a Friendship token. In Frodo\'s location, an action and 3 Friendship buy 2 hope. Any time fewer than 4 Nazgûl haunt their region: 1 Friendship lures 2 Nazgûl into it.',
-    abilityReconstructed: false,
     color: '#9bc06e',
+    abilities: [
+      { name: 'Loyal Friend', text: 'Once per turn (action): gain a Friendship token.' },
+      { name: 'Distract', text: 'Any turn: while fewer than 4 Nazgûl haunt their region, spend 1 Friendship to lure up to 2 Nazgûl into it.' },
+      { name: 'Give Us a Song!', text: 'Action: in Frodo\'s location, spend 3 Friendship to gain 2 hope.' },
+    ],
   },
   {
     id: 'aragorn',
     name: 'Aragorn',
     title: 'Heir of Isildur',
     start: 'weather_hills',
-    abilityText:
-      'One free reroll on each search where he is present. In his battles, each Rout fells 2 shadow troops. Once per turn (action), after any objective is complete: his blade removes 1 shadow troop from his location.',
-    abilityReconstructed: false,
     color: '#3d5a80',
+    abilities: [
+      { name: 'Ranger of the North', text: 'Present at a search, he may reroll 1 die (free).' },
+      { name: 'Captain of the West', text: 'Present at a battle, each Rout removes up to 2 shadow troops instead of 1.' },
+      { name: 'Andúril', text: 'Once per turn (action): if at least 1 objective is complete, remove 1 shadow troop from his location.' },
+    ],
   },
   {
     id: 'arwen',
     name: 'Arwen',
     title: 'Evenstar',
     start: 'rivendell',
-    abilityText:
-      'Musters at Elven locations without spending Friendship. When she Prepares, if a character stands in the card\'s region, an Elven troop travels from her to them. Once per turn, her Fellowship at a haven needs no matching region. Solo game: once per turn her Prepare card need not match her region either.',
-    abilityReconstructed: false,
     color: '#8ea8c3',
+    abilities: [
+      { name: 'Evenstar', text: 'Musters at Elven locations without spending Friendship.' },
+      { name: 'Send Aid', text: "When she Prepares, if a character stands in the card's region, move 1 Elven troop from her location to them." },
+      { name: 'Give Counsel', text: 'Once per turn, her Fellowship at a haven needs no matching region.' },
+      { name: 'Solo Game', text: "Once per turn (solo), her Prepare card need not match her region." },
+    ],
   },
   {
     id: 'boromir',
     name: 'Boromir',
     title: 'Captain of the White Tower',
     start: 'minas_tirith',
-    abilityText:
-      'Musters at Gondor locations without spending Friendship. Capture costs him 1 less Valor. But the Ring tempts him: his Fellowship can never pass Resistance cards.',
-    abilityReconstructed: false,
     color: '#b23a48',
+    abilities: [
+      { name: 'Heir to the Steward', text: 'Musters at Gondor locations without spending Friendship.' },
+      { name: 'Hero of Gondor', text: 'His Capture costs 1 fewer Valor.' },
+      { name: 'Tempted by Power', text: 'In the Fellowship action he can never give Resistance (and none may be taken from him).' },
+    ],
   },
   {
     id: 'eomer',
     name: 'Éomer',
     title: 'Marshal of the Mark',
     start: 'eastemnet',
-    abilityText:
-      'Once per turn he rides: a free bonus Travel. In battles at his location with Rohirrim present, 1 friendly-troop loss is ignored.',
-    abilityReconstructed: false,
     color: '#a1683a',
+    abilities: [
+      { name: 'Rider of Rohan', text: 'Once per turn on his turn: a free bonus Travel action.' },
+      { name: 'Marshal of the Mark', text: 'If Éomer and a Rohirrim troop are present at a battle, ignore the loss of 1 friendly troop.' },
+    ],
   },
   {
     id: 'eowyn',
     name: 'Éowyn',
     title: 'Shieldmaiden of Rohan',
     start: 'edoras',
-    abilityText:
-      'Musters at Rohirrim locations without spending Friendship. When she stands in a rolled battle, each Nazgûl! result destroys a Nazgûl in her region instead of costing 2 friendly troops.',
-    abilityReconstructed: false,
     color: '#d9c26a',
+    abilities: [
+      { name: 'Shieldmaiden of Rohan', text: 'Musters at Rohirrim locations without spending Friendship.' },
+      { name: 'No Living Man Am I!', text: 'Present at a battle, each Nazgûl result destroys a Nazgûl in her region (removed from the game) instead of costing 2 friendly troops.' },
+    ],
   },
   {
     id: 'faramir',
     name: 'Faramir',
     title: 'Ranger of Ithilien',
     start: 'minas_tirith',
-    abilityText:
-      'Special paths cost him 1 fewer symbol. When he Travels with friendly troops, he may Attack at his destination as a free action — and on that ambush, 1 Stealth turns a battle die to a shadow-troop kill (Rout). Once per turn (action), from a haven: take a Resistance region card matching his region from the discard pile.',
-    abilityReconstructed: false,
     color: '#5d7052',
+    abilities: [
+      { name: 'Ambush', text: 'When he Travels with a friendly troop, he may make a free Attack at his destination — and on that ambush, 1 Stealth turns a battle die to a shadow-troop kill (Rout).' },
+      { name: 'Stealthy', text: 'Special paths cost him 1 fewer symbol.' },
+      { name: 'Wisdom of the Eldar', text: "Once per turn (action): from a haven, take a Resistance region card matching his region from the discard pile." },
+    ],
   },
   {
     id: 'galadriel',
     name: 'Galadriel',
     title: 'Lady of Lórien',
     start: 'lorien',
-    abilityText:
-      'In battles with an Elven troop present, one free reroll. At a haven (any player\'s turn): 1 Friendship summons a random event left out of the game. Once per turn (action): her Mirror reveals the next 4 player cards.',
-    abilityReconstructed: true, // Mirror: the printed card also lets you rearrange them
     color: '#e8e2d5',
+    abilities: [
+      { name: 'Lady of Light', text: 'Any turn, while in a haven: spend 1 Friendship to draw a random event that was left out of the game at setup.' },
+      { name: 'Mirror of Galadriel', text: 'Action: reveal the top 4 player cards and return them to the top in any order.' },
+      { name: 'Nenya', text: 'If Galadriel and an Elven troop are present at a battle, reroll up to 1 die (free).' },
+    ],
   },
   {
     id: 'gandalf',
     name: 'Gandalf',
     title: 'The Grey Pilgrim',
     start: 'tharbad',
-    abilityText:
-      'His Muster adds an extra troop. Traveling alone on ordinary roads, he covers 2 connections. In battles where he stands, spend Valor to change that many battle dice to any faces you choose.',
-    abilityReconstructed: false,
     color: '#a0a0b8',
+    abilities: [
+      { name: 'Mithrandir', text: 'His Muster adds up to 2 troops instead of 1.' },
+      { name: 'Shadowfax', text: 'Traveling alone on ordinary roads, he may move 2 locations (no special paths).' },
+      { name: 'Light and Flame', text: 'Present at a battle, spend Valor to change that many battle dice to any faces you choose.' },
+    ],
   },
   {
     id: 'gimli',
     name: 'Gimli',
     title: 'Son of Glóin',
     start: 'erebor',
-    abilityText:
-      'Musters at Dwarven locations without spending Friendship. Once per turn (action): his craft yields a Valor token.',
-    abilityReconstructed: false,
     color: '#7d5ba6',
+    abilities: [
+      { name: 'Son of Glóin', text: 'Musters at Dwarven locations without spending Friendship.' },
+      { name: 'Dwarven Craft', text: 'Once per turn (action): gain a Valor token.' },
+    ],
   },
   {
     id: 'gollum',
     name: 'Gollum',
     title: 'The Wretched Guide',
     start: 'moria',
-    abilityText:
-      'Cannot Muster, Attack, or Capture. Treachery: whenever Gollum, Frodo, and a friendly troop all come together in one location, lose 1 hope. Searches where he lurks roll 3 fewer dice. He Prepares anywhere (no haven needed) and may send 1 friendly troop from his location to an adjacent one (no battle). Once per turn (action): he filches any card from the discard pile.',
-    abilityReconstructed: false,
     color: '#6f8f6a',
+    abilities: [
+      { name: 'They Tricks Us!', text: 'When Gollum, Frodo, and a friendly troop come together in one location, lose 1 hope.' },
+      { name: 'Guide', text: 'Searches where Gollum is present roll 3 fewer dice.' },
+      { name: 'Slinker', text: 'Action (once per turn): take any 1 card from the player discard pile.' },
+      { name: 'Cunning', text: 'He Prepares anywhere (no haven needed), and may send 1 friendly troop from his location to an adjacent one (no battle). He cannot Muster, Attack, or Capture.' },
+    ],
   },
   {
     id: 'legolas',
     name: 'Legolas',
     title: 'Prince of the Woodland Realm',
     start: 'woodland_realm',
-    abilityText:
-      'Once per turn (action): gain a Stealth token. Any player\'s turn: 1 Stealth lets him shoot — remove a shadow troop at or beside him, or send a Nazgûl in his region back to Mordor. When he Prepares, look at the top card of the shadow deck.',
-    abilityReconstructed: false,
     color: '#2a7f62',
+    abilities: [
+      { name: 'Walk Silently', text: 'Action (once per turn): gain a Stealth token.' },
+      { name: 'Sure Shot', text: "Any turn: spend 1 Stealth to remove a shadow troop from Legolas's location or an adjacent one, or send a Nazgûl in his region to Mordor." },
+      { name: 'Keen Sight', text: 'When Legolas Prepares, look at the top card of the shadow deck.' },
+    ],
   },
 ];
 

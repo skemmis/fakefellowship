@@ -76,6 +76,13 @@ export interface BattleLineDef {
 // Characters
 // ---------------------------------------------------------------------------
 
+export interface CharacterAbility {
+  /** The ability's printed name (e.g. "Ambush"). */
+  name: string;
+  /** Paraphrased mechanics; symbol names may be written for icon rendering. */
+  text: string;
+}
+
 export interface CharacterDef {
   id: CharacterId;
   name: string;
@@ -83,9 +90,8 @@ export interface CharacterDef {
   start: LocationId;
   /** True for the shardbearer pair (the analog of the ring-bearer unit). */
   bearer?: boolean;
-  abilityText: string;
-  /** True if reconstructed rather than transcribed from the source game. */
-  abilityReconstructed: boolean;
+  /** The character's named abilities, split out as on the printed card. */
+  abilities: CharacterAbility[];
   color: string;
 }
 
