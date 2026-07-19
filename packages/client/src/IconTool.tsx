@@ -162,12 +162,15 @@ export function IconTool() {
   const onMove = (e: React.MouseEvent) => {
     if (!drag) return;
     const p = pos(e);
+    // Fixed square: the side is the larger drag axis, growing in the
+    // direction of the drag from the anchor point.
+    const side = Math.max(Math.abs(p.x - drag.x), Math.abs(p.y - drag.y));
     setDragBox({
       src: source,
-      x: Math.min(drag.x, p.x),
-      y: Math.min(drag.y, p.y),
-      w: Math.abs(p.x - drag.x),
-      h: Math.abs(p.y - drag.y),
+      x: p.x >= drag.x ? drag.x : drag.x - side,
+      y: p.y >= drag.y ? drag.y : drag.y - side,
+      w: side,
+      h: side,
     });
   };
   const onUp = () => {
@@ -201,9 +204,10 @@ export function IconTool() {
       <div className="icon-side">
         <h2>Icon cropper</h2>
         <p className="hint">
-          Pick an icon, then drag a box around it on the page. The preview
-          shows exactly what will ship. When everything looks right, export
-          and send me <code>fate-icons.json</code>.
+          Pick an icon, then drag a square around it on the page (the
+          selection stays square automatically). The preview shows exactly
+          what will ship. When everything looks right, export and send me{' '}
+          <code>fate-icons.json</code>.
         </p>
         <div className="icon-controls">
           <label>
