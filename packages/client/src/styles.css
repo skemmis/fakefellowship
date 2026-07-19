@@ -1001,3 +1001,12 @@ select {
 .crop-box span { position: absolute; top: -16px; left: 0; white-space: nowrap; text-shadow: 0 1px 2px #000; }
 .crop-box.selected { border-color: #ffd76a; background: rgba(255, 215, 106, 0.15); color: #ffe9ad; }
 .crop-box.dragging { border-style: dashed; }
+.ed-import {
+  display: inline-block;
+  padding: 6px 12px;
+  border: 1px solid #5a5346;
+  border-radius: 6px;
+  cursor: pointer;
+  background: #2a251d;
+}
+.ed-import:hover { background: #363023; }

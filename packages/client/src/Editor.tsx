@@ -183,6 +183,26 @@ export function Editor() {
     a.click();
   };
 
+  const importJson = (file: File) => {
+    file.text().then((text) => {
+      try {
+        const parsed = JSON.parse(text);
+        if (!parsed.regions || !parsed.locations || !parsed.edges) {
+          alert('That does not look like a fate-board.json export.');
+          return;
+        }
+        if (!confirm('Replace your current board edits with this file?')) return;
+        update((d) => {
+          d.regions = parsed.regions;
+          d.locations = parsed.locations;
+          d.edges = parsed.edges;
+        });
+      } catch {
+        alert('Could not parse that file as JSON.');
+      }
+    });
+  };
+
   // Group edges by pair for parallel-offset rendering.
   const pairKey = (e: EdgeDef) => [e.a, e.b].sort().join('|');
   const edgeGroups = useMemo(() => {
@@ -597,6 +617,19 @@ export function Editor() {
           <h3>Save / export</h3>
           <div className="ed-chiprow">
             <button className="primary" onClick={exportJson}>⬇ Export fate-board.json</button>
+            <label className="ed-import">
+              ⬆ Import fate-board.json
+              <input
+                type="file"
+                accept="application/json,.json"
+                style={{ display: 'none' }}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) importJson(f);
+                  e.target.value = '';
+                }}
+              />
+            </label>
             <button
               onClick={() => {
                 if (confirm('Discard all local edits and reload the shipped board data?')) {
