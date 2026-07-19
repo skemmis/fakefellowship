@@ -161,9 +161,8 @@ export function buildEventCards(): EventCard[] {
 }
 
 // 12 Skies Darken cards; step 3 ("Under Cover of Darkness") drops 3 shadow troops
-// on the location the card shows. Those 12 target locations live only on the
-// physical cards (the rulebook shows just one example, South Ithilien), so this
-// list is a stand-in until the cards are photographed. See docs/SOURCE-TEXT.md.
+// on the location the card shows. All 12 targets confirmed from photos of the
+// physical cards (see docs/SOURCE-TEXT.md).
 const DARKEN_TARGETS: LocationId[] = [
   'druadan_forest', 'dorwinion', 'gladden_fields', 'hollin', 'mount_doom',
   'north_ithilien', 'south_ithilien', 'southern_mirkwood', 'tharbad',

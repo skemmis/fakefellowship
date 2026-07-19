@@ -281,22 +281,21 @@ specials); 3 battle dice; 7 search dice; **48 shadow troops**; **35 friendly tro
 (8 Dwarven, 9 Elven, 8 Rohirrim, 10 Gondor)** — exactly `FACTION_TOTALS`; 6 haven/stronghold
 tokens; **36 symbol tokens**.
 
-## 9. Skies Darken cards `[RULEBOOK p15]` — mechanic CONFIRMED
+## 9. Skies Darken cards `[RULEBOOK p15]` `[OBJ-PHOTO cards]` — CONFIRMED
 Each has 4 steps: 1) The Shadow Grows — threat rate +1. 2) I See You! — if the Eye is in
 Frodo's region lose 2 hope, else shift the Eye there. 3) Under Cover of Darkness — add 3
 shadow troops to **the location the card shows** (battle there if friendly troops present;
 lose 1 hope per troop that can't be placed). 4) The Danger Intensifies — reshuffle the
 shadow discard pile onto the shadow deck. Resolve, then remove the card from the game.
 
-## 10. Still not fully pinned (small, non-breaking)
+The 12 step-3 target locations (`DARKEN_TARGETS`), confirmed from photos of all 12 cards:
+Drúadan Forest, Dorwinion, Gladden Fields, Hollin, Mount Doom, North Ithilien, South
+Ithilien, Southern Mirkwood, Tharbad, Fangorn Forest, Drúwaith Iaur, Emyn Muil.
 
-1. **⚠️ ON-CARD-ONLY — the 12 Skies Darken target locations** (`DARKEN_TARGETS`). The
-   step-3 troop-drop location lives only on each physical card; the rulebook shows just
-   one example (South Ithilien). Current targets are a reasonable stand-in and don't
-   affect correctness, only which locations get pressured. Photos of the 12 cards would
-   pin this exactly.
-2. **Symbol-token split** — the rulebook lists **36 symbol tokens** total but doesn't
-   split them by symbol; the fan sheet says "only 12 rings (Resistance)". The engine uses
-   9 of each (36 total). This only bounds how many tokens can be banked at once and never
-   blocks the 5 needed to destroy the Ring, so it's cosmetic-ish. A component-list photo
-   would confirm the exact split.
+## 10. The one remaining soft value (non-breaking)
+
+**Symbol-token split** — the rulebook lists **36 symbol tokens** total but does not split
+them by symbol; the fan sheet says "only 12 rings (Resistance)". The engine uses 9 of each
+(36 total). This only bounds how many tokens can be banked at once and never blocks the 5
+Resistance needed to destroy the Ring, so it's effectively cosmetic. A photo of the token
+component list would confirm the exact split — the last open detail in the whole game.
