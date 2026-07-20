@@ -692,6 +692,51 @@ export function Game({
         <aside className="sidebar">
           {pend && <PendingPanel state={state} playerId={playerId} legal={legal} onAct={send} />}
 
+          {/* Hand + tokens */}
+          {me && (
+            <section className="panel">
+              <h3>
+                Your hand ({me.hand.length}/7)
+                <span className="tokens">
+                  {(Object.keys(SYMBOL_GLYPH) as SymbolKind[]).map((sym) => (
+                    <span key={sym} className="token" title={`${SYMBOL_INFO[sym].name} tokens — ${SYMBOL_INFO[sym].note}`}>
+                      <Sym s={sym} />
+                      {me.tokens[sym]}
+                    </span>
+                  ))}
+                </span>
+              </h3>
+              <div className="hand">
+                {me.hand.map((card) => (
+                  <CardView
+                    key={card.id}
+                    card={card}
+                    legal={legal}
+                    onPlay={(a) => {
+                      if (a) return send(a);
+                      if (card.kind !== 'event') return;
+                      const ev = card.event;
+                      if (ev === 'elven_cloaks') setMode({ kind: 'eventPath', card: card.id, event: ev, character: null, maxLegs: 2, path: [] });
+                      else if (ev === 'entmoot') setMode({ kind: 'entmoot', card: card.id });
+                      else if (ev === 'red_arrow' || ev === 'gwaihir' || ev === 'conflicting_orders')
+                        setMode({ kind: 'eventMove', card: card.id, event: ev, from: null, to: null });
+                      else if (ev === 'rohan_horses') setMode({ kind: 'rohanRide', card: card.id, start: null, path: [] });
+                      else if (ev === 'eagles') setMode({ kind: 'eventChar', card: card.id, event: 'eagles', character: null });
+                      else if (ev === 'lembas') setMode({ kind: 'eventChar', card: card.id, event: 'lembas', character: null });
+                      else if (ev === 'council_of_elrond') setMode({ kind: 'council', card: card.id, chars: [] });
+                      else setMode({ kind: 'eventTarget', card: card.id, event: ev });
+                    }}
+                  />
+                ))}
+                {me.hand.length === 0 && <p className="hint">No cards. You draw 2 at the end of your turn.</p>}
+              </div>
+              <p className="hint">
+                Region cards are spent for their symbol: <Sym s="friendship" />=muster, <Sym s="valor" />=battle/capture,{' '}
+                <Sym s="stealth" />=hide Frodo, <Sym s="resistance" />=reroll — or banked as tokens with Prepare at a haven.
+              </p>
+            </section>
+          )}
+
           {state.phase === 'playing' && !pend && me && (
             <section className="panel">
               <h3>Your characters</h3>
@@ -742,51 +787,6 @@ export function Game({
                     ↺ Reset turn
                   </button>
                 ))}
-            </section>
-          )}
-
-          {/* Hand + tokens */}
-          {me && (
-            <section className="panel">
-              <h3>
-                Your hand ({me.hand.length}/7)
-                <span className="tokens">
-                  {(Object.keys(SYMBOL_GLYPH) as SymbolKind[]).map((sym) => (
-                    <span key={sym} className="token" title={`${SYMBOL_INFO[sym].name} tokens — ${SYMBOL_INFO[sym].note}`}>
-                      <Sym s={sym} />
-                      {me.tokens[sym]}
-                    </span>
-                  ))}
-                </span>
-              </h3>
-              <div className="hand">
-                {me.hand.map((card) => (
-                  <CardView
-                    key={card.id}
-                    card={card}
-                    legal={legal}
-                    onPlay={(a) => {
-                      if (a) return send(a);
-                      if (card.kind !== 'event') return;
-                      const ev = card.event;
-                      if (ev === 'elven_cloaks') setMode({ kind: 'eventPath', card: card.id, event: ev, character: null, maxLegs: 2, path: [] });
-                      else if (ev === 'entmoot') setMode({ kind: 'entmoot', card: card.id });
-                      else if (ev === 'red_arrow' || ev === 'gwaihir' || ev === 'conflicting_orders')
-                        setMode({ kind: 'eventMove', card: card.id, event: ev, from: null, to: null });
-                      else if (ev === 'rohan_horses') setMode({ kind: 'rohanRide', card: card.id, start: null, path: [] });
-                      else if (ev === 'eagles') setMode({ kind: 'eventChar', card: card.id, event: 'eagles', character: null });
-                      else if (ev === 'lembas') setMode({ kind: 'eventChar', card: card.id, event: 'lembas', character: null });
-                      else if (ev === 'council_of_elrond') setMode({ kind: 'council', card: card.id, chars: [] });
-                      else setMode({ kind: 'eventTarget', card: card.id, event: ev });
-                    }}
-                  />
-                ))}
-                {me.hand.length === 0 && <p className="hint">No cards. You draw 2 at the end of your turn.</p>}
-              </div>
-              <p className="hint">
-                Region cards are spent for their symbol: <Sym s="friendship" />=muster, <Sym s="valor" />=battle/capture,{' '}
-                <Sym s="stealth" />=hide Frodo, <Sym s="resistance" />=reroll — or banked as tokens with Prepare at a haven.
-              </p>
             </section>
           )}
 
