@@ -438,6 +438,22 @@ export function legalActions(s: GameState, playerId?: string): Action[] {
     }
   }
 
+  // Faramir's Ambush: leading troops into a location earns a FREE Attack there,
+  // available even if Faramir has no actions left (so it isn't gated by canAct).
+  if (s.turn.freeAttack) {
+    const fc = s.turn.freeAttack.character;
+    const floc = s.turn.freeAttack.location;
+    if (
+      p.characters.includes(fc) &&
+      s.characters[fc]?.location === floc &&
+      (s.shadow[floc] ?? 0) > 0 &&
+      friendlyAt(s, floc) > 0 &&
+      !out.some((a) => a.type === 'attack' && a.character === fc)
+    ) {
+      out.push({ type: 'attack', character: fc, dice: Math.min(MAX_BATTLE_DICE, friendlyAt(s, floc)) });
+    }
+  }
+
   // Destroy the One Ring
   if (
     p.characters.includes(BEARER) &&

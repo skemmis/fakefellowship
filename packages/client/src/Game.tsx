@@ -957,6 +957,7 @@ function CharacterPanel({
   if (!loc) return null;
   const can = (type: Action['type']) => legal.some((a) => 'character' in a && a.character === character && a.type === type);
   const attack = legal.find((a) => a.type === 'attack' && a.character === character);
+  const isFreeAmbush = state.turn.freeAttack?.character === character && state.turn.freeAttack?.location === loc;
   const fellowships = legal.filter((a) => a.type === 'fellowship' && a.character === character);
   const prepares = legal.filter((a) => a.type === 'prepare' && a.character === character);
   const destroy = legal.find((a) => a.type === 'destroyEmber');
@@ -987,10 +988,15 @@ function CharacterPanel({
           </button>
           <button
             disabled={!attack}
+            className={isFreeAmbush ? 'primary' : ''}
             onClick={() => attack && onAct(attack)}
-            title="Roll battle dice (1 per friendly troop here, max 3). Shifts the Eye of Sauron to this region!"
+            title={
+              isFreeAmbush
+                ? "Faramir's Ambush: a FREE Attack here (no action) for leading troops in. Roll 1 die per friendly troop; you may spend Stealth to turn a die to Rout."
+                : 'Roll battle dice (1 per friendly troop here, max 3). Shifts the Eye of Sauron to this region!'
+            }
           >
-            Attack
+            {isFreeAmbush ? '⚔ Ambush! (free)' : 'Attack'}
           </button>
           <button
             disabled={!can('muster')}

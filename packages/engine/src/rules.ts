@@ -988,6 +988,7 @@ function pump(s: GameState, rng: Rng, events: GameEvent[]): void {
         s.turn.actionsUsed = {};
         s.turn.actedOrder = [];
         s.turn.abilityUsed = {};
+        delete s.turn.freeAttack;
         s.turnNumber += 1;
         if (s.solo) {
           s.solo.idx = (s.solo.idx + 1) % s.solo.order.length;
