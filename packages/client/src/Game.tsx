@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   BEARER,
+  ALT_CAPTURE,
   CHARACTER_MAP,
   connection,
   CONNECTIONS,
@@ -22,6 +23,8 @@ import {
   type GameState,
   type LocationId,
   type PlayerCard,
+  type PlayerState,
+  type PaySource,
   type SymbolKind,
 } from '@emberfall/engine';
 import { net } from './net.js';
@@ -246,6 +249,7 @@ export function Game({
     | { kind: 'travelPlan'; plan: TravelPlan }
     | { kind: 'eventTarget'; card: string; event: string }
     | { kind: 'eventPath'; card: string; event: string; character: CharacterId | null; maxLegs: number; path: LocationId[] }
+    | { kind: 'pay'; action: Action; cost: SymbolKind[]; label: string }
     | { kind: 'entmoot'; card: string }
     | { kind: 'eventMove'; card: string; event: 'red_arrow' | 'gwaihir' | 'conflicting_orders'; from: LocationId | null; to: LocationId | null }
     | { kind: 'rohanRide'; card: string; start: LocationId | null; path: LocationId[] }
@@ -338,6 +342,30 @@ export function Game({
   const send = (action: Action) => {
     net.send({ type: 'action', action });
     setMode({ kind: 'idle' });
+  };
+
+  /**
+   * Spending a symbol can come from a banked token or from any region card
+   * bearing it — and which region card leaves your hand matters. Open a picker
+   * whenever more than one combination is possible; otherwise just act.
+   */
+  const payThen = (action: Action, cost: SymbolKind[], label: string) => {
+    if (!me || cost.length === 0) return send(action);
+    const options = cost.map(
+      (sym) => (me.tokens[sym] > 0 ? 1 : 0) + me.hand.filter((c) => c.kind === 'region' && c.symbol === sym).length,
+    );
+    // A single forced option for every symbol (and no duplicate-symbol
+    // ambiguity) means there is nothing to choose.
+    const distinct = new Set(cost);
+    const trivial =
+      options.every((n) => n <= 1) ||
+      [...distinct].every((sym) => {
+        const need = cost.filter((s) => s === sym).length;
+        const have = (me.tokens[sym] > 0 ? 1 : 0) + me.hand.filter((c) => c.kind === 'region' && c.symbol === sym).length;
+        return have <= need;
+      });
+    if (trivial) return send(action);
+    setMode({ kind: 'pay', action, cost, label });
   };
 
   const onClickLocation = (loc: LocationId) => {
@@ -694,6 +722,16 @@ export function Game({
         <aside className="sidebar">
           {pend && <PendingPanel state={state} playerId={playerId} legal={legal} onAct={send} />}
 
+          {mode.kind === 'pay' && me && (
+            <PayPicker
+              me={me}
+              cost={mode.cost}
+              label={mode.label}
+              onCancel={() => setMode({ kind: 'idle' })}
+              onPay={(spend) => send({ ...(mode.action as Action), spend } as Action)}
+            />
+          )}
+
           {/* Hand + tokens */}
           {me && (
             <section className="panel">
@@ -751,6 +789,7 @@ export function Game({
                   legal={legal}
                   onTravel={() => setMode({ kind: 'travel', character: c })}
                   onAct={send}
+                  onPay={payThen}
                 />
               ))}
               {myTurn && (
@@ -946,6 +985,7 @@ function CharacterPanel({
   legal,
   onTravel,
   onAct,
+  onPay,
 }: {
   state: GameState;
   character: CharacterId;
@@ -953,6 +993,7 @@ function CharacterPanel({
   legal: Action[];
   onTravel: () => void;
   onAct: (a: Action) => void;
+  onPay: (a: Action, cost: SymbolKind[], label: string) => void;
 }) {
   const def = CHARACTER_MAP[character];
   const loc = state.characters[character]?.location;
@@ -960,6 +1001,13 @@ function CharacterPanel({
   const can = (type: Action['type']) => legal.some((a) => 'character' in a && a.character === character && a.type === type);
   const attack = legal.find((a) => a.type === 'attack' && a.character === character);
   const isFreeAmbush = state.turn.freeAttack?.character === character && state.turn.freeAttack?.location === loc;
+  // Printed costs, so the payment picker knows what to ask for.
+  const HOME_MUSTER: Record<string, Faction> = { eowyn: 'riders', arwen: 'sylvan', boromir: 'vale', gimli: 'deepholm' };
+  const musterCost: SymbolKind[] =
+    HOME_MUSTER[character] && HOME_MUSTER[character] === MAP[loc].muster ? [] : ['friendship'];
+  const captureCost: SymbolKind[] = Array(character === 'boromir' ? 2 : 3).fill('valor');
+  const altCaptureCost: SymbolKind[] =
+    ALT_CAPTURE.find((g) => g.location === loc && (!g.character || g.character === character))?.cost ?? [];
   const fellowships = legal.filter((a) => a.type === 'fellowship' && a.character === character);
   const prepares = legal.filter((a) => a.type === 'prepare' && a.character === character);
   const destroy = legal.find((a) => a.type === 'destroyEmber');
@@ -1002,7 +1050,7 @@ function CharacterPanel({
           </button>
           <button
             disabled={!can('muster')}
-            onClick={() => onAct({ type: 'muster', character })}
+            onClick={() => onPay({ type: 'muster', character }, musterCost, 'Muster')}
             title="Spend 1 Friendship to add a troop matching this location's muster icon."
           >
             Muster
@@ -1037,14 +1085,14 @@ function CharacterPanel({
           )}
           <button
             disabled={!can('capture')}
-            onClick={() => onAct({ type: 'capture', character })}
+            onClick={() => onPay({ type: 'capture', character }, captureCost, 'Capture')}
             title="At a cleared stronghold with a friendly troop: spend 3 Valor to turn it into a haven (+2 hope, Eye comes here)."
           >
             Capture
           </button>
           {legal.some((a) => a.type === 'capture' && a.character === character && a.alt) && (
             <button
-              onClick={() => onAct({ type: 'capture', character, alt: true })}
+              onClick={() => onPay({ type: 'capture', character, alt: true }, altCaptureCost, 'Capture (alt cost)')}
               title="An objective card's alternative Capture cost (instead of 3 Valor)."
             >
               Capture (alt cost)
@@ -1250,6 +1298,75 @@ function MirrorPanel({
           Set the order
         </button>
         <button onClick={() => onAct({ type: 'mirrorOrder', order: pend.cards })}>Leave unchanged</button>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * Choose exactly which tokens / region cards pay a cost. Region cards carry a
+ * region as well as a symbol, so spending the "wrong" one can cost you a
+ * Fellowship trade, a solo Prepare, or Faramir's Wisdom later.
+ */
+function PayPicker({
+  me,
+  cost,
+  label,
+  onPay,
+  onCancel,
+}: {
+  me: PlayerState;
+  cost: SymbolKind[];
+  label: string;
+  onPay: (spend: PaySource[]) => void;
+  onCancel: () => void;
+}) {
+  const [picks, setPicks] = useState<(PaySource | null)[]>(() => cost.map(() => null));
+  const usedCards = new Set(picks.filter((p): p is PaySource => !!p && !!p.card).map((p) => p.card!));
+  const tokensUsed = (sym: SymbolKind) => picks.filter((p) => p && p.token === sym).length;
+  const ready = picks.every((p) => p !== null);
+
+  return (
+    <section className="panel pending">
+      <h3>Pay for {label}</h3>
+      <p className="hint">Choose what to spend — which region card you discard can matter later.</p>
+      {cost.map((sym, i) => {
+        const cards = me.hand.filter(
+          (c): c is Extract<PlayerCard, { kind: 'region' }> =>
+            c.kind === 'region' && c.symbol === sym && (!usedCards.has(c.id) || picks[i]?.card === c.id),
+        );
+        const tokenFree = me.tokens[sym] - tokensUsed(sym) > 0 || picks[i]?.token === sym;
+        const pick = picks[i];
+        return (
+          <div key={i} className="pay-row">
+            <span className="pay-need">
+              <Sym s={sym} /> #{i + 1}
+            </span>
+            {tokenFree && (
+              <button
+                className={pick?.token === sym ? 'primary' : ''}
+                onClick={() => setPicks((ps) => ps.map((p, j) => (j === i ? { token: sym } : p)))}
+              >
+                token ({me.tokens[sym]})
+              </button>
+            )}
+            {cards.map((c) => (
+              <button
+                key={c.id}
+                className={pick?.card === c.id ? 'primary' : ''}
+                onClick={() => setPicks((ps) => ps.map((p, j) => (j === i ? { card: c.id } : p)))}
+              >
+                {REGIONS.find((r) => r.id === c.region)?.name}
+              </button>
+            ))}
+          </div>
+        );
+      })}
+      <div className="dialog-row">
+        <button className="primary" disabled={!ready} onClick={() => onPay(picks.filter((p): p is PaySource => !!p))}>
+          Spend
+        </button>
+        <button onClick={onCancel}>Cancel</button>
       </div>
     </section>
   );

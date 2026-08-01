@@ -282,7 +282,15 @@ export function simulateGame(
       }
       choice = best;
     }
-    const result = applyAction(state, decider, choice);
+    let result;
+    try {
+      result = applyAction(state, decider, choice);
+    } catch (err) {
+      // Surface the offending action: a throw here means legalActions offered
+      // something the rules then refused, which is always a bug.
+      (err as Error).message = `${(err as Error).message} [action=${JSON.stringify(choice)} decider=${decider} pending=${state.pending?.type ?? 'none'}]`;
+      throw err;
+    }
     state = result.state;
     if (opts.trace) for (const e of result.events) console.log(`  ${e.text}`);
     actionsTaken++;

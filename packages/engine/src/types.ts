@@ -359,6 +359,15 @@ export interface GameState {
 /** How the bearer's arrival is covered when traveling. */
 export type BearerCover = 'stealth' | 'search' | 'ring';
 
+/**
+ * One unit of payment the player picked explicitly: either a banked token or a
+ * specific region card from hand. Which region card is spent matters (regions
+ * gate Fellowship trades, the solo Prepare, Faramir's Wisdom, ...), so the UI
+ * names them rather than letting the engine choose. Omitted => the engine
+ * pays automatically (tokens first), which is what the bots use.
+ */
+export type PaySource = { token: SymbolKind; card?: never } | { card: string; token?: never };
+
 export type Action =
   | {
       type: 'travel';
@@ -370,6 +379,8 @@ export type Action =
       companions?: CharacterId[];
       /** Required whenever the bearer moves (himself or brought along). */
       cover?: BearerCover;
+      /** Exactly which tokens/cards to spend on path costs + stealth cover. */
+      spend?: PaySource[];
     }
   | { type: 'fellowship'; character: CharacterId; give?: string; takeFrom?: PlayerId; take?: string }
   | {
@@ -381,15 +392,19 @@ export type Action =
       variant?: 'valor' | 'stealth';
       /** Hobbits' pledge: the Friendship region card discarded. */
       card?: string;
+      /** Exactly which tokens/cards to spend on this objective's cost. */
+      spend?: PaySource[];
     }
   | { type: 'prepare'; character: CharacterId; card: string; location2?: LocationId }
-  | { type: 'muster'; character: CharacterId }
+  | { type: 'muster'; character: CharacterId; spend?: PaySource[] }
   | { type: 'attack'; character: CharacterId; dice: number }
   | {
       type: 'capture';
       character: CharacterId;
       /** Pay an objective card's alternative cost instead of 3 Valor. */
       alt?: boolean;
+      /** Exactly which tokens/cards to spend on the capture cost. */
+      spend?: PaySource[];
     }
   | { type: 'destroyEmber' }
   | {
@@ -401,6 +416,8 @@ export type Action =
       mode?: 'nazgul' | 'peek' | 'song' | 'distract' | 'summon';
       /** Card id target (Faramir/Gollum discard retrieval). */
       card?: string;
+      /** Exactly which tokens/cards to spend on the ability's cost. */
+      spend?: PaySource[];
     }
   | {
       type: 'playEvent';
@@ -427,14 +444,14 @@ export type Action =
     }
   | { type: 'endTurn' }
   // Pending-resolution actions:
-  | { type: 'reroll'; die: number; free?: boolean } // 1 resistance (or valor with Gandalf present); free uses a character's once-per-roll reroll
-  | { type: 'ignoreDie'; die: number } // Sam's aid: 1 friendship neutralizes a harmful search die
-  | { type: 'showValor' } // battle only: spend 1 valor, remove 1 shadow troop
-  | { type: 'eowynStrike'; die: number } // Shieldmaiden card: 2 valor turns a battle die to the Nazgûl face
-  | { type: 'faramirAmbush'; die: number } // Ambush: 1 stealth turns a battle die to Rout
+  | { type: 'reroll'; die: number; free?: boolean; spend?: PaySource[] } // 1 resistance (or valor with Gandalf present); free uses a character's once-per-roll reroll
+  | { type: 'ignoreDie'; die: number; spend?: PaySource[] } // Sam's aid: 1 friendship neutralizes a harmful search die
+  | { type: 'showValor'; spend?: PaySource[] } // battle only: spend 1 valor, remove 1 shadow troop
+  | { type: 'eowynStrike'; die: number; spend?: PaySource[] } // Shieldmaiden card: 2 valor turns a battle die to the Nazgûl face
+  | { type: 'faramirAmbush'; die: number; spend?: PaySource[] } // Ambush: 1 stealth turns a battle die to Rout
   | { type: 'mirrorOrder'; order: string[] } // Galadriel: reorder the revealed top cards
-  | { type: 'preventHope' } // ordeal only: buy off 1 hope of the pending loss
-  | { type: 'gandalfWhite'; faces: string[] } // Gandalf the White: 1 valor sets the roll's dice
+  | { type: 'preventHope'; spend?: PaySource[] } // ordeal only: buy off 1 hope of the pending loss
+  | { type: 'gandalfWhite'; faces: string[]; spend?: PaySource[] } // Gandalf the White: 1 valor sets the roll's dice
   | { type: 'confirm' } // apply the pending roll and continue
   /** Objective reward: redeploy 1 friendly troop (Rangers / Subdue Umbar). */
   | { type: 'reposition'; from: LocationId; faction: Faction; to: LocationId }

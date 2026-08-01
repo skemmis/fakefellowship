@@ -42,6 +42,7 @@ import type {
   GameEvent,
   GameState,
   LocationId,
+  PaySource,
   PendingOrdeal,
   PlayerId,
   PlayerState,
@@ -125,20 +126,78 @@ function canPay(p: PlayerState, symbols: SymbolKind[]): boolean {
   return true;
 }
 
-function pay(s: GameState, p: PlayerState, symbols: SymbolKind[], events: GameEvent[]): void {
+/**
+ * Pull the entries covering `symbols` out of a shared pool of chosen payments,
+ * so one action can pay more than once (Travel: a path cost, then Frodo's
+ * stealth cover) from a single player-picked list.
+ */
+function takeSpend(
+  pool: PaySource[] | undefined,
+  symbols: SymbolKind[],
+  p: PlayerState,
+): PaySource[] | undefined {
+  if (!pool || pool.length === 0) return undefined;
+  const out: PaySource[] = [];
+  for (const sym of symbols) {
+    const i = pool.findIndex((q) =>
+      q.token !== undefined
+        ? q.token === sym
+        : p.hand.some((c) => c.id === q.card && c.kind === 'region' && c.symbol === sym),
+    );
+    if (i < 0) return undefined; // incomplete choice: fall back to automatic
+    out.push(...pool.splice(i, 1));
+  }
+  return out;
+}
+
+/**
+ * Spend `symbols`. When the player named exactly which tokens/cards to use
+ * (`spend`), honour that — which region card leaves your hand matters, since
+ * regions gate Fellowship trades, the solo Prepare and Faramir's Wisdom.
+ * Without a choice, fall back to tokens first, then any matching card (what
+ * the bots rely on).
+ */
+function pay(
+  s: GameState,
+  p: PlayerState,
+  symbols: SymbolKind[],
+  events: GameEvent[],
+  spend?: PaySource[],
+): void {
   if (!canPay(p, symbols)) {
     throw new RuleError(`Not enough symbols (need ${symbols.join(', ')}).`);
   }
+  const picks = [...(spend ?? [])];
+  if (picks.length > 0 && picks.length !== symbols.length) {
+    throw new RuleError(`Choose exactly ${symbols.length} payment${symbols.length > 1 ? 's' : ''}.`);
+  }
   for (const sym of symbols) {
-    if (p.tokens[sym] > 0) {
+    // Match the player's own pick for this symbol when they gave one.
+    let picked: PaySource | undefined;
+    if (picks.length > 0) {
+      const i = picks.findIndex((q) =>
+        q.token !== undefined
+          ? q.token === sym
+          : p.hand.some((c) => c.id === q.card && c.kind === 'region' && c.symbol === sym),
+      );
+      if (i < 0) throw new RuleError(`Your chosen payment does not cover ${sym}.`);
+      [picked] = picks.splice(i, 1);
+    }
+    const useToken = picked ? picked.token !== undefined : p.tokens[sym] > 0;
+    if (useToken) {
+      if (p.tokens[sym] <= 0) throw new RuleError(`No ${sym} token to spend.`);
       p.tokens[sym] -= 1;
       s.supply.tokens[sym] += 1;
       events.push({ kind: 'action', text: `${p.name} spends a ${sym} token.` });
     } else {
-      const idx = p.hand.findIndex((c) => c.kind === 'region' && c.symbol === sym);
+      const idx = picked
+        ? p.hand.findIndex((c) => c.id === picked!.card)
+        : p.hand.findIndex((c) => c.kind === 'region' && c.symbol === sym);
+      if (idx < 0) throw new RuleError(`That card is not in your hand.`);
       const [card] = p.hand.splice(idx, 1);
       s.playerDiscard.push(card);
-      events.push({ kind: 'action', text: `${p.name} discards a region card for ${sym}.` });
+      const where = card.kind === 'region' ? ` (${REGION_MAP[card.region].name})` : '';
+      events.push({ kind: 'action', text: `${p.name} discards a region card${where} for ${sym}.` });
     }
   }
 }
@@ -1572,7 +1631,7 @@ export function applyAction(state: GameState, playerId: PlayerId, action: Action
       };
       const free = FREE_MUSTER[c] === faction;
       spendAction(s, c);
-      if (!free) pay(s, p, ['friendship'], events);
+      if (!free) pay(s, p, ['friendship'], events, action.spend);
       const amount = Math.min(c === 'gandalf' ? 2 : 1, s.supply.factions[faction]); // Gandalf inspires an extra troop
       s.supply.factions[faction] -= amount;
       const at = (s.friendly[here] ??= {});
@@ -1638,11 +1697,11 @@ export function applyAction(state: GameState, playerId: PlayerId, action: Action
         );
         if (!grant) throw new RuleError('No alternative Capture cost applies here.');
         spendAction(s, c);
-        pay(s, p, grant.cost, events);
+        pay(s, p, grant.cost, events, action.spend);
       } else {
         const cost = c === 'boromir' ? CAPTURE_COST - 1 : CAPTURE_COST;
         spendAction(s, c);
-        pay(s, p, Array(cost).fill('valor') as SymbolKind[], events);
+        pay(s, p, Array(cost).fill('valor') as SymbolKind[], events, action.spend);
       }
       s.siteStatus[here] = 'haven';
       // Captured strongholds no longer receive card-driven shadow troops.
@@ -1671,7 +1730,7 @@ export function applyAction(state: GameState, playerId: PlayerId, action: Action
           if (!othersHere) throw new RuleError('Another character must be present.');
           const sym = action.variant === 'stealth' ? 'stealth' : 'valor';
           spendAction(s, c);
-          pay(s, p, [sym, sym, sym], events);
+          pay(s, p, [sym, sym, sym], events, action.spend);
           completeObjective(s, 'blessing_elves', events);
           break;
         }
@@ -1702,7 +1761,7 @@ export function applyAction(state: GameState, playerId: PlayerId, action: Action
           if (here !== 'minas_tirith') throw new RuleError('This takes an action in Minas Tirith.');
           if (!othersHere) throw new RuleError('Another character must be present.');
           spendAction(s, c);
-          pay(s, p, ['stealth', 'stealth', 'friendship', 'valor'], events);
+          pay(s, p, ['stealth', 'stealth', 'friendship', 'valor'], events, action.spend);
           completeObjective(s, 'unseat_denethor', events);
           break;
         }
@@ -1710,7 +1769,7 @@ export function applyAction(state: GameState, playerId: PlayerId, action: Action
           if (here !== 'edoras') throw new RuleError('This takes an action in Edoras.');
           if (!othersHere) throw new RuleError('Another character must be present.');
           spendAction(s, c);
-          pay(s, p, ['friendship', 'friendship', 'resistance'], events);
+          pay(s, p, ['friendship', 'friendship', 'resistance'], events, action.spend);
           completeObjective(s, 'free_theoden', events);
           break;
         }
@@ -2073,10 +2132,14 @@ function doTravel(
 
   spendAction(s, c);
 
+  // The player's chosen payments, drawn on by the path cost and then by
+  // Frodo's stealth cover below.
+  const spendPool = action.spend ? [...action.spend] : undefined;
+
   // Special path cost (Faramir the ranger spends 1 fewer symbol).
   if (conn.cost) {
     const cost = c === 'faramir' ? conn.cost.slice(1) : conn.cost;
-    if (cost.length > 0) pay(s, p, cost, events);
+    if (cost.length > 0) pay(s, p, cost, events, takeSpend(spendPool, cost, p));
   }
 
   // Move everyone and everything.
@@ -2107,7 +2170,7 @@ function doTravel(
 
   if (bearerMoves) {
     if (action.cover === 'stealth') {
-      pay(s, p, ['stealth'], events);
+      pay(s, p, ['stealth'], events, takeSpend(spendPool, ['stealth'], p));
       events.push({ kind: 'search', text: 'Frodo slips through unseen (stealth spent).' });
     } else if (action.cover === 'ring') {
       // Rulebook fine point: lose 1 hope, Eye to his region, search ignoring shadow troops.
@@ -2269,14 +2332,14 @@ function handlePendingAction(s: GameState, rng: Rng, playerId: PlayerId, action:
       if (action.die < 0 || action.die >= pend.dice.length) throw new RuleError('Bad die.');
       if (pend.ignored.includes(action.die)) throw new RuleError('Already ignored.');
       if (ORDEAL_HOPE_LOSS[pend.dice[action.die]] === 0) throw new RuleError('That die is harmless.');
-      pay(s, player, [ignoreCost], events);
+      pay(s, player, [ignoreCost], events, action.spend);
       pend.ignored.push(action.die);
       events.push({ kind: 'objective', text: `A ${pend.dice[action.die]} die is shrugged off.` });
       return;
     }
     if (action.type === 'preventHope') {
       if (ordealLoss(s, pend) <= 0) throw new RuleError('No hope loss left to prevent.');
-      pay(s, player, [preventCost], events);
+      pay(s, player, [preventCost], events, action.spend);
       pend.prevented += 1;
       events.push({ kind: 'objective', text: `1 hope loss is warded off (${ordealLoss(s, pend)} still at stake).` });
       return;
@@ -2323,7 +2386,7 @@ function handlePendingAction(s: GameState, rng: Rng, playerId: PlayerId, action:
         if (!ok) throw new RuleError('No character grants a free reroll here.');
         pend.freeRerollUsed = true;
       } else {
-        pay(s, player, ['resistance'], events);
+        pay(s, player, ['resistance'], events, action.spend);
       }
       if (pend.type === 'search') {
         pend.dice[action.die] = SEARCH_DIE[nextInt(rng, 6)] as SearchFace;
@@ -2342,7 +2405,7 @@ function handlePendingAction(s: GameState, rng: Rng, playerId: PlayerId, action:
       const face = pend.dice[action.die];
       if (face !== 'weary' && face !== 'exposed') throw new RuleError('Only Weary or Exposed dice.');
       if (pend.ignored.includes(action.die)) throw new RuleError('Already shrugged off.');
-      pay(s, player, ['friendship'], events);
+      pay(s, player, ['friendship'], events, action.spend);
       pend.ignored.push(action.die);
       events.push({ kind: 'search', text: `Sam steadies Frodo — a ${face} result is shrugged off.` });
       return;
@@ -2351,7 +2414,7 @@ function handlePendingAction(s: GameState, rng: Rng, playerId: PlayerId, action:
       if (pend.type !== 'battle') throw new RuleError('Valor helps only in battles.');
       if (!presentHere(pend.location)) throw new RuleError('You need a character at the battle.');
       if (pend.valorKills >= (s.shadow[pend.location] ?? 0)) throw new RuleError('No shadow troops left to slay.');
-      pay(s, player, ['valor'], events);
+      pay(s, player, ['valor'], events, action.spend);
       pend.valorKills += 1;
       events.push({ kind: 'battle', text: `${player.name} shows valor — another shadow troop will fall.` });
       return;
@@ -2375,7 +2438,7 @@ function handlePendingAction(s: GameState, rng: Rng, playerId: PlayerId, action:
         if (action.faces[i] !== pend.dice[i]) changed++;
       }
       if (changed === 0) throw new RuleError('Pick at least one die to change.');
-      pay(s, player, Array(changed).fill('valor') as SymbolKind[], events);
+      pay(s, player, Array(changed).fill('valor') as SymbolKind[], events, action.spend);
       for (let i = 0; i < pend.dice.length; i++) {
         (pend.dice as string[])[i] = action.faces[i];
       }
@@ -2394,7 +2457,7 @@ function handlePendingAction(s: GameState, rng: Rng, playerId: PlayerId, action:
       }
       if (action.die < 0 || action.die >= pend.dice.length) throw new RuleError('Bad die.');
       if (pend.dice[action.die] === 'rout') throw new RuleError('That die already shows a kill.');
-      pay(s, player, ['stealth'], events);
+      pay(s, player, ['stealth'], events, action.spend);
       pend.dice[action.die] = 'rout';
       events.push({ kind: 'battle', text: `Faramir's rangers strike from cover — a die turns to a kill: [${pend.dice.join(' ')}].` });
       return;
@@ -2409,7 +2472,7 @@ function handlePendingAction(s: GameState, rng: Rng, playerId: PlayerId, action:
       }
       if (action.die < 0 || action.die >= pend.dice.length) throw new RuleError('Bad die.');
       if (pend.dice[action.die] === 'wraith') throw new RuleError('That die already shows the Nazgûl.');
-      pay(s, player, ['valor', 'valor'], events);
+      pay(s, player, ['valor', 'valor'], events, action.spend);
       pend.dice[action.die] = 'wraith';
       events.push({ kind: 'battle', text: `Éowyn turns her blade — a die is set to the Nazgûl face: [${pend.dice.join(' ')}].` });
       return;

@@ -149,14 +149,25 @@ export function legalActions(s: GameState, playerId?: string): Action[] {
     {
       const white = (s.objProgress['gandalf_white'] ?? 0) > 0;
       const canBend = pend.type === 'battle' || (pend.type === 'search' && white);
+      const target = pend.type === 'search' ? 'slip' : 'rout';
       if (
         canBend &&
         player.characters.includes('gandalf') &&
         s.characters['gandalf']?.location === pend.location &&
         canPayList(player, ['valor']) &&
-        pend.dice.some((f) => (pend.type === 'search' ? f !== 'slip' : f !== 'rout'))
+        pend.dice.some((f) => f !== target)
       ) {
-        out.push({ type: 'gandalfWhite', faces: pend.dice.map(() => (pend.type === 'search' ? 'slip' : 'rout')) });
+        // Each changed die costs 1 Valor, so only bend as many as he can pay
+        // for (this used to offer to change them all after checking just one).
+        let budget = symbolsAvailable(player, 'valor');
+        const faces = pend.dice.map((f) => {
+          if (f !== target && budget > 0) {
+            budget -= 1;
+            return target;
+          }
+          return f;
+        });
+        out.push({ type: 'gandalfWhite', faces });
       }
     }
     // Faramir's ambush: 1 Stealth turns a battle die to Rout.
