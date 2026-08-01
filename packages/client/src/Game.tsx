@@ -368,6 +368,96 @@ export function Game({
     setMode({ kind: 'pay', action, cost, label });
   };
 
+  /**
+   * The printed symbol cost of an action, so every payment can go through the
+   * picker. Kept in step with the costs charged in the engine's rules.
+   */
+  const costOfAction = (a: Action): { cost: SymbolKind[]; label: string } => {
+    const V = (n: number): SymbolKind[] => Array(n).fill('valor');
+    switch (a.type) {
+      case 'travel': {
+        const from = state.characters[a.character]?.location;
+        const conn = from ? connection(from, a.to) : undefined;
+        // Faramir the ranger spends one fewer symbol on special paths.
+        const path = conn?.cost ? (a.character === 'faramir' ? conn.cost.slice(1) : conn.cost) : [];
+        return { cost: [...path, ...(a.cover === 'stealth' ? (['stealth'] as SymbolKind[]) : [])], label: 'Travel' };
+      }
+      case 'muster': {
+        const loc = state.characters[a.character]?.location;
+        const HOME: Record<string, Faction> = { eowyn: 'riders', arwen: 'sylvan', boromir: 'vale', gimli: 'deepholm' };
+        const free = loc && HOME[a.character] && HOME[a.character] === MAP[loc].muster;
+        return { cost: free ? [] : ['friendship'], label: 'Muster' };
+      }
+      case 'capture': {
+        const loc = state.characters[a.character]?.location;
+        if (a.alt) {
+          const g = ALT_CAPTURE.find((x) => x.location === loc && (!x.character || x.character === a.character));
+          return { cost: g?.cost ?? [], label: 'Capture (alt cost)' };
+        }
+        return { cost: V(a.character === 'boromir' ? 2 : 3), label: 'Capture' };
+      }
+      case 'destroyEmber':
+        return { cost: Array(5).fill('resistance'), label: 'Destroy the One Ring' };
+      case 'objective': {
+        const name = OBJECTIVE_MAP[a.id]?.name ?? 'Objective';
+        switch (a.id) {
+          case 'blessing_elves':
+            return { cost: a.variant === 'stealth' ? Array(3).fill('stealth') : V(3), label: name };
+          case 'arwen_banner':
+            return { cost: ['friendship'], label: name };
+          case 'unseat_denethor':
+            return { cost: ['stealth', 'stealth', 'friendship', 'valor'], label: name };
+          case 'free_theoden':
+            return { cost: ['friendship', 'friendship', 'resistance'], label: name };
+          default:
+            return { cost: [], label: name }; // hobbits' pledge names its own card
+        }
+      }
+      case 'ability': {
+        if (a.character === 'legolas' && (a.mode === 'nazgul' || a.to)) return { cost: ['stealth'], label: 'Sure Shot' };
+        if (a.character === 'merry_pippin' && a.mode === 'song') return { cost: Array(3).fill('friendship'), label: 'Give Us a Song!' };
+        if (a.character === 'merry_pippin' && a.mode === 'distract') return { cost: ['friendship'], label: 'Distract' };
+        if (a.character === 'galadriel' && a.mode === 'summon') return { cost: ['friendship'], label: 'Lady of Light' };
+        return { cost: [], label: 'Ability' };
+      }
+      // --- mitigations offered while a roll is pending ---
+      case 'reroll':
+        return { cost: a.free ? [] : ['resistance'], label: 'Reroll a die' };
+      case 'showValor':
+        return { cost: ['valor'], label: 'Show Valor' };
+      case 'eowynStrike':
+        return { cost: V(2), label: "Shieldmaiden's strike" };
+      case 'faramirAmbush':
+        return { cost: ['stealth'], label: "Faramir's ambush" };
+      case 'gandalfWhite': {
+        const pd = state.pending && 'dice' in state.pending ? state.pending.dice : [];
+        const changed = a.faces.filter((f, i) => f !== pd[i]).length;
+        return { cost: V(changed), label: 'Light and Flame' };
+      }
+      case 'ignoreDie': {
+        if (state.pending?.type === 'ordeal') {
+          const sym: SymbolKind = state.pending.objective === 'confront_balrog' ? 'resistance' : 'valor';
+          return { cost: [sym], label: 'Ignore a die' };
+        }
+        return { cost: ['friendship'], label: "Sam's Aid" };
+      }
+      case 'preventHope': {
+        const sym: SymbolKind =
+          state.pending?.type === 'ordeal' && state.pending.objective === 'confront_balrog' ? 'valor' : 'friendship';
+        return { cost: [sym], label: 'Prevent hope loss' };
+      }
+      default:
+        return { cost: [], label: '' };
+    }
+  };
+
+  /** Send an action, routing any symbol cost through the payment picker. */
+  const act = (a: Action) => {
+    const { cost, label } = costOfAction(a);
+    if (cost.length === 0) return send(a);
+    payThen(a, cost, label);
+  };
+
   const onClickLocation = (loc: LocationId) => {
     if (!highlights.has(loc)) return;
     if (mode.kind === 'travel') {
@@ -388,7 +478,7 @@ export function Game({
         setMode({ kind: 'travelPlan', plan: { character, to: loc, companions: [], troops: {} } });
       } else {
         // Ordinary move (incl. the bearer with no search risk): just go.
-        send({ type: 'travel', character, to: loc, ...(character === BEARER ? { cover: 'search' } : {}) });
+        act({ type: 'travel', character, to: loc, ...(character === BEARER ? { cover: 'search' } : {}) });
       }
     } else if (mode.kind === 'eventTarget') {
       const character = me?.characters.find((c) => state.characters[c]);
@@ -705,7 +795,7 @@ export function Game({
               onCancel={() => setMode({ kind: 'idle' })}
               onGo={(cover) => {
                 const { plan } = mode;
-                send({
+                act({
                   type: 'travel',
                   character: plan.character,
                   to: plan.to,
@@ -720,7 +810,7 @@ export function Game({
 
         {/* ---- Sidebar ---- */}
         <aside className="sidebar">
-          {pend && <PendingPanel state={state} playerId={playerId} legal={legal} onAct={send} />}
+          {pend && <PendingPanel state={state} playerId={playerId} legal={legal} onAct={act} />}
 
           {mode.kind === 'pay' && me && (
             <PayPicker
@@ -788,8 +878,7 @@ export function Game({
                   myTurn={myTurn}
                   legal={legal}
                   onTravel={() => setMode({ kind: 'travel', character: c })}
-                  onAct={send}
-                  onPay={payThen}
+                  onAct={act}
                 />
               ))}
               {myTurn && (
@@ -985,7 +1074,6 @@ function CharacterPanel({
   legal,
   onTravel,
   onAct,
-  onPay,
 }: {
   state: GameState;
   character: CharacterId;
@@ -993,7 +1081,6 @@ function CharacterPanel({
   legal: Action[];
   onTravel: () => void;
   onAct: (a: Action) => void;
-  onPay: (a: Action, cost: SymbolKind[], label: string) => void;
 }) {
   const def = CHARACTER_MAP[character];
   const loc = state.characters[character]?.location;
@@ -1001,13 +1088,6 @@ function CharacterPanel({
   const can = (type: Action['type']) => legal.some((a) => 'character' in a && a.character === character && a.type === type);
   const attack = legal.find((a) => a.type === 'attack' && a.character === character);
   const isFreeAmbush = state.turn.freeAttack?.character === character && state.turn.freeAttack?.location === loc;
-  // Printed costs, so the payment picker knows what to ask for.
-  const HOME_MUSTER: Record<string, Faction> = { eowyn: 'riders', arwen: 'sylvan', boromir: 'vale', gimli: 'deepholm' };
-  const musterCost: SymbolKind[] =
-    HOME_MUSTER[character] && HOME_MUSTER[character] === MAP[loc].muster ? [] : ['friendship'];
-  const captureCost: SymbolKind[] = Array(character === 'boromir' ? 2 : 3).fill('valor');
-  const altCaptureCost: SymbolKind[] =
-    ALT_CAPTURE.find((g) => g.location === loc && (!g.character || g.character === character))?.cost ?? [];
   const fellowships = legal.filter((a) => a.type === 'fellowship' && a.character === character);
   const prepares = legal.filter((a) => a.type === 'prepare' && a.character === character);
   const destroy = legal.find((a) => a.type === 'destroyEmber');
@@ -1050,7 +1130,7 @@ function CharacterPanel({
           </button>
           <button
             disabled={!can('muster')}
-            onClick={() => onPay({ type: 'muster', character }, musterCost, 'Muster')}
+            onClick={() => onAct({ type: 'muster', character })}
             title="Spend 1 Friendship to add a troop matching this location's muster icon."
           >
             Muster
@@ -1085,14 +1165,14 @@ function CharacterPanel({
           )}
           <button
             disabled={!can('capture')}
-            onClick={() => onPay({ type: 'capture', character }, captureCost, 'Capture')}
+            onClick={() => onAct({ type: 'capture', character })}
             title="At a cleared stronghold with a friendly troop: spend 3 Valor to turn it into a haven (+2 hope, Eye comes here)."
           >
             Capture
           </button>
           {legal.some((a) => a.type === 'capture' && a.character === character && a.alt) && (
             <button
-              onClick={() => onPay({ type: 'capture', character, alt: true }, altCaptureCost, 'Capture (alt cost)')}
+              onClick={() => onAct({ type: 'capture', character, alt: true })}
               title="An objective card's alternative Capture cost (instead of 3 Valor)."
             >
               Capture (alt cost)
