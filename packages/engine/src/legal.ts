@@ -59,6 +59,17 @@ export function legalActions(s: GameState, playerId?: string): Action[] {
       if (player.id === pend.player) out.push({ type: 'mirrorOrder', order: [...pend.cards] });
       return out;
     }
+    if (pend.type === 'reposition') {
+      if (player.id === pend.player) {
+        for (const from of pend.from) {
+          for (const [f, n] of Object.entries(s.friendly[from] ?? {})) {
+            if ((n ?? 0) > 0) for (const to of pend.to) out.push({ type: 'reposition', from, faction: f as Faction, to });
+          }
+        }
+        out.push({ type: 'confirm' });
+      }
+      return out;
+    }
     if (pend.type === 'ordeal') {
       if (player.id === pend.player) {
         const ignoreCost = pend.objective === 'confront_balrog' ? 'resistance' : 'valor';

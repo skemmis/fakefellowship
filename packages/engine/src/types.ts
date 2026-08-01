@@ -230,7 +230,32 @@ export interface PendingWheels {
   remaining?: number;
 }
 
-export type Pending = PendingSearch | PendingBattle | PendingDiscard | PendingWheels | PendingOrdeal | PendingMirror;
+/**
+ * An objective reward that lets the player redeploy troops: Rangers Secure
+ * Eriador (anywhere in Eriador → Weather Hills and/or Tharbad) and Subdue
+ * Umbar (anywhere in Haradwaith → Pelargir). Troops move one at a time until
+ * the player is done.
+ */
+export interface PendingReposition {
+  type: 'reposition';
+  objective: 'rangers_eriador' | 'subdue_umbar';
+  player: PlayerId;
+  /** Locations troops may be taken from. */
+  from: LocationId[];
+  /** Locations troops may be sent to. */
+  to: LocationId[];
+  /** How many have been redeployed so far (for the log). */
+  moved: number;
+}
+
+export type Pending =
+  | PendingSearch
+  | PendingBattle
+  | PendingDiscard
+  | PendingWheels
+  | PendingOrdeal
+  | PendingMirror
+  | PendingReposition;
 
 // ---------------------------------------------------------------------------
 // Automatic step queue (shadow phase, darken steps, queued battles)
@@ -411,6 +436,8 @@ export type Action =
   | { type: 'preventHope' } // ordeal only: buy off 1 hope of the pending loss
   | { type: 'gandalfWhite'; faces: string[] } // Gandalf the White: 1 valor sets the roll's dice
   | { type: 'confirm' } // apply the pending roll and continue
+  /** Objective reward: redeploy 1 friendly troop (Rangers / Subdue Umbar). */
+  | { type: 'reposition'; from: LocationId; faction: Faction; to: LocationId }
   | { type: 'discard'; card: string } // resolve a pending hand-limit discard
   | {
       /** Resolve The Wheels of Saruman, one step at a time. */

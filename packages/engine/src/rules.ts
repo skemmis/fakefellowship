@@ -268,6 +268,29 @@ function objectiveActive(s: GameState, id: string): boolean {
   return s.objectives.some((o) => o.id === id && !o.complete);
 }
 
+/**
+ * Open the optional troop-redeployment reward on an objective card. Sources are
+ * every location of `region` that still holds a friendly troop, minus the
+ * destinations themselves. No-op when there is nothing worth moving.
+ */
+function offerReposition(
+  s: GameState,
+  objective: 'rangers_eriador' | 'subdue_umbar',
+  region: RegionId,
+  to: LocationId[],
+  events: GameEvent[],
+): void {
+  const from = Object.values(MAP)
+    .filter((l) => l.region === region && !to.includes(l.id) && friendlyAt(s, l.id) > 0)
+    .map((l) => l.id);
+  if (from.length === 0) return;
+  s.pending = { type: 'reposition', objective, player: activePlayer(s).id, from, to, moved: 0 };
+  events.push({
+    kind: 'objective',
+    text: `The rangers may redeploy: move any troops in ${REGION_MAP[region].name} to ${to.map(locName).join(' and/or ')}.`,
+  });
+}
+
 function completeObjective(s: GameState, id: string, events: GameEvent[]): void {
   const obj = s.objectives.find((o) => o.id === id);
   if (!obj || obj.complete) return;
@@ -314,10 +337,13 @@ function completeObjective(s: GameState, id: string, events: GameEvent[]): void 
     case 'oathbreakers':
     case 'light_mirkwood':
     case 'arwen_banner':
-    case 'rangers_eriador':
     case 'shieldmaiden':
     case 'hobbits_loyalty':
       changeHope(s, 1, events, def.name);
+      break;
+    case 'rangers_eriador':
+      changeHope(s, 1, events, def.name);
+      offerReposition(s, 'rangers_eriador', 'eriador', ['weather_hills', 'tharbad'], events);
       break;
     case 'unseat_denethor':
       releaseReserve(s, id, events);
@@ -367,7 +393,7 @@ function completeObjective(s: GameState, id: string, events: GameEvent[]): void 
       musterReward(s, 'dunland', 'riders', 1, events);
       break;
     case 'subdue_umbar':
-      events.push({ kind: 'objective', text: 'The corsairs are subdued — troops in Haradwaith may be redeployed to Pelargir on later turns.' });
+      offerReposition(s, 'subdue_umbar', 'haradwaith', ['pelargir'], events);
       break;
     case 'lay_bare_pits':
       if (s.characters['galadriel']?.location === 'dol_guldur') {
@@ -2113,6 +2139,36 @@ function handlePendingAction(s: GameState, rng: Rng, playerId: PlayerId, action:
     s.playerDiscard.push(card);
     events.push({ kind: 'turn', text: `${player.name} discards a card.` });
     if (player.hand.length <= HAND_LIMIT) s.pending = null;
+    return;
+  }
+
+  if (pend.type === 'reposition') {
+    if (playerId !== pend.player) throw new RuleError('Not your redeployment.');
+    if (action.type === 'confirm') {
+      if (pend.moved === 0) {
+        events.push({ kind: 'objective', text: 'The rangers hold their positions — no troops redeploy.' });
+      }
+      s.pending = null;
+      return;
+    }
+    if (action.type !== 'reposition') throw new RuleError('Redeploy troops, or confirm to finish.');
+    if (!pend.from.includes(action.from)) throw new RuleError('Those troops may not be redeployed.');
+    if (!pend.to.includes(action.to)) throw new RuleError('They cannot march there.');
+    const src = s.friendly[action.from];
+    if (!src || (src[action.faction] ?? 0) <= 0) throw new RuleError('No such troop there.');
+    src[action.faction] = (src[action.faction] ?? 0) - 1;
+    const dst = (s.friendly[action.to] ??= {});
+    dst[action.faction] = (dst[action.faction] ?? 0) + 1;
+    pend.moved += 1;
+    events.push({
+      kind: 'objective',
+      text: `A ${FACTION_NAMES[action.faction]} troop redeploys from ${locName(action.from)} to ${locName(action.to)}.`,
+      fx: { fx: 'move', piece: 'friendly', from: action.from, to: action.to },
+    });
+    // Sources can run dry as troops leave.
+    pend.from = pend.from.filter((l) => friendlyAt(s, l) > 0);
+    checkHavens(s, events);
+    if (pend.from.length === 0) s.pending = null;
     return;
   }
 

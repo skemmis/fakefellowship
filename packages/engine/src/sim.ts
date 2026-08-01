@@ -255,7 +255,10 @@ export function simulateGame(
     // Whose decision is it? Discards and Doubt payments belong to their
     // target player; everything else is driven by the active player.
     const decider =
-      state.pending?.type === 'discard' || state.pending?.type === 'ordeal' || state.pending?.type === 'mirror'
+      state.pending?.type === 'discard' ||
+      state.pending?.type === 'ordeal' ||
+      state.pending?.type === 'mirror' ||
+      state.pending?.type === 'reposition'
         ? state.pending.player
         : state.pending?.type === 'wheels' && state.pending.mode === 'doubt'
           ? state.pending.player!

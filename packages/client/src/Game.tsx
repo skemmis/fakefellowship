@@ -423,7 +423,9 @@ export function Game({
                       ? `${state.players.find((p) => p.id === pend.player)?.name} gazes into Galadriel's Mirror`
                       : pend.type === 'ordeal'
                         ? 'An ordeal must be faced'
-                        : `${pend.type === 'search' ? 'Search' : 'Battle'} at ${MAP[pend.location].name} — resolve the dice`
+                        : pend.type === 'reposition'
+                          ? 'The rangers redeploy — move troops or finish'
+                          : `${pend.type === 'search' ? 'Search' : 'Battle'} at ${MAP[pend.location].name} — resolve the dice`
                 : myTurn
                   ? 'Your turn'
                   : `${active.name}'s turn`}
@@ -1267,6 +1269,43 @@ function PendingPanel({
   const pend = state.pending!;
   if (pend.type === 'mirror') {
     return <MirrorPanel state={state} playerId={playerId} pend={pend} onAct={onAct} />;
+  }
+  if (pend.type === 'reposition') {
+    const mine = pend.player === playerId;
+    const moves = legal.filter((a): a is Extract<Action, { type: 'reposition' }> => a.type === 'reposition');
+    const dests = pend.to.map((l) => MAP[l].name).join(' and/or ');
+    return (
+      <section className="panel pending">
+        <h3>{OBJECTIVE_MAP[pend.objective]?.name} — redeploy</h3>
+        <p className="hint">
+          {mine
+            ? `Move any friendly troops to ${dests}. Click a troop to send it; finish when you are done.`
+            : `${state.players.find((pl) => pl.id === pend.player)?.name} is redeploying troops.`}
+        </p>
+        {mine && (
+          <div className="hand">
+            {pend.from.map((from) =>
+              Object.entries(state.friendly[from] ?? {})
+                .filter(([, n]) => (n ?? 0) > 0)
+                .map(([f, n]) =>
+                  pend.to.map((to) => {
+                    const act = moves.find((a) => a.from === from && a.faction === f && a.to === to);
+                    if (!act) return null;
+                    return (
+                      <button key={`${from}-${f}-${to}`} onClick={() => onAct(act)}>
+                        {MAP[from].name}: {FACTION_NAMES[f as Faction]} ({n}) → {MAP[to].name}
+                      </button>
+                    );
+                  }),
+                ),
+            )}
+            <button className="primary" onClick={() => onAct({ type: 'confirm' })}>
+              Done redeploying{pend.moved > 0 ? ` (${pend.moved} moved)` : ''}
+            </button>
+          </div>
+        )}
+      </section>
+    );
   }
   if (pend.type === 'discard') {
     const mine = pend.player === playerId;

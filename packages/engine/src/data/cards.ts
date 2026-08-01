@@ -321,7 +321,7 @@ export const OBJECTIVES: ObjectiveDef[] = [
   {
     id: 'subdue_umbar',
     name: 'Subdue Umbar',
-    text: 'Done when Umbar is a haven, OR every Haradwaith location holds a friendly troop with no shadow troops in Haradwaith. (The reward repositioning to Pelargir is not automated yet.)',
+    text: 'Done when Umbar is a haven, OR every Haradwaith location holds a friendly troop with no shadow troops in Haradwaith: move any friendly troops in Haradwaith to Pelargir.',
   },
   {
     id: 'avenge_balin',
@@ -404,7 +404,7 @@ export const OBJECTIVES: ObjectiveDef[] = [
   {
     id: 'rangers_eriador',
     name: 'Rangers Secure Eriador',
-    text: 'Done when Eriador holds no shadow troops or strongholds and every Eriador location has a friendly troop: hope rises 1. (The reward repositioning is not automated yet.)',
+    text: 'Done when Eriador holds no shadow troops or strongholds and every Eriador location has a friendly troop: move any friendly troops in Eriador to Weather Hills and/or Tharbad, and hope rises 1.',
   },
   {
     id: 'dwarven_lands',
