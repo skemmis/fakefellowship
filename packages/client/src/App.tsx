@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { GameEvent, GameState, GameSummary, RoomInfo, ServerMessage } from '@emberfall/engine';
-import { net, clientId } from './net.js';
+import { net, clientId, roomFromUrl, setRoomUrl } from './net.js';
 import { Lobby } from './Lobby.js';
 import { Game } from './Game.js';
 import { GameSwitcher } from './GameSwitcher.js';
@@ -35,6 +35,7 @@ function GameApp() {
   // Leave the current game's view (without abandoning the seat) to reach the lobby.
   const toLobby = () => {
     localStorage.removeItem('emberfall.room');
+    setRoomUrl(null);
     net.rejoin = null;
     setGame(null);
     setRoom(null);
@@ -45,6 +46,7 @@ function GameApp() {
 
   const resume = (code: string) => {
     localStorage.setItem('emberfall.room', code);
+    setRoomUrl(code);
     net.rejoin = { room: code, name: localStorage.getItem('fellowship.name') ?? 'Traveler' };
     net.send({ type: 'join', room: code, name: net.rejoin.name, clientId: clientId() });
     setShowSwitcher(false);
@@ -61,6 +63,9 @@ function GameApp() {
         case 'joined':
           setPlayerId(msg.playerId);
           localStorage.setItem('emberfall.room', msg.room);
+          // Give the game its own URL so refreshing (or sharing the link)
+          // reopens this exact game.
+          setRoomUrl(msg.room);
           setError(null);
           break;
         case 'room':
@@ -68,13 +73,20 @@ function GameApp() {
           break;
         case 'games':
           setGames(msg.games);
-          // On first load, resume the most recent active game if we aren't
-          // already headed into one.
+          // On first load, if the URL/localStorage didn't already point us at a
+          // game, actually rejoin the most recent one (this used to only write
+          // localStorage, so nothing was resumed).
           if (!autoResumed.current) {
             autoResumed.current = true;
-            const saved = localStorage.getItem('emberfall.room');
-            const target = msg.games.find((g) => g.code === saved) ?? msg.games[0];
-            if (target && !saved) localStorage.setItem('emberfall.room', target.code);
+            const targeted = roomFromUrl() ?? localStorage.getItem('emberfall.room');
+            const target = msg.games.find((g) => g.code === targeted) ?? (targeted ? undefined : msg.games[0]);
+            if (target && !targeted) {
+              localStorage.setItem('emberfall.room', target.code);
+              setRoomUrl(target.code);
+              const name = localStorage.getItem('fellowship.name') ?? 'Traveler';
+              net.rejoin = { room: target.code, name };
+              net.send({ type: 'join', room: target.code, name, clientId: clientId() });
+            }
           }
           break;
         case 'game': {
@@ -98,6 +110,13 @@ function GameApp() {
           break;
         case 'error':
           setError(msg.message);
+          // A stale pointer to a room that no longer exists would otherwise
+          // error on every load; forget it and fall back to the lobby.
+          if (/no such game room/i.test(msg.message)) {
+            localStorage.removeItem('emberfall.room');
+            setRoomUrl(null);
+            net.rejoin = null;
+          }
           setTimeout(() => setError(null), 5000);
           break;
       }

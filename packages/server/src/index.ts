@@ -5,8 +5,9 @@
  * are broadcast to the whole room.
  */
 import { createServer } from 'node:http';
-import { readFile, stat } from 'node:fs/promises';
-import { extname, join, normalize } from 'node:path';
+import { readFile, stat, mkdir, writeFile, rename } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
+import { extname, join, normalize, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer, WebSocket } from 'ws';
 import {
@@ -54,6 +55,71 @@ interface Room {
 }
 
 const rooms = new Map<string, Room>();
+
+// ---------------------------------------------------------------------------
+// Persistence. Rooms used to live only in memory, so every server restart
+// silently destroyed in-progress games. Snapshot them to disk instead (live
+// sockets excluded) and reload on boot.
+// ---------------------------------------------------------------------------
+
+const DATA_FILE = process.env.FELLOWSHIP_DATA ?? fileURLToPath(new URL('../../../.data/rooms.json', import.meta.url));
+/** Rooms with no connected player are kept this long before being swept. */
+const ROOM_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+type PersistedRoom = Omit<Room, 'players'> & { players: Omit<RoomPlayer, 'ws'>[] };
+
+function loadRooms(): void {
+  let raw: string;
+  try {
+    raw = readFileSync(DATA_FILE, 'utf8');
+  } catch {
+    return; // first run
+  }
+  try {
+    const saved = JSON.parse(raw) as PersistedRoom[];
+    for (const r of saved) {
+      rooms.set(r.code, { ...r, players: r.players.map((p) => ({ ...p, ws: null })) });
+    }
+    console.log(`Restored ${rooms.size} room(s) from ${DATA_FILE}`);
+  } catch (err) {
+    console.error('Could not parse saved rooms; starting empty.', err);
+  }
+}
+
+let saveTimer: NodeJS.Timeout | null = null;
+let saving = false;
+
+async function writeRooms(): Promise<void> {
+  if (saving) return;
+  saving = true;
+  try {
+    const snapshot: PersistedRoom[] = [...rooms.values()].map((r) => ({
+      ...r,
+      players: r.players.map(({ ws: _ws, ...rest }) => rest),
+    }));
+    await mkdir(dirname(DATA_FILE), { recursive: true });
+    // Write-then-rename so a crash mid-write can't corrupt the save file.
+    const tmp = `${DATA_FILE}.tmp`;
+    await writeFile(tmp, JSON.stringify(snapshot));
+    await rename(tmp, DATA_FILE);
+  } catch (err) {
+    console.error('Failed to persist rooms', err);
+  } finally {
+    saving = false;
+  }
+}
+
+/** Debounced save; call after any mutation worth surviving a restart. */
+function persist(): void {
+  if (saveTimer) return;
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    void writeRooms();
+  }, 400);
+  saveTimer.unref?.();
+}
+
+loadRooms();
 
 function roomCode(): string {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -116,6 +182,16 @@ function sendGames(ws: WebSocket, clientId: string | null): void {
   if (clientId) send(ws, { type: 'games', games: gamesForClient(clientId) });
 }
 
+/**
+ * Refresh every connected player's game list (whose turn it is, phase, ...).
+ * Called after anything that changes how a room would be summarised.
+ */
+function pushGames(room: Room): void {
+  for (const p of room.players) {
+    if (p.ws && p.clientId) send(p.ws, { type: 'games', games: gamesForClient(p.clientId) });
+  }
+}
+
 interface ConnCtx {
   roomCode: string | null;
   playerId: string | null;
@@ -156,7 +232,8 @@ function joinRoom(
     send(ws, { type: 'joined', room: room.code, playerId: existing.id, playerToken: existing.token });
     pushRoom(room);
     if (room.state) send(ws, { type: 'game', state: room.state, events: room.eventLog });
-    sendGames(ws, ctx.clientId);
+    pushGames(room);
+    persist();
     return;
   }
   if (room.state) return send(ws, { type: 'error', message: 'That game already started.' });
@@ -175,7 +252,8 @@ function joinRoom(
   room.lastActivity = Date.now();
   send(ws, { type: 'joined', room: room.code, playerId: player.id, playerToken: player.token });
   pushRoom(room);
-  sendGames(ws, ctx.clientId);
+  pushGames(room);
+  persist();
 }
 
 function handleMessage(ws: WebSocket, ctx: ConnCtx, msg: ClientMessage): void {
@@ -235,6 +313,7 @@ function handleMessage(ws: WebSocket, ctx: ConnCtx, msg: ClientMessage): void {
         ctx.playerId = null;
       }
       sendGames(ws, ctx.clientId);
+      persist();
       break;
     }
 
@@ -246,6 +325,7 @@ function handleMessage(ws: WebSocket, ctx: ConnCtx, msg: ClientMessage): void {
       if (!DIFFICULTIES.includes(msg.difficulty)) return send(ws, { type: 'error', message: 'Unknown difficulty.' });
       room.difficulty = msg.difficulty;
       pushRoom(room);
+      persist();
       break;
     }
 
@@ -277,6 +357,8 @@ function handleMessage(ws: WebSocket, ctx: ConnCtx, msg: ClientMessage): void {
       room.turnStartLogLen = room.eventLog.length;
       pushRoom(room);
       broadcast(room, { type: 'game', state: room.state, events: opening });
+      pushGames(room);
+      persist();
       break;
     }
 
@@ -298,6 +380,8 @@ function handleMessage(ws: WebSocket, ctx: ConnCtx, msg: ClientMessage): void {
           room.turnStartLogLen = room.eventLog.length;
         }
         broadcast(room, { type: 'game', state: room.state, events: result.events });
+        pushGames(room);
+        persist();
       } catch (err) {
         if (err instanceof RuleError) {
           send(ws, { type: 'error', message: err.message });
@@ -328,6 +412,8 @@ function handleMessage(ws: WebSocket, ctx: ConnCtx, msg: ClientMessage): void {
       const notice: GameEvent = { kind: 'turn', text: `— ${player.name} resets the turn —` };
       room.eventLog.push(notice);
       broadcast(room, { type: 'game', state: room.state, events: room.eventLog, replace: true });
+      pushGames(room);
+      persist();
       break;
     }
 
@@ -404,12 +490,29 @@ wss.on('connection', (ws) => {
   });
 });
 
+// Sweep only games nobody has touched for a long while (was 24h from
+// creation, which discarded games still being played the next day).
 setInterval(() => {
-  const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+  const cutoff = Date.now() - ROOM_TTL_MS;
+  let removed = 0;
   for (const [code, room] of rooms) {
-    if (room.players.every((p) => p.ws === null) && room.createdAt < cutoff) rooms.delete(code);
+    if (room.players.every((p) => p.ws === null) && (room.lastActivity ?? room.createdAt) < cutoff) {
+      rooms.delete(code);
+      removed++;
+    }
   }
+  if (removed > 0) persist();
 }, 60 * 60 * 1000).unref();
+
+// Flush to disk on shutdown so a redeploy/restart never loses a live game.
+let shuttingDown = false;
+for (const sig of ['SIGINT', 'SIGTERM'] as const) {
+  process.on(sig, () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    void writeRooms().finally(() => process.exit(0));
+  });
+}
 
 httpServer.listen(PORT, () => {
   console.log(`Fellowship server listening on http://localhost:${PORT} (ws at /ws)`);

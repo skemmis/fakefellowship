@@ -3,6 +3,20 @@ import type { ClientMessage, ServerMessage } from '@emberfall/engine';
 export type NetListener = (msg: ServerMessage) => void;
 export type StatusListener = (status: 'connecting' | 'open' | 'closed') => void;
 
+/** The room code in the URL (`#g=ABCD`), if any — so a link/refresh targets one game. */
+export function roomFromUrl(): string | null {
+  const m = /[#&]g=([A-Za-z0-9]{4})\b/.exec(location.hash);
+  return m ? m[1].toUpperCase() : null;
+}
+
+/** Point the URL at a game, so a hard refresh (or a shared link) reopens it. */
+export function setRoomUrl(code: string | null): void {
+  const next = code ? `#g=${code}` : '';
+  if ((location.hash || '') === next) return;
+  if (code) location.hash = next;
+  else history.replaceState(null, '', location.pathname + location.search);
+}
+
 /** A durable per-browser identity so a player resumes their seat across reloads. */
 export function clientId(): string {
   let id = localStorage.getItem('emberfall.clientId');
@@ -37,8 +51,9 @@ export class Net {
       this.emitStatus('open');
       // Always tell the server who we are so it can list our active games.
       this.send({ type: 'listGames', clientId: clientId() });
-      // Resume the game we were last viewing (survives a full page reload).
-      const room = this.rejoin?.room ?? localStorage.getItem('emberfall.room') ?? null;
+      // Resume the game we were last viewing. The URL wins (a shared link or a
+      // hard refresh targets one game); otherwise fall back to the last one.
+      const room = this.rejoin?.room ?? roomFromUrl() ?? localStorage.getItem('emberfall.room') ?? null;
       const name = this.rejoin?.name ?? localStorage.getItem('fellowship.name') ?? 'Traveler';
       if (room) {
         this.send({ type: 'join', room, name, clientId: clientId() });
